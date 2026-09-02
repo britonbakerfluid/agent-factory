@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { AgentSession, EffectType, EnvironmentType, FacingDirection } from '@shared/types';
+import type { AgentSession, EffectType, EnvironmentType, FacingDirection, GrabTarget } from '@shared/types';
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { AgentSprite } from '../entities/AgentSprite';
 import { SubagentSprite } from '../entities/SubagentSprite';
@@ -9,6 +9,9 @@ import { getTheme } from '../environments';
 import type { ActivityBucket, EnvironmentTheme } from '../environments';
 import type { SoundBank } from '../audio/SoundBank';
 import { isInShotCorridor } from '../control/geometry';
+import type { Grabbable } from '../grab/GrabMotion';
+import { GRAB_DEPTH } from '../grab/physics';
+import type { Point } from '../grab/physics';
 
 const WORKING_STATES = ['reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'];
 
@@ -72,6 +75,10 @@ export class AgentManager {
     for (const session of agents) {
       this.upsertAgent(session);
     }
+
+    // A fresh snapshot (initial connect or reconnect) carries no grab state: drop anything still
+    // in the air. Live leases are re-asserted by the grab_update messages that follow it.
+    this.dropStaleGrabs();
 
     this.updateHud();
   }
@@ -232,6 +239,66 @@ export class AgentManager {
     }
   }
 
+  // ── Tactile grab ────────────────────────────────────────────────
+
+  get isVortexActive(): boolean {
+    return this.vortexActive;
+  }
+
+  /** Map a pressed game object back to the avatar (agent or subagent) it belongs to. */
+  resolveGrabTarget(gameObject: Phaser.GameObjects.GameObject): GrabTarget | null {
+    const parent = (gameObject as { parentContainer?: unknown }).parentContainer;
+    if (parent instanceof AgentSprite) return { sessionId: parent.sessionData.sessionId };
+    if (parent instanceof SubagentSprite) return { sessionId: parent.parentSessionId, agentId: parent.info.agentId };
+    return null;
+  }
+
+  hasGrabTarget(target: GrabTarget): boolean {
+    return !!this.grabbable(target);
+  }
+
+  beginGrab(target: GrabTarget, pointer: Point): boolean {
+    const sprite = this.grabbable(target);
+    if (!sprite) return false;
+    sprite.beginGrab(pointer);
+    return true;
+  }
+
+  /** Mirror another viewer's grab: lift if needed, otherwise just follow their pointer. */
+  applyRemoteGrab(target: GrabTarget, pointer: Point): void {
+    const sprite = this.grabbable(target);
+    if (!sprite) return;
+    if (sprite.isHeld) sprite.moveGrab(pointer);
+    else sprite.beginGrab(pointer);
+  }
+
+  moveGrab(target: GrabTarget, pointer: Point): void {
+    this.grabbable(target)?.moveGrab(pointer);
+  }
+
+  releaseGrab(target: GrabTarget, pointer: Point): void {
+    this.grabbable(target)?.releaseGrab(pointer);
+  }
+
+  showGrabHint(target: GrabTarget, text: string): void {
+    this.grabbable(target)?.showGrabHint(text);
+  }
+
+  private grabbable(target: GrabTarget): Grabbable | undefined {
+    return target.agentId
+      ? this.subagents.get(`${target.sessionId}:${target.agentId}`)
+      : this.agents.get(target.sessionId);
+  }
+
+  private dropStaleGrabs(): void {
+    for (const agent of this.agents.values()) {
+      if (agent.isHeld) agent.releaseGrab();
+    }
+    for (const sub of this.subagents.values()) {
+      if (sub.isHeld) sub.releaseGrab();
+    }
+  }
+
   update(time: number, delta: number) {
     // Vortex swirl physics
     if (this.vortexActive) {
@@ -247,8 +314,8 @@ export class AgentManager {
       if (!this.vortexActive) {
         agent.update(time, delta);
       }
-      // Y-based depth: entities further down screen render on top
-      agent.setDepth(7 + agent.y * 0.001);
+      // Y-based depth: entities further down screen render on top; airborne avatars render above all
+      agent.setDepth(agent.isGrabbed ? GRAB_DEPTH : 7 + agent.y * 0.001);
     }
     for (const sub of this.subagents.values()) {
       const parent = this.agents.get(sub.parentSessionId);
@@ -256,7 +323,7 @@ export class AgentManager {
         sub.setParentPosition(parent.x, parent.y);
       }
       sub.update(time, delta);
-      sub.setDepth(7 + sub.y * 0.001);
+      sub.setDepth(sub.isGrabbed ? GRAB_DEPTH : 7 + sub.y * 0.001);
     }
     // Machines also need Y-based depth
     for (const machine of this.machines) {
@@ -1212,7 +1279,7 @@ export class AgentManager {
     for (const [id, agent] of this.agents) {
       const activity = agent.sessionData.activity;
       const notBusy = activity === 'idle' || activity === 'waiting';
-      if (notBusy && !agent.isZombie && !this.flowerVisitors.has(id) && !done.has(id)) {
+      if (notBusy && !agent.isZombie && !agent.isGrabbed && !this.flowerVisitors.has(id) && !done.has(id)) {
         candidates.push(id);
       }
     }

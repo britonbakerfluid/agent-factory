@@ -10,6 +10,7 @@ import { getTheme } from '../environments';
 import type { EnvironmentTheme } from '../environments';
 import { SoundBank } from '../audio/SoundBank';
 import { ControlManager } from '../control/ControlManager';
+import { GrabManager } from '../grab/GrabManager';
 
 export class FactoryScene extends Phaser.Scene {
   private socket!: SocketClient;
@@ -19,6 +20,7 @@ export class FactoryScene extends Phaser.Scene {
   private loginOverlay!: LoginOverlay;
   private commandInput!: CommandInput;
   private controlManager!: ControlManager;
+  private grabManager!: GrabManager;
   private titleShadow!: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
   private theme!: EnvironmentTheme;
@@ -56,8 +58,10 @@ export class FactoryScene extends Phaser.Scene {
     // Auth
     this.authManager = new AuthManager();
     this.controlManager = new ControlManager(this, this.authManager, this.socket, this.agentManager);
+    this.grabManager = new GrabManager(this, this.authManager, this.socket, this.agentManager);
 
     const logout = () => {
+      this.grabManager.handleLoggedOut();
       this.socket.send({ type: 'logout' });
       this.authManager.logout();
       this.controlManager.handleLoggedOut();
@@ -82,6 +86,7 @@ export class FactoryScene extends Phaser.Scene {
 
     // Re-authenticate on reconnect
     this.socket.onConnect(() => {
+      this.grabManager.handleConnected();
       const token = this.authManager.authenticationToken;
       if (token) {
         this.socket.send({ type: 'auth', token });
@@ -126,6 +131,7 @@ export class FactoryScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     this.agentManager.update(time, delta);
+    this.grabManager.update();
   }
 
   private handleMessage(msg: WSMessageToClient) {
@@ -154,6 +160,7 @@ export class FactoryScene extends Phaser.Scene {
         } else {
           this.authManager.logout();
           this.controlManager.handleLoggedOut();
+          this.grabManager.handleLoggedOut();
           this.commandInput.hide();
           this.loginOverlay.showLoggedOut();
           this.loginOverlay.showError(msg.error || 'Invalid token');
@@ -162,6 +169,11 @@ export class FactoryScene extends Phaser.Scene {
       case 'control_result':
       case 'control_revoked':
         this.controlManager.handleMessage(msg);
+        break;
+      case 'grab_result':
+      case 'grab_update':
+      case 'grab_release':
+        this.grabManager.handleMessage(msg);
         break;
     }
   }

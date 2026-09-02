@@ -1,5 +1,5 @@
 import type { WebSocket } from '@fastify/websocket';
-import type { WSMessageToClient, AgentSession, EffectType, ChatMessage, GlobalEffectType } from '../../shared/types.js';
+import type { WSMessageToClient, AgentSession, EffectType, ChatMessage, GlobalEffectType, GrabState, GrabTarget } from '../../shared/types.js';
 
 interface SocketMeta {
   username?: string;
@@ -60,6 +60,14 @@ export class BroadcastManager {
 
   broadcastChatMessage(chat: ChatMessage) {
     this.broadcast({ type: 'chat_message', chat });
+  }
+
+  broadcastGrab(grab: GrabState) {
+    this.broadcast({ type: 'grab_update', grab });
+  }
+
+  broadcastGrabRelease(target: GrabTarget, x: number, y: number, reason: string) {
+    this.broadcast({ type: 'grab_release', ...target, x, y, reason });
   }
 
   private broadcast(msg: WSMessageToClient) {

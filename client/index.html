@@ -21,6 +21,8 @@
       justify-content: center;
     }
     canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+    body.is-grabbing canvas { cursor: grabbing; }
+    body.is-grabbing #tooltip { display: none !important; }
 
     /* Tooltip overlay */
     #tooltip {

@@ -9,6 +9,12 @@ import type {
 import { TOMBSTONE_DURATION_MS } from '@shared/constants';
 import { BootScene } from '../scenes/BootScene';
 import type { ActionSpec } from '../environments';
+import { GrabMotion } from '../grab/GrabMotion';
+import type { Grabbable } from '../grab/GrabMotion';
+import { resolveGrabAnchor, resolveSheetGrabAnchor, shadeColor } from '../grab/anchors';
+import type { GrabAnchor } from '../grab/anchors';
+import { GRAB_REST_LENGTH, elasticBand } from '../grab/physics';
+import type { Point } from '../grab/physics';
 
 const ACTIVITY_ICONS: Record<string, string> = {
   running: 'terminal',
@@ -31,7 +37,7 @@ const ICON_FRAME_MAP: Record<string, number> = {
   compress: 7,
 };
 
-export class AgentSprite extends Phaser.GameObjects.Container {
+export class AgentSprite extends Phaser.GameObjects.Container implements Grabbable {
   private sprite: Phaser.GameObjects.Sprite;
   private nametag: Phaser.GameObjects.Text;
   private statusIcon: Phaser.GameObjects.Sprite | null = null;
@@ -60,6 +66,14 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private manualMoving = false;
   private manualFacing: FacingDirection = 'down';
   private zombieStaggerTimer: Phaser.Time.TimerEvent | null = null;
+  private lastAction: { action: ActionSpec; environment: EnvironmentType } | null = null;
+
+  // Tactile grab state: held/falling motion, the elastic band, and the post-landing recovery.
+  private grab: GrabMotion | null = null;
+  private grabBand: Phaser.GameObjects.Graphics | null = null;
+  private grabKnot: Phaser.GameObjects.Graphics | null = null;
+  private grabAnchor: GrabAnchor | null = null;
+  private grabSettling = false;
 
   constructor(scene: Phaser.Scene, session: AgentSession) {
     super(scene, 0, 0);
@@ -133,6 +147,12 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   update(_time: number, delta: number) {
+    if (this.grab) {
+      this.stepGrab(delta / 1000);
+      return;
+    }
+    if (this.grabSettling) return;
+
     if (this.isMoving) {
       const dx = this.targetX - this.x;
       const dy = this.targetY - this.y;
@@ -174,6 +194,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   setManualControl(control: ManualControlState) {
+    this.cancelGrab();
     if (!this.manualMode) {
       this.clearBackgroundActionLoop();
       this.currentActionKey = '';
@@ -213,6 +234,10 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   setBackgroundAction(action: ActionSpec, environment: EnvironmentType) {
+    // Remember the latest action so it can be restored after a grab; apply it once we are back on the floor.
+    this.lastAction = { action, environment };
+    if (this.isGrabbed) return;
+
     const key = `${environment}:${action.loop}:${action.pose}`;
     this.currentActionPose = action.pose;
 
@@ -236,6 +261,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   die(onComplete?: () => void, serverGraphicDeath?: boolean) {
+    this.cancelGrab();
     if (serverGraphicDeath || this.sessionData.avatar?.graphicDeath) {
       this.dieGraphic(onComplete);
     } else {
@@ -1257,7 +1283,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   // ── Emotes ───────────────────────────────────────────────────────
 
   playEmote(emote: string, facing: FacingDirection = 'right') {
-    if (this.isEmoting) return;
+    if (this.isEmoting || this.isGrabbed) return;
     this.isEmoting = true;
 
     switch (emote) {
@@ -1286,7 +1312,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   playGunDeath() {
-    if (this.isEmoting) return;
+    if (this.isEmoting || this.isGrabbed) return;
     this.isEmoting = true;
 
     const origGlowColor = this.neonGlow.fillColor;
@@ -2790,6 +2816,227 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     });
   }
 
+  // ── Tactile grab: lift, dangle, drop, walk back ──────────────────
+
+  /** True while held, falling, or recovering from the landing. Routing and actions are suspended. */
+  get isGrabbed(): boolean {
+    return this.grab !== null || this.grabSettling;
+  }
+
+  get isHeld(): boolean {
+    return this.grab?.phase === 'held';
+  }
+
+  beginGrab(pointer: Point) {
+    if (this.grab) {
+      // Re-lift mid-fall (e.g. a reconnect re-asserting a live lease).
+      this.grab.begin(pointer, { x: this.x, y: this.y });
+      return;
+    }
+    if (this.grabSettling) this.cancelGrab();
+
+    // Remember exactly where this avatar belongs: its in-flight destination, else where it stands.
+    if (!this.isMoving) {
+      this.targetX = this.x;
+      this.targetY = this.y;
+      this.isMoving = true;
+    }
+
+    this.grabAnchor = this.resolveGrabAnchor();
+    this.hideTooltip();
+    this.clearBackgroundActionLoop();
+    this.currentActionKey = '';
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.sprite.setAngle(0).setPosition(0, 0).setScale(1);
+    this.playAnimation('idle');
+    this.scene.tweens.killTweensOf(this.nametag);
+    this.scene.tweens.add({ targets: this.nametag, alpha: 0, duration: 150 });
+
+    // The band sits behind the body so it reads as attached at the back of the collar / top of the hair;
+    // the grip knot sits in front so the pointer's hold point is always visible.
+    this.grabBand = this.scene.add.graphics();
+    this.addAt(this.grabBand, 0);
+    this.grabKnot = this.scene.add.graphics();
+    this.add(this.grabKnot);
+
+    this.grab = new GrabMotion(this.grabAnchor.offsetY, 1);
+    this.grab.begin(pointer, { x: this.x, y: this.y });
+  }
+
+  moveGrab(pointer: Point) {
+    if (this.grab?.phase === 'held') this.grab.setPointer(pointer);
+  }
+
+  releaseGrab(pointer?: Point) {
+    if (this.grab?.phase !== 'held') return;
+    this.grab.release(pointer);
+    this.grabBand?.clear();
+    this.grabKnot?.clear();
+    this.sprite.setAngle(0);
+  }
+
+  showGrabHint(text: string) {
+    this.showFloatingLabel(text, '#ff6688', 1200);
+  }
+
+  /** Band colour and attach point: the shirt collar, or the hair for long-haired avatars. */
+  private resolveGrabAnchor(): GrabAnchor {
+    const avatar = this.sessionData.avatar;
+    const zombieTint = this.isZombie ? 0x448833 : null;
+    if (avatar?.hairStyle !== undefined && this.spriteKey.startsWith('avatar_')) {
+      return resolveGrabAnchor(avatar, zombieTint);
+    }
+    // Legacy agent_N sheets are tinted as a whole, so the visible shirt/hair is sheet colour x tint.
+    const legacyTint = avatar?.color ? parseInt(avatar.color.replace('#', ''), 16) : Number.NaN;
+    const tint = zombieTint ?? (Number.isNaN(legacyTint) ? null : legacyTint);
+    return resolveSheetGrabAnchor(avatar?.spriteIndex ?? 0, tint);
+  }
+
+  private stepGrab(dt: number) {
+    const grab = this.grab!;
+    const result = grab.step(dt);
+    this.setPosition(grab.body.x, grab.body.y);
+
+    // The shadow stays on the floor and shrinks as the body rises.
+    const lift = grab.lift;
+    this.neonGlow.setPosition(0, 6 + lift).setScale(Math.max(0.5, 1 - lift / 40), 1);
+    this.controlMarker.setPosition(0, 7 + lift);
+
+    if (result === 'held') {
+      // Pendulum tilt from horizontal velocity while dangling.
+      this.sprite.setAngle(Phaser.Math.Clamp(-grab.body.vx * 0.06, -14, 14));
+      this.drawGrabBand(grab);
+    } else if (result === 'landed') {
+      this.onGrabLanded();
+    }
+  }
+
+  private drawGrabBand(grab: GrabMotion) {
+    if (!this.grabBand || !this.grabKnot || !this.grabAnchor) return;
+    const anchor = this.grabAnchor;
+    // Lay pixels on whole world coordinates so the band stays crisp, then offset into container space.
+    const from = { x: Math.round(grab.pointer.x), y: Math.round(grab.pointer.y) };
+    const to = { x: Math.round(this.x + anchor.offsetX), y: Math.round(this.y + anchor.offsetY) };
+    const band = elasticBand(from, to, GRAB_REST_LENGTH);
+    const ox = -this.x;
+    const oy = -this.y;
+    const highlight = shadeColor(anchor.color, 1.35);
+    const shadow = shadeColor(anchor.color, 0.55);
+
+    const g = this.grabBand;
+    g.clear();
+    g.fillStyle(anchor.color, 1);
+    for (const px of band.pixels) {
+      g.fillRect(px.x + ox - (px.size > 1 ? 1 : 0), px.y + oy, px.size, px.size);
+    }
+    if (band.width > 1) {
+      g.fillStyle(highlight, 0.9);
+      for (const px of band.pixels) g.fillRect(px.x + ox - 1, px.y + oy, 1, 1);
+    }
+    // Grip knot under the pointer, drawn on the front layer.
+    const k = this.grabKnot;
+    k.clear();
+    k.fillStyle(shadow, 1);
+    k.fillRect(from.x + ox - 2, from.y + oy - 2, 5, 5);
+    k.fillStyle(highlight, 1);
+    k.fillRect(from.x + ox - 1, from.y + oy - 1, 3, 3);
+  }
+
+  private onGrabLanded() {
+    this.grab = null;
+    this.grabSettling = true;
+    this.destroyGrabGraphics();
+    this.neonGlow.setPosition(0, 6).setScale(1);
+    this.controlMarker.setPosition(0, 7);
+    this.sprite.setAngle(0).setPosition(0, 0);
+    this.playAnimation('idle');
+    this.emitLandingDust();
+    this.landSquash();
+  }
+
+  private emitLandingDust() {
+    for (let i = 0; i < 6; i++) {
+      const dust = this.scene.add.circle(
+        this.x + Phaser.Math.Between(-10, 10),
+        this.y + 6,
+        Phaser.Math.Between(1, 3), 0xaaaaaa, 0.5,
+      ).setDepth(this.depth + 1);
+      this.scene.tweens.add({
+        targets: dust,
+        x: dust.x + Phaser.Math.Between(-16, 16),
+        y: dust.y + Phaser.Math.Between(-6, 2),
+        alpha: 0,
+        duration: Phaser.Math.Between(250, 450),
+        ease: 'Power2',
+        onComplete: () => dust.destroy(),
+      });
+    }
+  }
+
+  /** Landing stage 1: squash on impact. */
+  private landSquash() {
+    this.scene.tweens.add({
+      targets: this.sprite,
+      scaleX: 1.3,
+      scaleY: 0.7,
+      y: 4,
+      duration: 80,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+      onComplete: () => this.landHop(),
+    });
+  }
+
+  /** Landing stage 2: a small recovery hop. */
+  private landHop() {
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: -4,
+      scaleX: 0.95,
+      scaleY: 1.05,
+      duration: 110,
+      yoyo: true,
+      ease: 'Sine.easeOut',
+      onComplete: () => this.landSettle(),
+    });
+  }
+
+  /** Landing stage 3: stand up, restore the room action, and walk back to the exact pre-grab spot. */
+  private landSettle() {
+    this.grabSettling = false;
+    this.grabAnchor = null;
+    this.sprite.setAngle(0).setPosition(0, 0).setScale(1);
+    this.scene.tweens.add({ targets: this.nametag, alpha: 1, duration: 200 });
+    if (this.lastAction) this.setBackgroundAction(this.lastAction.action, this.lastAction.environment);
+    this.isMoving = true; // targetX/targetY still hold the pre-grab destination
+  }
+
+  /** Abort a grab instantly (manual control took over, or the agent is dying): snap to the floor. */
+  private cancelGrab() {
+    if (!this.grab && !this.grabSettling) return;
+    if (this.grab) {
+      if (this.grab.phase !== 'idle') this.setPosition(this.grab.floor.x, this.grab.floor.y);
+      this.grab.cancel();
+      this.grab = null;
+    }
+    this.grabSettling = false;
+    this.grabAnchor = null;
+    this.destroyGrabGraphics();
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.scene.tweens.killTweensOf(this.nametag);
+    this.sprite.setAngle(0).setPosition(0, 0).setScale(1);
+    this.nametag.setAlpha(1);
+    this.neonGlow.setPosition(0, 6).setScale(1);
+    this.controlMarker.setPosition(0, 7);
+  }
+
+  private destroyGrabGraphics() {
+    this.grabBand?.destroy();
+    this.grabBand = null;
+    this.grabKnot?.destroy();
+    this.grabKnot = null;
+  }
+
   private onArrived() {
     if (this.manualMode) {
       if (this.manualMoving) {
@@ -3231,6 +3478,7 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   }
 
   private showTooltip() {
+    if (this.isGrabbed) return;
     const tooltip = document.getElementById('tooltip');
     if (!tooltip) return;
 

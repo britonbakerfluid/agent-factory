@@ -57,6 +57,21 @@ export interface ControlInputState {
   right: boolean;
 }
 
+// === Tactile Avatar Grab ===
+// A viewer can lift one avatar at a time. The server hands out a short lease so two
+// viewers never fight over one sprite, and mirrors the holder's pointer to the room.
+// Grab state is ephemeral: it never lands on AgentSession or on disk.
+export interface GrabTarget {
+  sessionId: string;
+  agentId?: string; // present when the target is a subagent of that session
+}
+
+export interface GrabState extends GrabTarget {
+  username: string; // viewer holding the lease
+  x: number; // holder's pointer, world space
+  y: number;
+}
+
 // === Agent Session (Server State) ===
 export interface AgentSession {
   sessionId: string;
@@ -112,6 +127,9 @@ export type WSMessageToClient =
   | { type: 'auth_result'; success: boolean; username?: string; error?: string }
   | { type: 'control_result'; success: boolean; sessionId?: string; action: 'claim' | 'release'; error?: string }
   | { type: 'control_revoked'; sessionId: string; reason: string }
+  | { type: 'grab_result'; success: boolean; action: 'start' | 'end'; sessionId: string; agentId?: string; error?: string }
+  | { type: 'grab_update'; grab: GrabState }
+  | { type: 'grab_release'; sessionId: string; agentId?: string; x: number; y: number; reason: string }
   | { type: 'global_effect'; effect: GlobalEffectType; data?: Record<string, unknown> };
 
 // === Global Effect Types ===
@@ -127,6 +145,9 @@ export type WSMessageToServer =
   | { type: 'control_input'; sessionId: string; input: ControlInputState }
   | { type: 'control_release'; sessionId: string }
   | { type: 'shoot'; sessionId: string }
+  | { type: 'grab_start'; sessionId: string; agentId?: string; x: number; y: number }
+  | { type: 'grab_move'; sessionId: string; agentId?: string; x: number; y: number }
+  | { type: 'grab_end'; sessionId: string; agentId?: string; x: number; y: number }
   | { type: 'emote'; emote: string; sessionId?: string }
   | { type: 'chat'; message: string };
 

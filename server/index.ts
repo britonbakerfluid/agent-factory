@@ -13,6 +13,7 @@ import { startStaleReaper } from './cleanup.js';
 import { SessionRegistryWatcher } from './session-registry.js';
 import { TokenAuth, loadOrCreateSecret } from './auth.js';
 import { ControlManager } from './control-manager.js';
+import { GrabManager, parseGrabTarget } from './grab-manager.js';
 import { DEFAULT_PORT, DEFAULT_SERVER_CONFIG, VALID_EMOTES, CHAT_MESSAGE_MAX_LENGTH } from '../shared/constants.js';
 import { loadSessions, createDebouncedSave } from './session-store.js';
 import type { ServerConfig, EmoteType } from '../shared/types.js';
@@ -88,6 +89,7 @@ async function main() {
   const state = new StateManager();
   const broadcast = new BroadcastManager();
   const controls = new ControlManager(state, broadcast);
+  const grabs = new GrabManager(state, broadcast);
 
   // HTTP routes
   registerHookRoutes(app, state, broadcast, serverConfig, auth);
@@ -97,9 +99,14 @@ async function main() {
     broadcast.add(socket);
     // Send current state on connect
     broadcast.sendFullState(socket, state.getAll());
+    grabs.sendActive(socket);
 
-    socket.on('close', () => controls.releaseSocket(socket, 'Browser disconnected'));
-    socket.on('error', () => controls.releaseSocket(socket, 'Browser disconnected'));
+    const dropSocket = (reason: string) => {
+      controls.releaseSocket(socket, reason);
+      grabs.releaseSocket(socket, reason);
+    };
+    socket.on('close', () => dropSocket('Browser disconnected'));
+    socket.on('error', () => dropSocket('Browser disconnected'));
 
     socket.on('message', (raw: string | Buffer) => {
       try {
@@ -112,11 +119,11 @@ async function main() {
           case 'auth': {
             const username = auth.validateToken(String(msg.token || ''));
             if (username) {
-              controls.releaseSocket(socket, 'Browser re-authenticated');
+              dropSocket('Browser re-authenticated');
               broadcast.authenticateSocket(socket, username);
               broadcast.sendTo(socket, { type: 'auth_result', success: true, username });
             } else {
-              controls.releaseSocket(socket, 'Authentication failed');
+              dropSocket('Authentication failed');
               broadcast.deauthenticateSocket(socket);
               broadcast.sendTo(socket, { type: 'auth_result', success: false, error: 'Invalid token' });
             }
@@ -124,7 +131,7 @@ async function main() {
           }
 
           case 'logout':
-            controls.releaseSocket(socket, 'Logged out');
+            dropSocket('Logged out');
             broadcast.deauthenticateSocket(socket);
             break;
 
@@ -161,6 +168,18 @@ async function main() {
               broadcast.getSocketUsername(socket),
               String(msg.sessionId || ''),
             );
+            break;
+
+          case 'grab_start':
+            grabs.begin(socket, broadcast.getSocketUsername(socket), parseGrabTarget(msg), Number(msg.x), Number(msg.y));
+            break;
+
+          case 'grab_move':
+            grabs.move(socket, broadcast.getSocketUsername(socket), parseGrabTarget(msg), Number(msg.x), Number(msg.y));
+            break;
+
+          case 'grab_end':
+            grabs.end(socket, broadcast.getSocketUsername(socket), parseGrabTarget(msg), Number(msg.x), Number(msg.y));
             break;
 
           case 'emote': {
@@ -224,12 +243,15 @@ async function main() {
           if (data.agent.activity === 'stopped' && data.agent.manualControl) {
             controls.releaseSession(data.agent.sessionId, 'Agent session ended');
           }
+          // Drop grabs invalidated by this update (session stopped, manual control began, subagent finished)
+          grabs.syncSession(data.agent);
           broadcast.broadcastAgentUpdate(data.agent);
         }
         break;
       case 'remove':
         if (data.sessionId) {
           controls.releaseSession(data.sessionId, 'Agent session ended');
+          grabs.releaseSession(data.sessionId, 'Agent session ended');
           broadcast.broadcastAgentRemove(data.sessionId);
         }
         break;
@@ -245,6 +267,7 @@ async function main() {
   // Start stale session reaper and manual-control simulation
   startStaleReaper(state);
   controls.start();
+  grabs.start();
 
   await app.listen({ port, host });
   console.log(`\n  Agent Factory server running on http://${host}:${port}`);

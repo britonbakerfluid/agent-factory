@@ -162,6 +162,15 @@ Once logged in, an **Avatar Uplink** panel appears in the top-left. It lists eve
 
 Manual control affects only the visual avatar. The underlying Claude/Codex session keeps running, its activity indicators continue to update, and automatic workstation/lounge routing resumes when control is released. Control is also released on logout, disconnect, or session end. A newer browser authenticated as the same owner can take over an existing control lease.
 
+### Grabbing Avatars
+
+Once logged in, you can also pick avatars up. Press on any agent or subagent and drag: the avatar lifts off the floor and dangles under your pointer on a pixel elastic drawn in its shirt colour (long-haired avatars are lifted by the hair instead). Let go anywhere and it drops with gravity, squashes on landing, bounces back up, and walks back to exactly where it was headed before you grabbed it.
+
+- Any authenticated viewer can grab any avatar, not just their own.
+- The server hands out one grab lease per avatar, so two viewers never fight over the same sprite. Everyone in the room sees the same lift, dangle, and drop.
+- A grab is released automatically on pointer cancel, window blur, tab hidden, logout, disconnect, when the session or subagent ends, or when the avatar's owner takes manual control.
+- Grabs never change persistent state: the dragged position is not saved, and the avatar always returns to its real workstation or lounge spot.
+
 A terminal-style command bar also appears at the bottom. Available commands:
 
 | Command | Description |
@@ -299,9 +308,9 @@ agent-factory/
 
 ### WebSocket (`ws://host:4242/ws`)
 
-**Server -> Client:** `full_state`, `agent_update`, `agent_remove`, `effect`, `chat_message`, `auth_result`, `control_result`, `control_revoked`
+**Server -> Client:** `full_state`, `agent_update`, `agent_remove`, `effect`, `chat_message`, `auth_result`, `control_result`, `control_revoked`, `grab_result`, `grab_update`, `grab_release`
 
-**Client -> Server:** `request_state`, `auth` (token login), `logout`, `control_claim`, `control_input`, `control_release`, `shoot`, `emote`, `chat`
+**Client -> Server:** `request_state`, `auth` (token login), `logout`, `control_claim`, `control_input`, `control_release`, `shoot`, `grab_start`, `grab_move`, `grab_end`, `emote`, `chat`
 
 ## License
 
