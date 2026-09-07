@@ -97,6 +97,7 @@ export function installBoardDragging(
   }
   board.add(pivot);
   const position = () => ({ x: board.position.x, z: board.position.z });
+  const home = position();
   function place(point: FloorPoint) {
     board.position.x = point.x;
     board.position.z = point.z;
@@ -254,6 +255,14 @@ export function installBoardDragging(
   });
   window.addEventListener("resize", () => finish(true));
   return {
+    home,
+    restingYaw,
+    isBusy: () => !!drag || coasting,
+    moveByStaff(point: FloorPoint) {
+      if (drag || coasting) return;
+      place(moveBoard(position(), point));
+      if (Math.hypot(point.x - home.x, point.z - home.z) < .005) save();
+    },
     update(now: number) {
       const dt = Math.min(0.033, Math.max(0, (now - lastUpdate) / 1000));
       lastUpdate = now;

@@ -24,6 +24,7 @@ type AvatarConfig struct {
 	FaceAccessory *int    `json:"faceAccessory,omitempty"`
 	HeadAccessory *int    `json:"headAccessory,omitempty"`
 	ShirtDesign   *int    `json:"shirtDesign,omitempty"`
+	GraphicDeath  *bool   `json:"graphicDeath,omitempty"`
 }
 
 type RepositoryConfig struct {

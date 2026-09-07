@@ -76,6 +76,7 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
   for (const x of [9.7, 17.0]) for (const z of [-3.88, -.54]) {
     propPart(room, [.20, 2.8, .20], [x, 1.4, z], wood);
     propPart(room, [.24, .16, .24], [x, .08, z], iron);
+    contactShadow(room, { x, z, width: .24, depth: .24, spread: .13, opacity: .3 });
   }
   for (const z of [-4.02, -.42]) propPart(room, [7.8, .18, .17], [13.35, 2.78, z], iron);
   for (const x of [9.56, 17.14]) propPart(room, [.18, .18, 3.94], [x, 2.8, -2.22], iron);
@@ -121,6 +122,10 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
   propPart(lounge, [1.4, .45, 1.05], [11.5, low + .235, 9.725], wood);
   propPart(lounge, [1.47, .08, 1.12], [11.5, low + .49, 9.725], iron);
   // A recessed ember bed gives the lounge a quiet focal point, with no audio loop.
+  // These footprints sit on the rug, not the lower deck beneath it.
+  for (const [x, z, width, depth] of [[11.175, 8.25, 5.45, .9], [8.9, 9.15, .9, 2.7], [11.5, 9.725, 1.4, 1.05]]) {
+    contactShadow(lounge, { x, z, floorY: low + .027, width, depth, spread: .22, opacity: .24 });
+  }
   const fireBed = propPart(lounge, [.88, .028, .54], [11.5, low + .54, 9.725], standard('#342d28', 1));
   const flames: THREE.Mesh[] = [];
   for (let i = 0; i < 8; i++) {

@@ -1,4 +1,14 @@
 import * as THREE from 'three';
+import type { SkyPalette } from '../sky/skyPhase';
+
+/** The air between the viewer, distant terrain and clouds shares one palette. */
+export function setAtmosphereHaze(target: THREE.Color, palette: SkyPalette, night: boolean) {
+  const [r, g, b] = palette.skyHorizon;
+  const [sr, sg, sb] = palette.skyTop;
+  const upperAir = new THREE.Color().setRGB(sr / 255, sg / 255, sb / 255, THREE.SRGBColorSpace);
+  return target.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace)
+    .lerp(upperAir, night ? 0.35 : 0.62);
+}
 
 /** Shared distance haze for terrain, vegetation and objects standing among them. */
 export function applyLandscapeHaze(material: THREE.MeshStandardMaterial, haze: { value: THREE.Color }, distance = 0) {

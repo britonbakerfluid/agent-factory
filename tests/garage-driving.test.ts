@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WebSocket } from '@fastify/websocket';
-import { GarageDrivingSimulation, GARAGE_MAX_MARKS, GARAGE_MARK_LIFETIME_MS, garageCarBlocksSegment } from '../shared/factory25d-driving';
+import { GarageDrivingSimulation, GARAGE_MAX_MARKS, GARAGE_MARK_LIFETIME_MS, GARAGE_FULL_REPAIR_SECONDS, garageCarBlocksSegment } from '../shared/factory25d-driving';
 import { GARAGE_CAR_BAYS, GARAGE_CAR_IDS, GARAGE_CAR_YAW, garageCarVisitPose } from '../shared/factory25d-garage';
 import { GarageDrivingManager, GARAGE_INPUT_STALE_MS, GARAGE_LEASE_IDLE_MS } from '../server/garage-driving';
 import { StateManager } from '../server/state';
@@ -23,6 +23,57 @@ function step(sim: GarageDrivingSimulation, seconds: number, start = 1000) {
 }
 
 describe('shared garage physics', () => {
+  it.each([['mini', 4.85], ['porsche', 6.19], ['delorean', 4.45], ['f1', 7.98]] as const)('%s has at least 70 percent more speed in the first second', (id, oldLaunchSpeed) => {
+    const sim = new GarageDrivingSimulation(); sim.claim(id, 'visitor'); step(sim, 1.2);
+    const car = sim.car(id); Object.assign(car, { x: -9, z: 7, yaw: Math.PI / 2 });
+    sim.setInput(id, { throttle: 1, steer: 0, drift: false }); step(sim, 1, 3000);
+    expect(car.damage).toBe(0); expect(sim.isClear(car)).toBe(true);
+    expect(Math.hypot(car.vx, car.vz)).toBeGreaterThan(oldLaunchSpeed * 1.7);
+  });
+
+  it.each([['mini', 2.1], ['porsche', 1.85], ['delorean', 2.1], ['f1', 1.6]] as const)('%s crosses the usable straight in less than %s seconds', (id, limit) => {
+    const sim = new GarageDrivingSimulation(); sim.claim(id, 'visitor'); step(sim, 1.2);
+    const car = sim.car(id); Object.assign(car, { x: -9, z: 7, yaw: Math.PI / 2 });
+    sim.setInput(id, { throttle: 1, steer: 0, drift: false });
+    let elapsed = 0;
+    while (car.x < 6 && elapsed < 3) {
+      sim.step(1 / 60, 3000 + elapsed * 1000); elapsed += 1 / 60;
+      expect(car.damage).toBe(0); expect(sim.isClear(car)).toBe(true);
+    }
+    expect(car.x).toBeGreaterThanOrEqual(6); expect(elapsed).toBeLessThan(limit);
+  });
+
+  it.each(GARAGE_CAR_IDS)('%s reverses faster while remaining controllable and bounded', id => {
+    const sim = new GarageDrivingSimulation(); sim.claim(id, 'visitor'); step(sim, 1.2);
+    const car = sim.car(id); Object.assign(car, { x: 8, z: 7, yaw: Math.PI / 2 });
+    sim.setInput(id, { throttle: -1, steer: 0, drift: false }); step(sim, 2, 3000);
+    expect(car.vx).toBeLessThan(-4.3); expect(car.vx).toBeGreaterThan(-5.5);
+    expect(car.damage).toBe(0); expect(sim.isClear(car)).toBe(true);
+  });
+
+  it('coasts naturally and brakes much faster than releasing the throttle', () => {
+    const speeds = [0, -1].map(throttle => {
+      const sim = new GarageDrivingSimulation(); sim.claim('mini', 'visitor');
+      const car = sim.car('mini'); Object.assign(car, { x: -5, z: 7, yaw: Math.PI / 2, vx: 5 });
+      sim.setInput('mini', { throttle, steer: 0, drift: false }); step(sim, .4);
+      expect(car.damage).toBe(0); return Math.hypot(car.vx, car.vz);
+    });
+    expect(speeds[0]).toBeGreaterThan(4.7); expect(speeds[1]).toBeLessThan(1.3);
+  });
+
+  it('retains hard-crash damage through recovery and claiming, and repairs gradually only while parked', () => {
+    const sim = new GarageDrivingSimulation(); sim.claim('mini', 'visitor');
+    const car = sim.car('mini'); Object.assign(car, { x: 10.3, z: 7, yaw: Math.PI / 2, vx: 7 }); step(sim, .2);
+    const damage = car.damage; expect(damage).toBeGreaterThan(.35);
+    expect(sim.reset('mini')).toBe(true); expect(car.damage).toBe(damage);
+    step(sim, 3); expect(car.damage).toBe(damage);
+    step(sim, 10); expect(car.damage).toBeLessThan(damage); expect(car.damage).toBeGreaterThan(damage - .2);
+    sim.claim('mini', 'next visitor'); const interrupted = car.damage;
+    step(sim, 12); expect(car.damage).toBe(interrupted);
+    sim.release('mini'); step(sim, 3); expect(car.mode).toBe('parked'); expect(car.damage).toBe(interrupted);
+    step(sim, GARAGE_FULL_REPAIR_SECONDS + 5); expect(car.damage).toBe(0);
+  });
+
   it('starts clear in the measured bays and gives the four cars distinct acceleration', () => {
     const speeds: number[] = [];
     for (const id of GARAGE_CAR_IDS) {
@@ -68,7 +119,10 @@ describe('shared garage physics', () => {
 
   it('self-parks from its current pose, and refuses a recovery into an occupied bay', () => {
     const sim = new GarageDrivingSimulation(); sim.claim('mini', 'visitor');
-    sim.setInput('mini', { throttle: -1, steer: 0, drift: false }); step(sim, 3);
+    sim.setInput('mini', { throttle: -1, steer: 0, drift: false });
+    // Reach the open aisle before requesting parking; a fixed three-second
+    // reverse would now drive through the aisle and into the workbench.
+    for (let i = 0; i < 180 && sim.car('mini').z < 6; i++) sim.step(1 / 60, 1000 + i * 1000 / 60);
     expect(sim.car('mini').z).toBeGreaterThan(5);
     sim.release('mini');
     for (let i = 0; i < 600; i++) { sim.step(1 / 60, 5000 + i * 1000 / 60); expect(sim.cars.every(car => sim.isClear(car))).toBe(true); }
@@ -134,7 +188,8 @@ describe('shared garage physics', () => {
     expect(sim.isClear(car)).toBe(true);
     expect(sim.isClear({ ...car, hoverHeight: 0 })).toBe(false);
     expect(garageCarBlocksSegment(car, { x: -3, z: .25 }, { x: 3, z: .25 })).toBe(false);
-    sim.setInput('delorean', { throttle: -1, steer: .8, drift: true }); step(sim, 3);
+    sim.setInput('delorean', { throttle: -1, steer: .8, drift: true }); step(sim, 1);
+    expect(Math.hypot(car.x - GARAGE_CAR_BAYS.mini.x, car.z - GARAGE_CAR_BAYS.mini.z)).toBeGreaterThan(2);
     expect(sim.marks).toHaveLength(0); expect(car.damage).toBe(0);
     expect(sim.snapshot(6000).cars.find(c => c.id === 'delorean')?.hoverHeight).toBe(1.45);
     expect(sim.isClear({ ...car, x: 12 })).toBe(false);
@@ -158,6 +213,43 @@ describe('shared garage physics', () => {
 });
 
 describe('public garage control ownership', () => {
+  it('broadcasts a guest DeLorean departure and return once, including fire trails for observers and late joiners', () => {
+    const f = setup();
+    f.manager.receive(f.a.socket, { type: 'garage_drive', action: 'claim', car: 'delorean' });
+    const car = f.manager.simulation.car('delorean');
+    Object.assign(car, { x: 10.77, z: 6.8, yaw: Math.PI, hoverHeight: 1.45 });
+    let now = 1050;
+    while (!car.timeJump && now < 6000) {
+      f.time(now); f.manager.receive(f.a.socket, { type: 'garage_drive', action: 'input', car: 'delorean', input: { throttle: 1, steer: 0, drift: false } });
+      f.tick(now); now += 50;
+    }
+    expect(car.timeJump).toBeDefined();
+    f.manager.disconnect(f.a.socket);
+    for (let end = now + 2200; now < end; now += 50) f.tick(now);
+    const frames = f.b.messages.filter(m => m.type === 'garage_drive_state') as unknown as ReturnType<GarageDrivingSimulation['snapshot']>[];
+    expect(frames.some(s => s.cars.some(c => c.timeJump?.arrived === false))).toBe(true);
+    expect(frames.some(s => s.cars.some(c => c.timeJump?.arrived === true))).toBe(true);
+    const marks = frames.flatMap(s => s.marks);
+    expect(marks).toHaveLength(40); expect(new Set(marks.map(m => m.id)).size).toBe(40);
+    expect(marks.every(m => m.kind === 'fire')).toBe(true);
+    expect(car.mode).toBe('parked');
+    f.manager.sendActive(f.b.socket);
+    expect(f.b.messages.at(-1)).toMatchObject({ replaceMarks: true, marks, cars: expect.arrayContaining([expect.objectContaining({ id: 'delorean', mode: 'parked' })]) });
+    f.manager.stop();
+  });
+
+  it('broadcasts repairs while all cars are parked, including the final clean state and late joins', () => {
+    const f = setup(), car = f.manager.simulation.car('mini'); car.damage = .1;
+    for (let i = 1; i <= 200; i++) f.tick(1000 + i * 50);
+    const packet = f.b.messages.filter(m => m.type === 'garage_drive_state').at(-1)!;
+    const repaired = (packet.cars as { id: string; damage: number }[]).find(c => c.id === 'mini')!;
+    expect(repaired.damage).toBeLessThan(.01);
+    for (let i = 201; i <= 220; i++) f.tick(1000 + i * 50);
+    f.manager.sendActive(f.a.socket);
+    expect((f.a.messages.at(-1)!.cars as { id: string; damage: number }[]).find(c => c.id === 'mini')!.damage).toBe(0);
+    expect((f.b.messages.filter(m => m.type === 'garage_drive_state').at(-1)!.cars as { id: string; damage: number }[]).find(c => c.id === 'mini')!.damage).toBe(0);
+    f.manager.stop();
+  });
   it('atomically switches cars, keeps control on occupied-target rejection, and parks previous cars', () => {
     const f = setup(); f.manager.receive(f.a.socket, { action: 'claim', car: 'mini' });
     f.manager.receive(f.b.socket, { action: 'claim', car: 'porsche' });

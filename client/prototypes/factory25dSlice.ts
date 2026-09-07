@@ -14,6 +14,7 @@ import { createVisitorBasketball } from './factory25dVisitorBasketball';
 import { createNatureTv } from './factory25dNatureTv';
 import { createCeilingLights } from './factory25dCeilingLights';
 import * as THREE from 'three';
+import { FRONT_COUNTER, FRONT_VENDING, INTERIOR_Z } from '@shared/factory25d-layout';
 import { createRoomStaff } from './factory25dRoomStaff';
 import { createLiveAgents } from './factory25dLiveAgents';
 import { createFactoryControls } from './factory25dControls';
@@ -123,7 +124,7 @@ function box(
   return mesh;
 }
 
-function floorTexture(): THREE.CanvasTexture {
+function floorTexture(roughness = false): THREE.CanvasTexture {
   const floorCanvas = document.createElement('canvas');
   floorCanvas.width = 32;
   floorCanvas.height = 32;
@@ -131,16 +132,17 @@ function floorTexture(): THREE.CanvasTexture {
   if (context) {
     for (let y = 0; y < 32; y += 1) {
       for (let x = 0; x < 32; x += 1) {
-        context.fillStyle = (Math.floor(x / 2) + Math.floor(y / 2)) % 2 === 0 ? '#0a0a1a' : '#0c0c20';
+        const alternate = (Math.floor(x / 2) + Math.floor(y / 2)) % 2 === 0;
+        context.fillStyle = roughness ? (alternate ? '#c8c8c8' : '#cbcbcb') : (alternate ? '#212335' : '#222436');
         context.fillRect(x, y, 1, 1);
       }
     }
-    context.fillStyle = 'rgba(17, 17, 51, 0.4)';
+    context.fillStyle = roughness ? '#d4d4d4' : 'rgba(16, 18, 32, 0.10)';
     context.fillRect(0, 0, 32, 1);
     context.fillRect(0, 0, 1, 32);
   }
   const texture = new THREE.CanvasTexture(floorCanvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.colorSpace = roughness ? THREE.NoColorSpace : THREE.SRGBColorSpace;
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;
   texture.wrapS = THREE.RepeatWrapping;
@@ -149,12 +151,16 @@ function floorTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+// Sealed tile gets its color from illumination, with a broad, slightly varied
+// highlight. A tiny emission floor preserves readability when fixtures are off.
+const floorRoughness = floorTexture(true);
 const mainFloorMaterial = new THREE.MeshStandardMaterial({
   map: floorTexture(),
-  color: '#a8afca',
+  color: '#b5bbd4',
   emissive: '#0d1028',
-  emissiveIntensity: 1.55,
-  roughness: 0.98,
+  emissiveIntensity: 0.35,
+  roughness: 0.8,
+  roughnessMap: floorRoughness,
   metalness: 0.02,
 });
 const mainFloor: THREE.Mesh<THREE.BufferGeometry> = new THREE.Mesh(new THREE.PlaneGeometry(16.4, 18.5), mainFloorMaterial);
@@ -168,9 +174,10 @@ function floorZone(width: number, depth: number, x: number, z: number, color: st
     new THREE.PlaneGeometry(width, depth),
     new THREE.MeshStandardMaterial({
       color,
-      emissive: new THREE.Color(color).multiplyScalar(0.45),
-      emissiveIntensity: 1.25,
-      roughness: 1,
+      emissive: new THREE.Color(color).multiplyScalar(0.12),
+      emissiveIntensity: 0.45,
+      roughness: 0.86,
+      roughnessMap: floorRoughness,
       metalness: 0,
     }),
   );
@@ -181,8 +188,8 @@ function floorZone(width: number, depth: number, x: number, z: number, color: st
   return zone;
 }
 
-floorZone(7.8, 8, -4.08, 7.6, '#1a1408');
-floorZone(8.2, 8, 3.92, 7.6, '#1a0a2e');
+floorZone(7.8, 8, -4.08, 7.6, '#292113');
+floorZone(8.2, 8, 3.92, 7.6, '#29173d');
 
 // Floor-to-ceiling glass with a narrow header, side jambs and floor track.
 // The real header and uprights share a depth and meeting edge, so their shadows join.
@@ -448,7 +455,7 @@ plant('trailing', 4.38, -5.2, 0.79, 2.4);
 const movablePlant = plant('calathea', 5.85, -5.25, 0.85, 3.2);
 plant('bird', 7.05, -5.98, 1.02, 4);
 plant('succulent', 6.68, -5.05, 0.64, 1);
-plant('palm', -5.8, 4.12, 0.92, 1.1);
+plant('palm', -6.25, 4.12, 0.92, 1.1);
 plant('snake', 1.85, 4.72, 0.82, 2.1);
 plant('bonsai', -1.25, 4.62, 0.48, 2, 0.53);
 plant('rubber', -5.55, 5.55, 0.83, 0.4);
@@ -496,28 +503,29 @@ const whiteboardInteraction = createWhiteboardInteraction({
   board: whiteboard, panel: boardPanel, centerY: 1.2 - boardDrop, camera, canvas, renderer,
 });
 
-// Preserve the shorter counter and leave the outer doorway clear on its left.
-const counterWidth = 7.05 * 0.75;
-const counterTopWidth = 6.95 * 0.75;
-const counterCenter = -4.05 - (7.05 - counterWidth) / 2 + 1.55;
-const counterTopCenter = -4.05 - (6.95 - counterTopWidth) / 2 + 1.55;
+// A shorter counter joins the low brand cabinet; both share the front wall line.
+const counterWidth = FRONT_COUNTER.width;
+const counterTopWidth = FRONT_COUNTER.width;
+const counterCenter = FRONT_COUNTER.x;
+const counterTopCenter = FRONT_COUNTER.x;
+const counterZ = FRONT_COUNTER.z - INTERIOR_Z;
 // A recessed toe-kick and continuous cabinet body visibly meet the floor.
-interior.add(box([counterWidth - 0.14, 0.055, 0.29], [counterCenter, 0.0275, 4.7], standard('#4b3b1c')));
-interior.add(box([counterWidth - 0.08, 0.31, 0.31], [counterCenter, 0.205, 4.7], standard('#70551c')));
-interior.add(box([counterWidth, 0.16, 0.34], [counterCenter, 0.36, 4.7], standard('#8b6914')));
-interior.add(box([counterTopWidth, 0.1, 0.42], [counterTopCenter, 0.48, 4.66], standard('#c4991a')));
-contactShadow(interior, { x: counterCenter, z: 4.7, floorY: 0.018,
+interior.add(box([counterWidth - 0.14, 0.055, 0.29], [counterCenter, 0.0275, counterZ], standard('#4b3b1c')));
+interior.add(box([counterWidth - 0.08, 0.31, 0.31], [counterCenter, 0.205, counterZ], standard('#70551c')));
+interior.add(box([counterWidth, 0.16, 0.34], [counterCenter, 0.36, counterZ], standard('#8b6914')));
+interior.add(box([counterTopWidth, 0.1, FRONT_COUNTER.depth], [counterTopCenter, FRONT_COUNTER.topY-.05, counterZ], standard('#c4991a')));
+contactShadow(interior, { x: counterCenter, z: counterZ, floorY: 0.018,
   width: counterWidth - 0.14, depth: 0.29, spread: 0.18, opacity: 0.32 });
 // The counter label belongs on its cabinet face, leaving the tabletop screen clear.
 const counterLabel = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.16), new THREE.MeshStandardMaterial({
   map: signTexture('FRONT COUNTER', '#d2c8a1', '#4d401e', 2, 1.65 / 0.16), roughness: 1,
 }));
-counterLabel.position.set(counterCenter, 0.23, 4.878);
+counterLabel.position.set(counterCenter, 0.23, counterZ+.178);
 interior.add(counterLabel);
 const vendingMachine=createVendingMachine(interior);
-vendingMachine.root.position.set(-1,0,7.05);
+vendingMachine.root.position.set(FRONT_VENDING.x,0,FRONT_VENDING.z-INTERIOR_Z);
 // Front desk room, beside its right divider; the display faces left into the room.
-vendingMachine.root.rotation.y=-Math.PI/3;
+vendingMachine.root.rotation.y=FRONT_VENDING.rotationY;
 const teamDesk = createTeamDesk(interior, canvas, camera, renderer, () => factoryControls.state.stop(), mountainView.setVisitors, liveAgents.contributionFor);
 const brandLibrary = createBrandLibrary(interior, canvas, () => factoryControls.state.stop());
 brandLibrary.addTrigger(brandFlag.target, 'patio', 'Open the WE flag and brand shelf');
@@ -566,7 +574,7 @@ function cornerCouch(x: number, z: number): void {
 cornerCouch(0.65, 5.8);
 // The plant shelf moved into the garage, keeping the lift and side aisle clear.
 const natureTv = createNatureTv(interior);
-const roomStaff = createRoomStaff(scene, whiteboard, canvas, whiteboardInteraction.openBoard);
+const roomStaff = createRoomStaff(scene, whiteboard, canvas, whiteboardInteraction.openBoard, whiteboardInteraction.boardMotion);
 const loungeDetails = createLoungeDetails(interior, canvas, camera, renderer, teamDesk.members);
 loungeDetails.chat.configureNotifications({ buzz: sceneAudio.phoneBuzz, stop: sceneAudio.stopPhoneBuzz });
 
@@ -581,8 +589,7 @@ const factoryControls = createFactoryControls(canvas, liveAgents, () => currentV
   room => roomNavigation.request(room), avatarStage,
   () => garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory');
 garage.setWorkAction(() => factoryControls.openGarageStations());
-garage.setCarAction(car => factoryControls.visitGarageCar(car));
-const garageDriving = createGarageDriving(garage.room, garage.cars, liveAgents, () => {
+const garageDriving = createGarageDriving(garage.room, garage.cars, liveAgents, canvas, () => {
   factoryControls.state.stop(); if (factoryControls.state.active) factoryControls.state.release();
 });
 carDrivingActive = garageDriving.isActive;
@@ -627,9 +634,10 @@ let basketballPlayers: { id: string; name: string; position: THREE.Vector3; home
 
 const ambient = new THREE.HemisphereLight('#9bb6df', '#363453', 4.1);
 scene.add(ambient);
-// The enclosed adjoining room shares the environment's ambient illumination.
-// Rendering it separately keeps the main window's direct sunlight in its own room.
+// The roofless patio has cooler sky fill and warm timber bounce of its own;
+// keep it separate from the enclosed room's deliberately generous fill.
 const sideRoomAmbient = ambient.clone();
+const patioSkyFill = new THREE.Color('#b6cbed');
 sideRoomScene.add(sideRoomAmbient);
 
 // A real window-sized source supplies the broad room wash. It intentionally
@@ -723,7 +731,7 @@ function setLightX(value: number): void {
   }
   mountainView.setEnvironment(sunArc, weather, currentPalette, isNight, lunarLight);
   windowWashLight.color.copy(bottom).lerp(new THREE.Color('#ffe0b5'), horizon * 0.55 * (1 - weather.cloud01));
-  windowLight.color.set('#e6efff').lerp(new THREE.Color(evening ? '#ffc58d' : '#ffdfb4'), horizon);
+  windowLight.color.set('#fff1da').lerp(new THREE.Color(evening ? '#ffc58d' : '#ffdfb4'), horizon);
   ambient.color.set('#9bb6df').lerp(new THREE.Color(evening ? '#a395be' : '#b4b7d4'), horizon * 0.65);
   ambient.color.lerp(new THREE.Color('#97abc7'), weather.cloud01 * 0.45);
   windowWashLight.intensity = THREE.MathUtils.lerp(8, 6.4, horizon) * light.window;
@@ -906,8 +914,9 @@ function animate(): void {
   sun.scale.y = 1 / Math.max(0.5, Math.abs(viewCamera.matrixWorldInverse.elements[5]));
   if (showPatio) {
     sideRoomAmbient.color.copy(ambient.color);
-    sideRoomAmbient.groundColor.copy(ambient.groundColor);
-    sideRoomAmbient.intensity = ambient.intensity;
+    sideRoomAmbient.groundColor.set(isNight ? '#363453' : '#665b4f');
+    sideRoomAmbient.intensity = ambient.intensity * (isNight ? 1 : 0.82);
+    if (!isNight) sideRoomAmbient.color.lerp(patioSkyFill, 0.3);
     patio.stations.setFeedback(stationFeedback, reducedSceneMotion.matches);
     patio.update(windowLight, weather.snow01, weather.rain01, isNight, elapsed*(reducedSceneMotion.matches?0.2:1), weather.wet01, reducedSceneMotion.matches,
       (viewCamera.right - viewCamera.left) / viewCamera.zoom);

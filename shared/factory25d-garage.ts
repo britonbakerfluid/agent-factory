@@ -4,6 +4,11 @@ export type GarageCarId = typeof GARAGE_CAR_IDS[number];
 export const GARAGE_CAR_SCALE = .75;
 export const GARAGE_CAR_YAW = Math.PI - .52;
 export const GARAGE_CAR_VISIT_MS = 12_000;
+export const GARAGE_RAMP = { left: 9.79, right: 11.9, near: 5.2, far: -4.1, rise: 1.25, doorZ: -4.18 } as const;
+export function garageRampHeightAt(x: number, z: number) {
+  return x >= GARAGE_RAMP.left && x <= GARAGE_RAMP.right && z < GARAGE_RAMP.near
+    ? Math.max(0, Math.min(1, (GARAGE_RAMP.near - z) / (GARAGE_RAMP.near - GARAGE_RAMP.far))) * GARAGE_RAMP.rise : 0;
+}
 export const GARAGE_CAR_BAYS = Object.fromEntries(GARAGE_CAR_IDS.map((id, i) => [id, { x: -4.6 + i * 4.2, z: .25 }])) as Record<GarageCarId, { x: number; z: number }>;
 /** Measured GLB body bounds at the display scale/yaw; exclude open-door motion. */
 export const GARAGE_PARKED_BOUNDS: Record<GarageCarId, {left:number;right:number;near:number;far:number}> = {

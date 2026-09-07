@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { DEFAULT_AVATAR } from '../shared/constants';
+import { avatarBodyFrame } from '../client/prototypes/factory25dAvatarTexture';
 
 vi.mock('../client/rendering/avatarPainter', async importOriginal => ({
   ...await importOriginal<typeof import('../client/rendering/avatarPainter')>(), drawCharacter: vi.fn(),
@@ -95,10 +96,10 @@ describe('in-room avatar camera', () => {
     const { stage, factory, tick } = await setup();
     tick(15_000); stage.pose(1, true); tick(15_000);
     const model = factory.getObjectByName('avatar-edit-draft') as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>;
-    expect(model.material.map!.offset.x).toBe(0);
-    tick(15_160); expect(model.material.map!.offset.x).toBe(.25);
-    stage.pose(2, true); tick(15_310); expect(model.material.map!.offset.x).toBe(.75);
-    stage.pose(2, false); tick(15_500); expect(model.material.map!.offset.x).toBe(0);
+    expect(avatarBodyFrame(model.material.map!)).toBe(0);
+    tick(15_160); expect(avatarBodyFrame(model.material.map!)).toBe(1);
+    stage.pose(2, true); tick(15_310); expect(avatarBodyFrame(model.material.map!)).toBe(3);
+    stage.pose(2, false); tick(15_500); expect(avatarBodyFrame(model.material.map!)).toBe(0);
     stage.dispose();
   });
 

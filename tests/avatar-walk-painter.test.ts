@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { DEFAULT_AVATAR } from '../shared/constants';
 import { drawCharacter, hexToInt, resolveAvatar } from '../client/rendering/avatarPainter';
+import { AVATAR_ANIMATIONS } from '../client/prototypes/factory25dAvatar';
+import { snackHandPose } from '../client/prototypes/factory25dSnackCarry';
 
 type Rect = { x: number; y: number; width: number; height: number; color: string };
 function paint(animation: string, frame: number, avatar = DEFAULT_AVATAR) {
@@ -18,6 +21,77 @@ function paint(animation: string, frame: number, avatar = DEFAULT_AVATAR) {
 }
 
 describe('four-frame pixel walk', () => {
+  it('anchors a carried snack on actual painted hand pixels in every pose and frame', () => {
+    const texture = new THREE.Texture(), pixel = .86 / 32;
+    for (const [row, animation] of AVATAR_ANIMATIONS.entries()) for (let frame = 0; frame < 4; frame++) {
+      texture.offset.set(frame / 4, 1 - (row + 1) / AVATAR_ANIMATIONS.length);
+      const hand = snackHandPose(texture), { pixels, colors } = paint(animation, frame);
+      const x = Math.floor(16 + hand.x / pixel), y = Math.floor(16 - hand.y / pixel);
+      expect(pixels[y][x], `${animation} frame ${frame}`).toBe(colors.skinTone);
+    }
+    texture.dispose();
+  });
+  it('keeps both hands visible and attached throughout the working cycle', () => {
+    for (let frame = 0; frame < 4; frame++) {
+      const { pixels, colors } = paint('work', frame);
+      expect(pixels[21][4]).toBe(colors.skinTone);
+      expect(pixels[21][23]).toBe(colors.skinTone);
+    }
+  });
+  it('keeps visible crown and temple hair after painting skin in every side-facing frame', () => {
+    for (const hairStyle of [0, 1, 2, 4, 6]) for (const anim of ['walk_right', 'walk_left', 'hold_right', 'hold_left']) for (let frame = 0; frame < 4; frame++) {
+      const { pixels } = paint(anim, frame, { ...DEFAULT_AVATAR, hairStyle, hairColor: '#604332' });
+      const crown = pixels.slice(4, 8).flat().filter(color => color === '#604332').length;
+      expect(crown, `${hairStyle} ${anim} ${frame}`).toBeGreaterThan(8);
+      if (hairStyle === 2) {
+        expect(pixels.slice(10, 18).flat().filter(color => color === '#604332').length).toBeGreaterThan(12);
+      }
+    }
+  });
+
+  it('retains the board manager glasses and long hair while walking and carrying', () => {
+    for (const anim of ['walk_right', 'walk_left', 'hold_right', 'hold_left']) for (let frame = 0; frame < 4; frame++) {
+      const { pixels } = paint(anim, frame, { ...DEFAULT_AVATAR, hairStyle: 2, hairColor: '#604332', faceAccessory: 1 });
+      expect(pixels.slice(7, 13).flat().filter(color => color === '#666666').length).toBeGreaterThan(8);
+      expect(pixels.slice(10, 18).flat().some(color => color === '#604332')).toBe(true);
+    }
+  });
+
+  it('renders every terminal face and head choice distinctly without bleeding into adjacent side frames', () => {
+    for (const [field, count] of [['faceAccessory', 6], ['headAccessory', 7], ['facialHair', 6], ['mouthStyle', 6]] as const) {
+      for (const anim of ['walk_left', 'walk_right']) {
+        const signatures = new Set<string>();
+        for (let choice = 0; choice < count; choice++) for (let frame = 0; frame < 4; frame++) {
+          const { pixels, rectangles } = paint(anim, frame, { ...DEFAULT_AVATAR, [field]: choice });
+          expect(rectangles.every(r => r.x >= 0 && r.y >= 0 && r.x + r.width <= 32 && r.y + r.height <= 32), `${field} ${choice}`).toBe(true);
+          if (frame === 0) signatures.add(JSON.stringify(pixels.slice(0, 17)));
+        }
+        expect(signatures.size, `${field} ${anim}`).toBe(count);
+      }
+    }
+  });
+
+  it('keeps cap and bandana fabric tied to the selected shirt, not hair color', () => {
+    for (const hairStyle of [3, 7]) {
+      const avatar = { ...DEFAULT_AVATAR, hairStyle, shirtColor: '#5f8f78', hairColor: '#604332' };
+      expect(paint('walk_right', 0, avatar).pixels).toEqual(paint('walk_right', 0, { ...avatar, hairColor: '#abcdef' }).pixels);
+      expect(paint('walk_right', 0, avatar).pixels).not.toEqual(paint('walk_right', 0, { ...avatar, shirtColor: '#ed6644' }).pixels);
+    }
+  });
+
+  it('keeps both gripping hands fixed while the carrying feet step, using the same avatar colors', () => {
+    for (const direction of ['left', 'right', 'up']) {
+      const frames = [0, 1, 2, 3].map(frame => paint(`hold_${direction}`, frame));
+      const hands = frames.map(({ rectangles, colors }) => rectangles.filter(r => r.color === colors.skinTone && r.y >= 12));
+      for (let frame = 1; frame < 4; frame++) expect(hands[frame], direction).toEqual(hands[0]);
+      // Opposite contact feet can share a silhouette when both arms hold still.
+      expect(new Set(frames.map(({ pixels }) => JSON.stringify(pixels))).size, direction).toBeGreaterThanOrEqual(3);
+      for (const { pixels, rectangles } of frames) {
+        expect(pixels[31].some(Boolean)).toBe(true);
+        expect(rectangles.every(r => r.x >= 0 && r.y >= 0 && r.x + r.width <= 32 && r.y + r.height <= 32), direction).toBe(true);
+      }
+    }
+  });
   it('paints four distinct poses in every direction, with shoes inside their atlas cell and a steady ground line', () => {
     for (const direction of ['left', 'right', 'up', 'down']) {
       const frames = [0, 1, 2, 3].map(frame => paint(`walk_${direction}`, frame));

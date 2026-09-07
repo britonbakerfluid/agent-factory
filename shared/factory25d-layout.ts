@@ -20,7 +20,9 @@ export function factoryWorldPoint(point: { x: number; z: number }, room: Factory
 export const INDOOR_COLUMNS = [-5.5, -3.3, -1.1, 1.1, 3.3, 5.5];
 export const INDOOR_ROWS = [-3.8, 0.33];
 export const INTERIOR_Z = 1.95;
-export const BRAND_SHELF = { x:-6.8, z:8.15, width:1.25, depth:.5 } as const;
+export const FRONT_COUNTER = { x: -2.42, z: 6.65, width: 3.36, depth: .42, topY: .53 } as const;
+export const BRAND_SHELF = { x: -4.84, z: 6.61, width: 1.48, depth: .5, height: 1.18, rotationY: 0 } as const;
+export const FRONT_VENDING = { x: -1, z: 9.65, rotationY: -Math.PI / 3, halfWidth: .54, halfDepth: .59 } as const;
 export type Workstation = { id: string; room: FactoryRoom; x: number; z: number; label: string; halfWidth?: number };
 export const INDOOR_STATIONS: Workstation[] = INDOOR_ROWS.flatMap((z, row) =>
   INDOOR_COLUMNS.map((x, column) => ({ id: `inside-${row * 6 + column}`, room: 'factory', x, z: z + INTERIOR_Z, label: 'arcade station' })),
@@ -57,14 +59,14 @@ export function factory25dWaypoints(from: Position, to: Position): Position[] {
 }
 
 export type RoomPoint = { x: number; z: number };
-type Obstacle = { left: number; right: number; near: number; far: number };
+type Obstacle = { left: number; right: number; near: number; far: number; id?: string };
 const margin = 0.12;
 export const FACTORY_OBSTACLES: Obstacle[] = [
   ...PATIO_OBSTACLES,
-  { left:BRAND_SHELF.x-BRAND_SHELF.width/2, right:BRAND_SHELF.x+BRAND_SHELF.width/2, near:BRAND_SHELF.z-BRAND_SHELF.depth/2, far:BRAND_SHELF.z+BRAND_SHELF.depth/2 }, // Brand objects on the small front-counter shelf.
+  { left:BRAND_SHELF.x-BRAND_SHELF.width/2, right:BRAND_SHELF.x+BRAND_SHELF.width/2, near:BRAND_SHELF.z-BRAND_SHELF.depth/2, far:BRAND_SHELF.z+BRAND_SHELF.depth/2 }, // Built-in display joins the shorter front counter.
   ...WORKSTATIONS.filter(station => station.id !== MINI_WORKSTATION_ID).map(station => ({ left: station.x - (station.halfWidth ?? (station.room === 'patio' ? 0.77 : 0.36)), right: station.x + (station.halfWidth ?? (station.room === 'patio' ? 0.77 : 0.36)), near: station.z - 0.3, far: station.z + 0.32 })),
   ...GARAGE_CAR_IDS.map(id => { const bay=GARAGE_CAR_BAYS[id],bounds=GARAGE_PARKED_BOUNDS[id]; return {left:bay.x+bounds.left,right:bay.x+bounds.right,near:GARAGE_WORLD_Z+bay.z+bounds.near,far:GARAGE_WORLD_Z+bay.z+bounds.far}; }),
-  { left: 9.65, right: 12, near: GARAGE_WORLD_Z - 4.3, far: GARAGE_WORLD_Z + 5.4 }, // Vehicle ramp; pedestrians use the open floor.
+  { id: 'garage-ramp', left: 9.65, right: 12, near: GARAGE_WORLD_Z - 4.3, far: GARAGE_WORLD_Z + 5.4 }, // Vehicle ramp; pedestrians use the open floor.
   { left: 5.65, right: 11.85, near: GARAGE_WORLD_Z + 11, far: GARAGE_WORLD_Z + 16.1 },
   { left: -11.8, right: -6.2, near: GARAGE_WORLD_Z + 11.7, far: GARAGE_WORLD_Z + 13.2 },
   { left: -8.775, right: -7.525, near: GARAGE_WORLD_Z - 4.1, far: GARAGE_WORLD_Z - 3.6 }, // Preserved plant shelf between the lower lift and window desks.
@@ -74,13 +76,13 @@ export const FACTORY_OBSTACLES: Obstacle[] = [
   { left: -6.2, right: 5.8, near: 5.46, far: 5.62 },
   { left: 7.2, right: 7.88, near: 5.46, far: 5.62 },
   { left: -0.22, right: -0.04, near: 5.6, far: 14.1 },
-  { left: -5.85, right: -0.55, near: 6.43, far: 6.86 },
-  { left: -1.54, right: -0.46, near: 8.41, far: 9.59 }, // Front desk room's bottom-right vending machine, facing left.
+  { left: FRONT_COUNTER.x-FRONT_COUNTER.width/2, right: FRONT_COUNTER.x+FRONT_COUNTER.width/2, near: FRONT_COUNTER.z-FRONT_COUNTER.depth/2, far: FRONT_COUNTER.z+FRONT_COUNTER.depth/2 },
+  { left: FRONT_VENDING.x-FRONT_VENDING.halfWidth, right: FRONT_VENDING.x+FRONT_VENDING.halfWidth, near: FRONT_VENDING.z-FRONT_VENDING.halfDepth, far: FRONT_VENDING.z+FRONT_VENDING.halfDepth }, // Moved down along the front desk room's right divider.
   { left: 0.25, right: 1.1, near: 7.05, far: 8.75 },
   { left: .22, right: 1.34, near: 9.52, far: 10.66 }, // Orange chair; board it from the open right-hand side.
 ].map(o => {
   const clearance = 'clearance' in o && typeof o.clearance === 'number' ? o.clearance : margin;
-  return { left: o.left - clearance, right: o.right + clearance, near: o.near - clearance, far: o.far + clearance };
+  return { ...o, left: o.left - clearance, right: o.right + clearance, near: o.near - clearance, far: o.far + clearance };
 });
 function inside(p: RoomPoint, o: Obstacle) { return p.x > o.left && p.x < o.right && p.z > o.near && p.z < o.far; }
 function floorBounds(point: RoomPoint) {

@@ -203,6 +203,7 @@ export function createLoungeChat(
     lastWidth = canvas.clientWidth; lastHeight = canvas.clientHeight;
   }
   function closePose(): CameraPose {
+    board.updateWorldMatrix(true, false); board.localToWorld(focus.set(0, 0, PHONE.faceZ));
     return phoneCameraPose(board, canvas.clientWidth, canvas.clientHeight);
   }
   function enter() {
@@ -219,7 +220,7 @@ export function createLoungeChat(
     dock.dataset.instant = String(reduced.matches);
     fit(); from.height *= canvas.clientHeight / Math.max(1, previousHeight);
     layoutWidth = Math.max(300, Math.min(400, PHONE.screenWidth / closePose().height * canvas.clientHeight));
-    blendCamera(camera, from, closePose(), 0, canvas.clientWidth / Math.max(1, canvas.clientHeight));
+    blendCamera(camera, from, closePose(), 0, canvas.clientWidth / Math.max(1, canvas.clientHeight), focus);
     list.scrollTop = list.scrollHeight;
     focusInputOnArrival = focusComposer; back.focus({ preventScroll: true }); focusComposer = false;
   }
@@ -345,7 +346,7 @@ export function createLoungeChat(
         const viewport = canvas.closest('.slice-viewport')!.getBoundingClientRect();
         const restoredHeight = Math.min(viewport.height, viewport.width * 141 / 200) - 2;
         const to = open ? closePose() : { ...room, height: room.height * canvas.clientHeight / Math.max(1, restoredHeight) };
-        blendCamera(camera, from, to, t, canvas.clientWidth / Math.max(1, canvas.clientHeight));
+        blendCamera(camera, from, to, t, canvas.clientWidth / Math.max(1, canvas.clientHeight), focus);
         sheet.inert = !open || t < 1;
         if (t === 1) {
           moving = false;

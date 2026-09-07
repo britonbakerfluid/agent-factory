@@ -1,19 +1,14 @@
-.garage-elevator-call,.garage-nav button,.garage-collection button{font:12px monospace;color:#e5dfcf;background:#20283bec;border:1px solid #697084;border-radius:5px;min-height:44px;padding:8px 13px;cursor:pointer}
+.garage-elevator-call,.garage-nav button{font:12px monospace;color:#e5dfcf;background:#20283bec;border:1px solid #697084;border-radius:5px;min-height:44px;padding:8px 13px;cursor:pointer}
 .garage-elevator-call{position:fixed;z-index:15;min-width:44px;font-size:11px;padding:8px 7px;font-family:'Geist Pixel',monospace;border-color:#6aaca2;color:#b0ddd4;background:#122629e8}
 .garage-nav{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:15px;background:#0c1020e8;padding:10px;color:#cfbbd9;font:12px monospace;border-radius:8px;white-space:nowrap}
-.garage-collection{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:20;max-width:95vw}
-.garage-collection button[aria-pressed=true]{border-color:#e49cde;background:#55426a}
 .garage-status{position:fixed;bottom:140px;left:50%;transform:translateX(-50%);color:#ded9cd;font:12px monospace;z-index:20;text-align:center}
 .garage-open #room-doorway,.garage-open #window-open,.garage-open #board-open,.garage-open #board-game,.garage-open #keyboard-walk{visibility:hidden}
-.garage-nav[hidden],.garage-elevator-call[hidden],.garage-collection[hidden],.garage-status[hidden]{display:none}
-@media(max-width:600px){.garage-collection{bottom:78px;flex-wrap:wrap;justify-content:center;width:95vw}.garage-collection button{font-size:10px;padding:6px 9px}.garage-nav{bottom:12px}.garage-status{bottom:185px;width:90vw}}
+.garage-nav[hidden],.garage-elevator-call[hidden],.garage-status[hidden]{display:none}
+@media(max-width:600px){.garage-nav{bottom:12px}.garage-status{bottom:140px;width:90vw}}
 
 /* Share the factory dock rather than introducing a second control style. */
-.garage-nav.pixel-island,.garage-collection.pixel-island{background:#080b12f5;border-radius:0;border-top:1px solid #53616a85;color:#e2e9eb;}
-.garage-collection.pixel-island{width:max-content;max-width:calc(100vw - 24px);padding:10px 16px;}
-.garage-collection.pixel-island button[aria-pressed=true]{--pixel-face:#25453f;--pixel-edge:#7ca99c;background:var(--pixel-edge);border:0;color:#dceee9;}
-.garage-nav.pixel-island button,.garage-collection.pixel-island button{font-family:'Geist Pixel',monospace;font-size:12px;}
-@media(max-width:600px){.garage-collection.pixel-island{width:calc(100vw - 24px);padding:10px;gap:5px}.garage-collection.pixel-island button{font-size:10px;padding:7px 9px;}.garage-status{bottom:220px}}
+.garage-nav.pixel-island{background:#080b12f5;border-radius:0;border-top:1px solid #53616a85;color:#e2e9eb;}
+.garage-nav.pixel-island button{font-family:'Geist Pixel',monospace;font-size:12px;}
 
 .garage-transit{position:fixed;inset:0;z-index:90;background:#080b12;display:grid;place-items:center;pointer-events:auto;color:#92c7be;font:16px 'Geist Pixel',monospace;letter-spacing:.14em;}
 .garage-transit[hidden]{display:none}
@@ -26,6 +21,3 @@
 .garage-elevator-call{width:44px;height:44px;padding:0;border:0;background:transparent;font-size:0;display:grid;place-items:center;}
 .garage-elevator-call::after{content:attr(data-label);display:grid;place-items:center;width:28px;height:22px;background:#14292ce8;border:1px solid #6da398;color:#b3dace;font:10px 'Geist Pixel',monospace;clip-path:polygon(3px 0,calc(100% - 3px) 0,100% 3px,100% calc(100% - 3px),calc(100% - 3px) 100%,3px 100%,0 calc(100% - 3px),0 3px);}
 .garage-elevator-call:focus-visible{outline:1px solid #b3dace;outline-offset:0;border-radius:4px}
-.garage-car-rev{margin-left:8px;--pixel-face:#25453f;--pixel-edge:#7ca99c}
-.garage-collection button:disabled{opacity:.5;cursor:wait}
-@media(max-width:600px){.garage-collection.pixel-island{bottom:138px}.garage-car-rev{flex-basis:100%;margin-left:0}.garage-status{bottom:262px;padding:0 12px;box-sizing:border-box}}

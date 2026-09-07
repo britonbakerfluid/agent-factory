@@ -96,6 +96,58 @@ describe('avatar editing access and validation', () => {
 });
 
 describe('durable avatar preferences and terminal compatibility', () => {
+  it('allows an explicit terminal save to replace a browser preference for only that installation', async () => {
+    const { app, state, profiles } = await fixture(); await profiles.save(owner, red);
+    const headers = { authorization: `Bearer ${device}` };
+    const loaded = await app.inject({ method: 'GET', url: '/api/avatar/installation?ownerId=' + otherOwner, headers });
+    expect(loaded.json()).toEqual({ avatar: red, saved: true });
+    const next = { ...blue, hairStyle: 2, faceAccessory: 1, facialHair: 4, headAccessory: 6, mouthStyle: 1, shirtDesign: 9, hairColor: '#604332', pantsColor: '#2b3440', shoeColor: '#555555', skinTone: '#ae704e' };
+    const before = structuredClone(state.get('one'));
+    const saved = await app.inject({ method: 'PUT', url: '/api/avatar/installation', headers, payload: { avatar: next, ownerId: otherOwner } });
+    expect(saved.statusCode).toBe(200); expect(saved.json()).toEqual({ avatar: next, saved: true });
+    expect(state.get('one')).toEqual({ ...before, avatar: next });
+    expect(state.get('two')?.avatar).toEqual(next); expect(state.get('other')?.avatar).toEqual(blue);
+    const browser = await app.inject({ method: 'GET', url: '/api/avatar', cookies: request.cookies });
+    expect(browser.json().avatar).toEqual(next);
+    // A stale hook does not undo either editor's deliberate save.
+    await app.inject({ method: 'POST', url: '/api/hooks', headers, payload: hook('one', owner, red) });
+    expect(state.get('one')?.avatar).toEqual(next);
+    await app.inject(request); expect(profiles.get(owner).avatar).toEqual(red);
+    await app.close();
+  });
+
+  it('requires a valid installation credential for terminal reads and saves', async () => {
+    const { app, repository } = await fixture();
+    for (const authorization of [undefined, 'Bearer invalid', `Bearer ${browserCookie}`]) {
+      const headers = authorization ? { authorization } : {};
+      expect((await app.inject({ method: 'GET', url: '/api/avatar/installation', headers, cookies: request.cookies })).statusCode).toBe(401);
+      expect((await app.inject({ method: 'PUT', url: '/api/avatar/installation', headers, cookies: request.cookies, payload: { avatar: red } })).statusCode).toBe(401);
+    }
+    expect(repository.saveAvatarProfile).not.toHaveBeenCalled(); await app.close();
+  });
+
+  it('validates terminal edits and preserves the saved look when persistence fails', async () => {
+    const { app, repository, profiles } = await fixture();
+    const put = { method: 'PUT' as const, url: '/api/avatar/installation', headers: { authorization: `Bearer ${device}` } };
+    expect((await app.inject({ ...put, payload: { avatar: { ...red, hairStyle: 9 } } })).statusCode).toBe(400);
+    vi.mocked(repository.saveAvatarProfile).mockRejectedValueOnce(new Error('offline'));
+    expect((await app.inject({ ...put, payload: { avatar: red } })).statusCode).toBe(503);
+    expect(profiles.get(owner).avatar).toEqual(blue);
+    expect((await app.inject({ ...put, payload: { avatar: red } })).statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('rejects installation credentials over remote plaintext transport', async () => {
+    const { app, repository } = await fixture();
+    vi.stubEnv('NODE_ENV', 'production');
+    try {
+      for (const method of ['GET', 'PUT'] as const) {
+        expect((await app.inject({ method, url: '/api/avatar/installation', remoteAddress: '203.0.113.8', headers: { authorization: `Bearer ${device}` }, ...(method === 'PUT' ? { payload: { avatar: red } } : {}) })).statusCode).toBe(403);
+      }
+      expect(repository.saveAvatarProfile).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); await app.close(); }
+  });
+
   it('keeps legacy appearance fields when validating a saved look', () => {
     const legacy = { ...DEFAULT_AVATAR, hat: 'old hat', trail: 'spark', graphicDeath: false };
     expect(parseAvatarConfig(legacy)).toEqual(legacy);

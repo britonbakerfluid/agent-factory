@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AGENT_VISUAL_STATES, DEFAULT_AGENT_STYLES, AgentPresentationMachine, activityForVisualState,
-  agentStateStyle, resetAgentStateStyle, resolveAgentVisualState, sanitizeAgentStateStyle, setAgentStateStyle } from '../client/prototypes/factory25dAgentStates';
+  agentStateStyle, resetAgentStateStyle, resolveAgentVisualState, sanitizeAgentStateStyle, setAgentStateStyle, stationaryAgentAnimation } from '../client/prototypes/factory25dAgentStates';
 
 afterEach(() => AGENT_VISUAL_STATES.forEach(resetAgentStateStyle));
 describe('shared agent presentation states', () => {
+  it('faces the scenery only for a quiet break, retaining attention poses when ready or blocked', () => {
+    expect(stationaryAgentAnimation('idle', true)).toBe('walk_up');
+    for (const state of ['input', 'permission', 'ready', 'error'] as const)
+      expect(stationaryAgentAnimation(state, true)).toBe(DEFAULT_AGENT_STYLES[state].pose);
+    setAgentStateStyle('ready', { pose: 'sit' });
+    expect(stationaryAgentAnimation('ready', true)).toBe('sit');
+    expect(stationaryAgentAnimation('writing', false)).toBe('work');
+  });
   it('covers every work state, gives it its own look, and does not infer attention from idle or unspecified waiting', () => {
     for (const activity of ['thinking', 'reading', 'writing', 'running', 'searching', 'chatting', 'planning', 'compacting'] as const) {
       expect(resolveAgentVisualState({ activity, currentTool: null })).toBe(activity);

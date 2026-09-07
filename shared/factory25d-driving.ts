@@ -1,16 +1,18 @@
-import { GARAGE_CAR_BAYS, GARAGE_CAR_IDS, GARAGE_CAR_YAW, type GarageCarId } from './factory25d-garage.js';
+import { GARAGE_CAR_BAYS, GARAGE_CAR_IDS, GARAGE_CAR_YAW, GARAGE_RAMP, garageRampHeightAt, type GarageCarId } from './factory25d-garage.js';
 import { planGarageParking } from './factory25d-parking.js';
 import { FACTORY_OBSTACLES, GARAGE_WORLD_Z } from './factory25d-layout.js';
 
 export type GarageDriveInput = { throttle: number; steer: number; drift: boolean };
+export type GarageTimeJump = { id: number; startedAt: number; arriveAt: number; arrived: boolean; x: number; z: number; yaw: number };
 export type GarageDriveCar = {
   id: GarageCarId; x: number; z: number; yaw: number; vx: number; vz: number;
   steer: number; slip: number; throttle: number; damage: number;
   mode: 'parked' | 'driving' | 'returning' | 'donut';
   hoverHeight?: number;
+  timeJump?: GarageTimeJump;
   driverVisitorId?: string; driverSessionId?: string;
 };
-export type GarageTireMark = { id: number; car: GarageCarId; x1: number; z1: number; x2: number; z2: number; width: number; opacity: number; createdAt: number };
+export type GarageTireMark = { id: number; car: GarageCarId; x1: number; z1: number; x2: number; z2: number; width: number; opacity: number; createdAt: number; kind?: 'fire'; y1?: number; y2?: number };
 export type GarageDrivePedestrian = { x: number; z: number; radius?: number; toX?: number; toZ?: number; sessionId?: string };
 export type GarageDriveRequest = { type: 'garage_drive'; action: 'claim' | 'input' | 'release' | 'reset'; car: GarageCarId; input?: GarageDriveInput };
 export type GarageDriveResult = { type: 'garage_drive_result'; action: GarageDriveRequest['action']; car: GarageCarId; success: boolean; visitorId?: string; error?: string };
@@ -18,23 +20,31 @@ export type GarageDriveState = { type: 'garage_drive_state'; serverTime: number;
 export const GARAGE_MAX_MARKS = 240;
 export const GARAGE_MARK_LIFETIME_MS = 90_000;
 export const GARAGE_HOVER_HEIGHT = 1.45;
+export const GARAGE_TIME_JUMP_DELAY_MS = 550;
+export const GARAGE_FIRE_LIFETIME_MS = 8_000;
 export const GARAGE_RETURN_RECOVERY_MS = 1_000;
+export const GARAGE_REPAIR_DELAY_SECONDS = 4;
+export const GARAGE_FULL_REPAIR_SECONDS = 60;
 export const GARAGE_NEUTRAL_INPUT: GarageDriveInput = { throttle: 0, steer: 0, drift: false };
 export const GARAGE_DRIVE_PROFILES = {
-  porsche: { height: .804, width: 1.074, length: 2.052, acceleration: 5.6, braking: 9, maxSpeed: 6.8, mass: 1.15, grip: 10, driftGrip: 1.5, steering: .66, wheelbase: 1.36 },
-  mini: { height: .878, width: .897, length: 1.620, acceleration: 4.5, braking: 8, maxSpeed: 5.7, mass: .82, grip: 9, driftGrip: 1.8, steering: .78, wheelbase: 1.06 },
-  delorean: { height: .744, width: 1.104, length: 2.091, acceleration: 3.8, braking: 7, maxSpeed: 6.1, mass: 1.4, grip: 8, driftGrip: 1.2, steering: .58, wheelbase: 1.4 },
-  f1: { height: .739, width: 1.382, length: 2.299, acceleration: 7.2, braking: 12, maxSpeed: 8, mass: .65, grip: 14, driftGrip: 2.2, steering: .61, wheelbase: 1.55 },
+  porsche: { height: .804, width: 1.074, length: 2.052, acceleration: 13.5, braking: 15, maxSpeed: 13.5, reverseSpeed: 5.2, mass: 1.15, grip: 10, driftGrip: 1.5, steering: .66, wheelbase: 1.36 },
+  mini: { height: .878, width: .897, length: 1.620, acceleration: 10.8, braking: 12.5, maxSpeed: 11.2, reverseSpeed: 4.8, mass: .82, grip: 9, driftGrip: 1.8, steering: .78, wheelbase: 1.06 },
+  delorean: { height: .744, width: 1.104, length: 2.091, acceleration: 10, braking: 12, maxSpeed: 12.4, reverseSpeed: 5.4, mass: 1.4, grip: 8, driftGrip: 1.2, steering: .58, wheelbase: 1.4 },
+  f1: { height: .739, width: 1.382, length: 2.299, acceleration: 17.5, braking: 20, maxSpeed: 16, reverseSpeed: 4.6, mass: .65, grip: 14, driftGrip: 2.2, steering: .61, wheelbase: 1.55 },
 } as const;
+// Autonomous breaks keep their rehearsed, slower courtyard maneuver.
+const IDLE_ACCELERATION = { porsche: 5.6, mini: 4.5, delorean: 3.8, f1: 7.2 };
+const IDLE_BRAKING = { porsche: 9, mini: 8, delorean: 7, f1: 12 };
+const IDLE_MAX_SPEED = { porsche: 9.5, mini: 7.8, delorean: 8.8, f1: 11.5 };
 type Point = { x: number; z: number };
 type Pose = Point & { yaw: number };
-type Box = { left: number; right: number; near: number; far: number };
+type Box = { left: number; right: number; near: number; far: number; ramp?: boolean };
 const clamp = (v: number, low: number, high: number) => Math.max(low, Math.min(high, v));
 const angle = (v: number) => Math.atan2(Math.sin(v), Math.cos(v));
-// The current ramp has no finished exterior. Keep its entire footprint closed.
+// Ground cars stop at the barrier. Only the airborne DeLorean can use this exit.
 export const GARAGE_DRIVE_OBSTACLES: readonly Box[] = FACTORY_OBSTACLES.filter(o => o.near > 18
   && !GARAGE_CAR_IDS.some(id => { const p = GARAGE_CAR_BAYS[id]; return p.x > o.left && p.x < o.right && p.z + GARAGE_WORLD_Z > o.near && p.z + GARAGE_WORLD_Z < o.far; }))
-  .map(o => ({ ...o, near: o.near - GARAGE_WORLD_Z, far: o.far - GARAGE_WORLD_Z }))
+  .map<Box>(o => ({ ...o, near: o.near - GARAGE_WORLD_Z, far: o.far - GARAGE_WORLD_Z, ramp: o.id === 'garage-ramp' }))
   .concat([
     // Full authored front-row envelope: workbench, stool, cabinets, coffee
     // stop and seats extend beyond the narrower pedestrian station markers.
@@ -69,7 +79,7 @@ function overlap(a: Point[], b: Point[]) {
   return true;
 }
 function boxHull(b: Box): Point[] { return [{ x: b.left, z: b.near }, { x: b.right, z: b.near }, { x: b.right, z: b.far }, { x: b.left, z: b.far }]; }
-const obstacleHulls = GARAGE_DRIVE_OBSTACLES.map(boxHull);
+const obstacleHulls = GARAGE_DRIVE_OBSTACLES.map(box => ({ box, hull: boxHull(box) }));
 /** Swept pedestrian capsule against a car's expanded rectangle. */
 export function garageCarBlocksSegment(car: GarageDriveCar, from: Point, to: Point, radius = .28): boolean {
   if ((car.hoverHeight ?? 0) >= 1.25) return false;
@@ -95,16 +105,20 @@ export class GarageDrivingSimulation {
   private tires = new Map<GarageCarId, Point[]>();
   private donuts = new Map<GarageCarId, { startedAt?: number; circleAt?: number }>();
   private returnStalls = new Map<GarageCarId, { recoverAt: number }>();
+  private repairTime = new Map<GarageCarId, number>();
   private pedestrians: GarageDrivePedestrian[] = [];
   private nextMark = 1;
+  private nextJump = 1;
   car(id: GarageCarId) { return this.cars.find(car => car.id === id)!; }
   claim(id: GarageCarId, visitorId: string, driverSessionId?: string): boolean {
     const car = this.car(id);
+    if (car?.timeJump && !car.timeJump.arrived) return false;
     if (!car || car.mode !== 'parked' && !(car.mode === 'returning' && car.driverVisitorId === visitorId)) return false;
     // Validate first, then hand off atomically: a rejected switch never drops the old car.
     for (const previous of this.cars) if (previous.id !== id && previous.driverVisitorId === visitorId && previous.mode === 'driving') this.release(previous.id);
     this.routes.delete(id); this.returnStalls.delete(id); this.parkingSpeeds.delete(id);
     car.mode = 'driving'; car.driverVisitorId = visitorId; car.driverSessionId = driverSessionId;
+    this.repairTime.delete(id);
     this.inputs.set(id, { ...GARAGE_NEUTRAL_INPUT }); return true;
   }
   startDonut(id: GarageCarId, driverSessionId: string): boolean {
@@ -120,20 +134,23 @@ export class GarageDrivingSimulation {
   }
   reset(id: GarageCarId): boolean {
     const car = this.car(id); if (!car) return false;
+    if (car.timeJump && !car.timeJump.arrived) return false;
     const target = { ...car, ...GARAGE_CAR_BAYS[id], yaw: GARAGE_CAR_YAW, hoverHeight: 0 };
     if (this.blocker(target)) { this.release(id); return false; }
     this.park(car); return true;
   }
   private park(car: GarageDriveCar) {
-    Object.assign(car, GARAGE_CAR_BAYS[car.id], { yaw: GARAGE_CAR_YAW, vx: 0, vz: 0, steer: 0, slip: 0, throttle: 0, damage: 0, hoverHeight: 0, mode: 'parked' });
+    Object.assign(car, GARAGE_CAR_BAYS[car.id], { yaw: GARAGE_CAR_YAW, vx: 0, vz: 0, steer: 0, slip: 0, throttle: 0, hoverHeight: 0, mode: 'parked' });
     delete car.driverVisitorId; delete car.driverSessionId;
     this.routes.delete(car.id); this.parkingSpeeds.delete(car.id); this.inputs.delete(car.id); this.tires.delete(car.id); this.donuts.delete(car.id);
     this.returnStalls.delete(car.id);
   }
   private blocker(car: GarageDriveCar, clearance = 0): 'scene' | 'pedestrian' | GarageDriveCar | undefined {
     const hull = garageCarHull(car, .14 + clearance);
-    if (hull.some(p => p.x < -11.8 || p.x > 11.8 || p.z < -4.3 || p.z > 16)
-      || obstacleHulls.some(o => overlap(hull, o))) return 'scene';
+    const flying = car.id === 'delorean' && (car.hoverHeight ?? 0) >= 1.25;
+    const throughDoor = (p: Point) => flying && p.x >= GARAGE_RAMP.left && p.x <= GARAGE_RAMP.right && p.z >= -5.6;
+    if (hull.some(p => p.x < -11.8 || p.x > 11.8 || (p.z < -4.3 && !throughDoor(p)) || p.z > 16)
+      || obstacleHulls.some(o => !(flying && o.box.ramp) && overlap(hull, o.hull))) return 'scene';
     const low = (car.hoverHeight ?? 0) - (car.id === 'delorean' ? .065 : 0);
     const high = (car.hoverHeight ?? 0) + GARAGE_DRIVE_PROFILES[car.id].height;
     const other = this.cars.find(other => other.id !== car.id
@@ -150,7 +167,22 @@ export class GarageDrivingSimulation {
     this.pedestrians = pedestrians.filter(p => Number.isFinite(p.x) && Number.isFinite(p.z));
     const total = Math.min(.1, dt), steps = Math.ceil(total / (1 / 120)), h = total / steps;
     for (let i = 0; i < steps; i++) for (const car of this.cars) {
-      if (car.mode === 'parked') continue;
+      if (car.timeJump && !car.timeJump.arrived) {
+        if (now < car.timeJump.arriveAt) continue;
+        car.timeJump = { ...car.timeJump, arrived: true };
+        Object.assign(car, GARAGE_CAR_BAYS[car.id], { yaw: GARAGE_CAR_YAW, hoverHeight: GARAGE_HOVER_HEIGHT, vx: 0, vz: 0 });
+        this.fireTracks(car, now, 3.2);
+      }
+      if (car.timeJump && now - car.timeJump.arriveAt > GARAGE_FIRE_LIFETIME_MS) delete car.timeJump;
+      if (car.mode === 'parked') {
+        if (car.damage > 0) {
+          const quiet = (this.repairTime.get(car.id) ?? 0) + h;
+          this.repairTime.set(car.id, quiet);
+          if (quiet > GARAGE_REPAIR_DELAY_SECONDS) car.damage = Math.max(0, car.damage - h / GARAGE_FULL_REPAIR_SECONDS);
+          if (!car.damage) this.repairTime.delete(car.id);
+        }
+        continue;
+      }
       if (car.mode === 'returning') { this.returnStep(car, h, now); continue; }
       if (car.id === 'delorean') {
         car.hoverHeight = Math.min(GARAGE_HOVER_HEIGHT, (car.hoverHeight ?? 0) + h * 1.6);
@@ -170,24 +202,56 @@ export class GarageDrivingSimulation {
   private driveStep(car: GarageDriveCar, input: GarageDriveInput, dt: number, now: number) {
     const p = GARAGE_DRIVE_PROFILES[car.id], before = { ...car }, fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
     let forward = car.vx * fx + car.vz * fz, sideways = car.vx * fz - car.vz * fx;
-    car.steer += (input.steer * p.steering - car.steer) * (1 - Math.exp(-9 * dt));
+    const autonomous = car.mode === 'donut';
+    const flying = car.id === 'delorean' && !autonomous && (car.hoverHeight ?? 0) >= 1.25;
+    const speed = Math.abs(forward), topSpeed = (autonomous ? IDLE_MAX_SPEED[car.id] : p.maxSpeed) * (1 - car.damage * .4);
+    // Smaller steering angles at speed keep a key press from snapping the car
+    // sideways. Tire grip, rather than a rotation tween, catches the body.
+    const steeringLimit = p.steering / (1 + (autonomous ? 0 : speed * speed * .022));
+    car.steer += (input.steer * steeringLimit - car.steer) * (1 - Math.exp(-(autonomous ? 9 : 7) * dt));
     const braking = input.throttle * forward < -.1;
-    forward += input.throttle * (braking ? p.braking : p.acceleration * (1 - car.damage * .4)) * dt;
-    forward *= Math.exp(-(input.throttle ? .25 : 3) * dt);
-    forward = clamp(forward, -2.8, p.maxSpeed * (1 - car.damage * .3));
-    sideways *= Math.exp(-(input.drift ? p.driftGrip : p.grip) * dt);
-    car.yaw = angle(car.yaw + forward / p.wheelbase * Math.tan(car.steer) * dt);
+    const acceleration = autonomous ? IDLE_ACCELERATION[car.id] : p.acceleration * (1 - .35 * clamp(speed / topSpeed, 0, 1));
+    forward += input.throttle * (braking ? autonomous ? IDLE_BRAKING[car.id] : p.braking : acceleration * (1 - car.damage * .55)) * dt;
+    if (autonomous) forward *= Math.exp(-(input.throttle ? .25 : 3) * dt);
+    else {
+      // Rolling resistance + air drag allow coasting. Brakes remain much
+      // stronger, and releasing the throttle no longer feels like a handbrake.
+      const resistance = (flying ? .06 + forward * forward * .003 : .25 + forward * forward * .009 + (input.drift ? .7 : 0)) * dt;
+      forward = Math.sign(forward) * Math.max(0, Math.abs(forward) - resistance);
+    }
+    forward = clamp(forward, -(autonomous ? 2.8 : p.reverseSpeed), topSpeed);
+    sideways *= Math.exp(-(flying ? input.drift ? .16 : .65 : input.drift ? p.driftGrip : p.grip) * dt);
+    const yawRate = flying ? car.steer / p.steering * (.65 + Math.min(10, speed) * .15) : forward / p.wheelbase * Math.tan(car.steer);
+    car.yaw = angle(car.yaw + yawRate * dt);
     // Retain lateral momentum while the body turns, producing readable drift.
     car.vx = fx * forward + fz * sideways; car.vz = fz * forward - fx * sideways;
+    if (flying) {
+      const airSpeed = Math.hypot(car.vx, car.vz);
+      if (airSpeed > topSpeed) { car.vx *= topSpeed / airSpeed; car.vz *= topSpeed / airSpeed; }
+    }
     car.x += car.vx * dt; car.z += car.vz * dt; car.throttle = input.throttle;
     const hit = this.blocker(car);
     if (hit) {
       const impact = Math.hypot(car.vx, car.vz); Object.assign(car, { x: before.x, z: before.z, yaw: before.yaw, vx: 0, vz: 0, slip: 0 });
       if (hit !== 'pedestrian' && impact > 1.1) {
-        car.damage = clamp(car.damage + impact * impact * p.mass * .008, 0, 1);
-        if (typeof hit === 'object') hit.damage = clamp(hit.damage + impact * impact * p.mass * .006 / GARAGE_DRIVE_PROFILES[hit.id].mass, 0, 1);
+        const severity = impact * impact * p.mass;
+        car.damage = clamp(car.damage + severity * .018, 0, 1);
+        this.repairTime.delete(car.id);
+        if (typeof hit === 'object') {
+          hit.damage = clamp(hit.damage + severity * .014 / GARAGE_DRIVE_PROFILES[hit.id].mass, 0, 1);
+          this.repairTime.delete(hit.id);
+        }
+        // A small rigid rebound sells a hard hit, without pushing parked cars
+        // into pedestrians or disabling the swept collision checks.
+        car.vx = -before.vx * .12; car.vz = -before.vz * .12;
       }
       this.tires.delete(car.id); return;
+    }
+    if (flying && car.mode === 'driving' && before.z >= GARAGE_RAMP.doorZ && car.z < GARAGE_RAMP.doorZ && car.vz < 0
+      && garageCarHull(car).every(p => p.x >= GARAGE_RAMP.left && p.x <= GARAGE_RAMP.right)) {
+      this.fireTracks(car, now, 3.2);
+      car.timeJump = { id: this.nextJump++, startedAt: now, arriveAt: now + GARAGE_TIME_JUMP_DELAY_MS, arrived: false, x: car.x, z: car.z, yaw: car.yaw };
+      this.release(car.id); return;
     }
     car.slip = Math.atan2(car.vx * Math.cos(car.yaw) - car.vz * Math.sin(car.yaw), Math.abs(car.vx * Math.sin(car.yaw) + car.vz * Math.cos(car.yaw)) + .2);
     if ((car.hoverHeight ?? 0) > .1 || !input.drift || Math.abs(car.slip) < .065 || Math.hypot(car.vx, car.vz) < .9) { this.tires.delete(car.id); return; }
@@ -198,6 +262,16 @@ export class GarageDrivingSimulation {
     const width = car.id === 'f1' ? .11 : car.id === 'mini' ? .075 : .085;
     if (previous) tires.forEach((point, i) => this.marks.push({ id: this.nextMark++, car: car.id, x1: previous[i].x, z1: previous[i].z, x2: point.x, z2: point.z, width, opacity: clamp(.35 + Math.abs(car.slip) * .7, .35, .8), createdAt: now }));
     this.tires.set(car.id, tires);
+  }
+  private fireTracks(car: GarageDriveCar, now: number, length: number) {
+    const p = GARAGE_DRIVE_PROFILES[car.id], fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
+    for (const side of [-1, 1]) for (let segment = 0; segment < 10; segment++) {
+      const point = (distance: number) => ({ x: car.x - fx * distance + Math.cos(car.yaw) * p.width * .38 * side,
+        z: car.z - fz * distance - Math.sin(car.yaw) * p.width * .38 * side });
+      const a = point(segment * length / 10 + .35), b = point((segment + 1) * length / 10 + .35);
+      this.marks.push({ id: this.nextMark++, car: car.id, x1: a.x, z1: a.z, x2: b.x, z2: b.z, y1: garageRampHeightAt(a.x, a.z), y2: garageRampHeightAt(b.x, b.z),
+        kind: 'fire', width: .13, opacity: .75, createdAt: now });
+    }
   }
   private returnStep(car: GarageDriveCar, dt: number, now: number) {
     const bay = { ...GARAGE_CAR_BAYS[car.id], yaw: GARAGE_CAR_YAW };

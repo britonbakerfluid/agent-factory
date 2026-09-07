@@ -7,6 +7,7 @@ import type { SkyPalette } from '../sky/skyPhase';
 import { cloudLayerWeights } from '../sky/weather';
 import type { WeatherVisualState } from '../sky/weather';
 import { createCloudVolume, cloudStyleFromSearch } from './factory25dCloudVolume';
+import { cloudFigureFromSearch } from './factory25dCloudFigure';
 
 /** A Three.js view of the existing factory cloud, snow and wet-glass models. */
 export function createWindowWeather(scene: THREE.Scene, renderer: THREE.WebGLRenderer, width: number, height: number, centerY: number) {
@@ -48,7 +49,10 @@ export function createWindowWeather(scene: THREE.Scene, renderer: THREE.WebGLRen
     scene.add(mesh);
     return { spec, texture, material, snowLift, snowColor, mesh };
   });
-  const volume = createCloudVolume(renderer, width, height);
+  // Local A/B comparison without opening a second GPU-heavy scene.
+  const cloudyBillows = !(import.meta.env.DEV && new URLSearchParams(location.search).get('cloudShape') === 'legacy');
+  const volume = createCloudVolume(renderer, width, height, cloudyBillows,
+    import.meta.env.DEV ? cloudFigureFromSearch(location.search) : 'auto');
   const volumeMesh = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: volume.texture, transparent: true, depthWrite: false }));
   volumeMesh.position.set(0, centerY, -4.57);
   scene.add(volumeMesh);

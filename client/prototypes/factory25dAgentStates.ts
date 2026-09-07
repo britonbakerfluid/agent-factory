@@ -63,6 +63,10 @@ try {
   for (const id of AGENT_VISUAL_STATES) if (saved?.[id]) overrides[id] = sanitizeAgentStateStyle(saved[id], DEFAULT_AGENT_STYLES[id]);
 } catch { /* Missing or unavailable storage uses the shared defaults. */ }
 export function agentStateStyle(id: AgentVisualState): AgentStateStyle { return overrides[id] ?? DEFAULT_AGENT_STYLES[id]; }
+/** A quiet break can face the view; attention keeps its chosen presentation. */
+export function stationaryAgentAnimation(id: AgentVisualState, resting: boolean) {
+  return resting && id === 'idle' ? 'walk_up' : agentStateStyle(id).pose;
+}
 export function setAgentStateStyle(id: AgentVisualState, patch: Partial<AgentStateStyle>) {
   overrides[id] = sanitizeAgentStateStyle({ ...agentStateStyle(id), ...patch }, DEFAULT_AGENT_STYLES[id]);
   try { localStorage.setItem(storageKey, JSON.stringify(overrides)); } catch { /* Keep this preview usable without storage. */ }

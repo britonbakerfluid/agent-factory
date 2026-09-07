@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FRONT_COUNTER, INTERIOR_Z } from '@shared/factory25d-layout';
 import { lastSeenLabel, type TeamMember, type TeamSnapshot } from '@shared/team';
 import { parseAvatarConfig } from '@shared/avatar-customization';
 import { contributionLevel, type ContributionRecord } from '@shared/factory-contributions';
@@ -18,7 +19,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   onVisitors?: (members: readonly TeamMember[]) => void,
   contributionFor: (username: string) => ContributionRecord | undefined = () => undefined) {
   const abort = new AbortController(), events = { signal: abort.signal };
-  const terminal = new THREE.Group(); terminal.position.set(-3.2, .53, 4.66); parent.add(terminal);
+  const terminal = new THREE.Group(); terminal.position.set(FRONT_COUNTER.x-.25, FRONT_COUNTER.topY, FRONT_COUNTER.z-INTERIOR_Z-.04); parent.add(terminal);
   const casing = standard('#364344', .7), edge = standard('#566363', .6);
   // A weighted foot rests on the counter; the short neck supports a tilted tablet.
   propPart(terminal, [.34, .028, .25], [0, .014, .012], casing);
@@ -154,7 +155,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
     sheet.style.opacity = '0'; sheet.inert = true;
     if (soundPanel) dialog.append(soundPanel);
     dialog.showModal(); fit(); from.height *= height / Math.max(1, oldHeight);
-    blendCamera(camera, from, closePose(), 0, width / Math.max(1, height)); back.focus(); void refresh();
+    blendCamera(camera, from, closePose(), 0, width / Math.max(1, height), focus); back.focus(); void refresh();
   }
   function exit() {
     if (!open) return;
@@ -186,7 +187,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
         const viewport = canvas.closest('.slice-viewport')!.getBoundingClientRect();
         const restored = Math.min(viewport.height, viewport.width * 141 / 200) - 2;
         const to = open ? closePose() : { ...room, height: room.height * height / Math.max(1, restored) };
-        blendCamera(camera, from, to, t, width / Math.max(1, height)); sheet.inert = !open || t < 1;
+        blendCamera(camera, from, to, t, width / Math.max(1, height), focus); sheet.inert = !open || t < 1;
         sheet.style.opacity = String(open ? THREE.MathUtils.smoothstep(t, .68, .96) : exitOpacity * (1 - THREE.MathUtils.smoothstep(t, 0, .35)));
         const tl = project(-DISPLAY.width / 2, DISPLAY.height / 2, camera);
         const tr = project(DISPLAY.width / 2, DISPLAY.height / 2, camera);

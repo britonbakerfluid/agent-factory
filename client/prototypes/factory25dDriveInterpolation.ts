@@ -21,6 +21,7 @@ export class GarageDriveInterpolation {
     const t = second.at === first.at ? 1 : Math.max(0, Math.min(1, (at - first.at) / (second.at - first.at)));
     return second.cars.map(car => {
       const previous = first.cars.find(item => item.id === car.id);
+      if (previous?.timeJump?.id !== car.timeJump?.id || previous?.timeJump?.arrived !== car.timeJump?.arrived) return { ...car };
       if (!previous || Math.hypot(car.x - previous.x, car.z - previous.z) > 3) return { ...car };
       const yawDelta = Math.atan2(Math.sin(car.yaw - previous.yaw), Math.cos(car.yaw - previous.yaw));
       return { ...car, x: previous.x + (car.x - previous.x) * t, z: previous.z + (car.z - previous.z) * t,

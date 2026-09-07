@@ -23,6 +23,19 @@ function role(root: THREE.Object3D, wanted: string) {
 function tireMesh(room: THREE.Group) { return room.getObjectByName('garage-tire-marks') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>; }
 
 describe('garage driving visuals on the actual authored cars', () => {
+  it('responds to repeated clicks with a bounded rigid suspension nudge and settles without scaling the model', async () => {
+    const root = await model('mini'), room = new THREE.Group(); room.add(root);
+    const visuals = createGarageDriveVisuals(room, new Map([['mini', root]]));
+    visuals.poseCar(state('mini', { mode: 'parked' })); visuals.nudge('mini'); visuals.update(.05);
+    const body = root.getObjectByName('garage-driving-body')!;
+    expect(body.rotation.z).toBeLessThan(-.001);
+    for (let i = 0; i < 60; i++) { visuals.nudge('mini'); visuals.update(1 / 60); expect(Math.abs(body.rotation.z)).toBeLessThan(.06); }
+    expect(body.scale.toArray()).toEqual([1, 1, 1]); expect(root.scale.toArray()).toEqual([GARAGE_CAR_SCALE, GARAGE_CAR_SCALE, GARAGE_CAR_SCALE]);
+    for (let i = 0; i < 300; i++) visuals.update(1 / 60);
+    expect(Math.abs(body.rotation.z)).toBeLessThan(1e-7);
+    visuals.nudge('mini'); visuals.update(.1, { reducedMotion: true }); expect(body.rotation.z).toBe(0);
+    visuals.dispose();
+  });
   it('rolls all four models by traveled distance / measured radius and keeps tire contacts, shadows and outer poses fixed', async () => {
     for (const id of GARAGE_CAR_IDS) {
       const root = await model(id), room = new THREE.Group(); room.add(root);

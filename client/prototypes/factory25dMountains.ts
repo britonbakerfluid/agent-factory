@@ -2,6 +2,7 @@ import { createMountainClimbers } from './factory25dClimbers';
 import { createLakeCanoe } from './factory25dCanoe';
 import { landscapeVisitors } from './factory25dVisitors';
 import * as THREE from 'three';
+import { setAtmosphereHaze } from './factory25dAtmosphere';
 import { CLEAR_WEATHER } from '../sky/weather';
 import type { WeatherVisualState } from '../sky/weather';
 import { paletteForElevation } from '../sky/skyPhase';
@@ -10,6 +11,7 @@ import { weatherLighting } from './factory25dWeatherState';
 import { createUtahLandscape } from './factory25dLandscape';
 import { createRidgeBear } from './factory25dBear';
 import { createValleyBirds } from './factory25dBirds';
+import { createMeadowElk } from './factory25dElk';
 import { createLandscapeFocus } from './factory25dFocus';
 import type { TeamMember } from '@shared/team';
 
@@ -27,6 +29,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   let depthOfField = false;
   scene.add(landscape.group);
   const bear = createRidgeBear(scene, originalLandscape.hazeColor, (x, z) => landscape.heightAt(x, z));
+  const elk = createMeadowElk(scene, originalLandscape.hazeColor, (x, z) => landscape.heightAt(x, z));
   const climbers = createMountainClimbers(scene, (x, z) => landscape.heightAt(x, z), originalLandscape.hazeColor);
   const canoe = createLakeCanoe(scene, originalLandscape.hazeColor);
   let visitorIds: { climbers: string[]; canoe: string[] } = { climbers: [], canoe: [] };
@@ -69,13 +72,9 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
     fill.color.set('#c8d5e5').lerp(new THREE.Color('#b4aaca'), horizon * 0.4 * (1 - currentWeather.cloud01));
     fill.intensity = (isNight ? 0.34 : 1.35) * lighting.ambient;
     if (isNight) fill.color.set('#8399c5');
-    const rgb = currentPalette.skyHorizon;
-    haze.setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
-    const sky = currentPalette.skyTop;
-    const upperAir = new THREE.Color().setRGB(sky[0] / 255, sky[1] / 255, sky[2] / 255, THREE.SRGBColorSpace);
     // Distant air takes the blue above the horizon, while sunset and storm
     // palettes still supply the color. Nearby greens keep their contrast.
-    haze.lerp(upperAir, isNight ? 0.35 : 0.62);
+    setAtmosphereHaze(haze, currentPalette, isNight);
     fog.color.copy(haze);
     landscape.hazeColor.value.copy(haze);
     originalLandscape.hazeColor.value.copy(haze);
@@ -89,7 +88,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   const previousClearColor = new THREE.Color();
   return {
     texture: target.texture,
-    dispose() { climbers.dispose(); canoe.dispose(); focus.dispose(); target.dispose(); },
+    dispose() { climbers.dispose(); canoe.dispose(); elk.dispose(); birds.dispose(); focus.dispose(); target.dispose(); },
     setLightning(pulse:number){const intensity=THREE.MathUtils.clamp(pulse,0,1)*2.4;if(Math.abs(intensity-lightningLight.intensity)>.002){lightningLight.intensity=intensity;dirty=true;}},
     setVisitors(members: readonly TeamMember[]) {
       const cast = landscapeVisitors(members, visitorIds);
@@ -109,6 +108,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
       landscape = next;
       scene.add(landscape.group);
       bear.resetGround();
+      elk.resetGround();
       applyEnvironment();
     },
     setDepthOfField(enabled: boolean) {
@@ -130,6 +130,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
       previousElapsed = elapsed;
       if (!visible || document.hidden) return;
       bear.update(dt, reducedMotion.matches);
+      elk.update(dt, currentWeather, isNight, reducedMotion.matches);
       birds.update(dt, currentWeather, isNight, reducedMotion.matches);
       climbers.update(dt, isNight, reducedMotion.matches);
       canoe.update(dt, currentWeather, isNight, reducedMotion.matches);

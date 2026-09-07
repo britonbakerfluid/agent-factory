@@ -1,6 +1,7 @@
 package designer
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -46,6 +47,7 @@ type Model struct {
 	selections   [fieldCount]int
 	confirmed    bool
 	cancelled    bool
+	original     config.AvatarConfig
 }
 
 // Result holds the designer output.
@@ -61,25 +63,27 @@ func NewModel(existing *config.AvatarConfig) Model {
 	}
 
 	if existing != nil {
+		m.original = *existing
+		m.selections[fieldHairStyle] = clampIdx(existing.SpriteIndex, len(m.fields[fieldHairStyle].Options))
 		if existing.HairStyle != nil {
 			m.selections[fieldHairStyle] = clampIdx(*existing.HairStyle, len(m.fields[fieldHairStyle].Options))
 		}
 		if existing.HairColor != nil {
-			m.selections[fieldHairColor] = findColorIdx(HairColors, *existing.HairColor)
+			m.selectColor(fieldHairColor, *existing.HairColor)
 		}
 		if existing.SkinTone != nil {
-			m.selections[fieldSkinTone] = findColorIdx(SkinTones, *existing.SkinTone)
+			m.selectColor(fieldSkinTone, *existing.SkinTone)
 		}
 		if existing.ShirtColor != nil {
-			m.selections[fieldShirtColor] = findColorIdx(ShirtColors, *existing.ShirtColor)
+			m.selectColor(fieldShirtColor, *existing.ShirtColor)
 		} else if existing.Color != "" {
-			m.selections[fieldShirtColor] = findColorIdx(ShirtColors, existing.Color)
+			m.selectColor(fieldShirtColor, existing.Color)
 		}
 		if existing.PantsColor != nil {
-			m.selections[fieldPantsColor] = findColorIdx(PantsColors, *existing.PantsColor)
+			m.selectColor(fieldPantsColor, *existing.PantsColor)
 		}
 		if existing.ShoeColor != nil {
-			m.selections[fieldShoeColor] = findColorIdx(ShoeColors, *existing.ShoeColor)
+			m.selectColor(fieldShoeColor, *existing.ShoeColor)
 		}
 		if existing.FacialHair != nil {
 			m.selections[fieldFacialHair] = clampIdx(*existing.FacialHair, len(m.fields[fieldFacialHair].Options))
@@ -164,7 +168,7 @@ func (m Model) View() string {
 	// Title
 	sb.WriteString("\n")
 	sb.WriteString(borderStyle.Render("  ╔"+strings.Repeat("═", boxW)+"╗") + "\n")
-	titleText := fmt.Sprintf("%*s", -(boxW-2), "               ✦ AVATAR DESIGNER ✦")
+	titleText := fmt.Sprintf("%*s", -(boxW - 2), "               ✦ AVATAR DESIGNER ✦")
 	sb.WriteString(borderStyle.Render("  ║") + " " + titleStyle.Render(titleText) + " " + borderStyle.Render("║") + "\n")
 	sb.WriteString(borderStyle.Render("  ╠"+strings.Repeat("═", boxW)+"╣") + "\n")
 	sb.WriteString(borderStyle.Render("  ║") + strings.Repeat(" ", boxW) + borderStyle.Render("║") + "\n")
@@ -258,11 +262,11 @@ func (m Model) GetResult() Result {
 	}
 
 	hairStyle := m.selections[fieldHairStyle]
-	hairColor := HairColors[m.selections[fieldHairColor]].Hex
-	skinTone := SkinTones[m.selections[fieldSkinTone]].Hex
-	shirtColor := ShirtColors[m.selections[fieldShirtColor]].Hex
-	pantsColor := PantsColors[m.selections[fieldPantsColor]].Hex
-	shoeColor := ShoeColors[m.selections[fieldShoeColor]].Hex
+	hairColor := m.fields[fieldHairColor].Colors[m.selections[fieldHairColor]]
+	skinTone := m.fields[fieldSkinTone].Colors[m.selections[fieldSkinTone]]
+	shirtColor := m.fields[fieldShirtColor].Colors[m.selections[fieldShirtColor]]
+	pantsColor := m.fields[fieldPantsColor].Colors[m.selections[fieldPantsColor]]
+	shoeColor := m.fields[fieldShoeColor].Colors[m.selections[fieldShoeColor]]
 	facialHair := m.selections[fieldFacialHair]
 	mouthStyle := m.selections[fieldMouthStyle]
 	faceAccessory := m.selections[fieldFaceAccessory]
@@ -273,8 +277,9 @@ func (m Model) GetResult() Result {
 		Avatar: config.AvatarConfig{
 			SpriteIndex:   hairStyle, // keep spriteIndex in sync for backwards compat
 			Color:         shirtColor,
-			Hat:           nil,
-			Trail:         nil,
+			Hat:           m.original.Hat,
+			Trail:         m.original.Trail,
+			GraphicDeath:  m.original.GraphicDeath,
 			HairStyle:     &hairStyle,
 			HairColor:     &hairColor,
 			SkinTone:      &skinTone,
@@ -293,11 +298,11 @@ func (m Model) GetResult() Result {
 func (m Model) currentParams() AvatarParams {
 	return AvatarParams{
 		HairStyle:     m.selections[fieldHairStyle],
-		HairColor:     HairColors[m.selections[fieldHairColor]].Hex,
-		SkinTone:      SkinTones[m.selections[fieldSkinTone]].Hex,
-		ShirtColor:    ShirtColors[m.selections[fieldShirtColor]].Hex,
-		PantsColor:    PantsColors[m.selections[fieldPantsColor]].Hex,
-		ShoeColor:     ShoeColors[m.selections[fieldShoeColor]].Hex,
+		HairColor:     m.fields[fieldHairColor].Colors[m.selections[fieldHairColor]],
+		SkinTone:      m.fields[fieldSkinTone].Colors[m.selections[fieldSkinTone]],
+		ShirtColor:    m.fields[fieldShirtColor].Colors[m.selections[fieldShirtColor]],
+		PantsColor:    m.fields[fieldPantsColor].Colors[m.selections[fieldPantsColor]],
+		ShoeColor:     m.fields[fieldShoeColor].Colors[m.selections[fieldShoeColor]],
 		FacialHair:    m.selections[fieldFacialHair],
 		MouthStyle:    m.selections[fieldMouthStyle],
 		FaceAccessory: m.selections[fieldFaceAccessory],
@@ -327,12 +332,21 @@ func clampIdx(val, max int) int {
 	return val
 }
 
-func findColorIdx(opts []ColorOption, hex string) int {
-	hex = strings.ToLower(hex)
-	for i, o := range opts {
-		if strings.ToLower(o.Hex) == hex {
-			return i
+// Preserve a web color that is not in the terminal palette until it is changed.
+func (m *Model) selectColor(field int, color string) {
+	for i, option := range m.fields[field].Colors {
+		if strings.EqualFold(option, color) {
+			m.selections[field] = i
+			return
 		}
 	}
-	return 0
+	if len(color) != 7 || color[0] != '#' {
+		return
+	}
+	if _, err := hex.DecodeString(color[1:]); err != nil {
+		return
+	}
+	m.selections[field] = len(m.fields[field].Colors)
+	m.fields[field].Colors = append(m.fields[field].Colors, color)
+	m.fields[field].Options = append(m.fields[field].Options, "Custom "+color)
 }

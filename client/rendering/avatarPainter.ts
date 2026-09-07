@@ -565,6 +565,8 @@ export function hexToInt(hex: string): number {
   return parseInt(hex.replace('#', ''), 16);
 }
 
+export type AvatarEyes = 'center' | 'left' | 'right' | 'up' | 'blink';
+
 export function drawCharacter(
     ctx: CanvasRenderingContext2D,
     x: number, y: number,
@@ -573,6 +575,7 @@ export function drawCharacter(
     anim: string,
     frame: number,
     colors: { hairStyle: number; hairColor: string; skinTone: string; shirtColor: string; pantsColor: string; shoeColor: string; facialHair: number; mouthStyle: number; faceAccessory: number; headAccessory: number; shirtDesign: number },
+    eyes?: AvatarEyes,
   ) {
     const r = (color >> 16) & 0xff;
     const g = (color >> 8) & 0xff;
@@ -584,29 +587,32 @@ export function drawCharacter(
     const hairColor = colors.hairColor;
     const climbing = anim === 'climb';
     const sitting = anim === 'sit' || anim === 'sit_up';
-    const facesAway = anim === 'work' || anim === 'walk_up' || anim === 'sit_up' || anim === 'board' || climbing;
+    const holding = anim.startsWith('hold_');
+    const facesAway = anim === 'work' || anim === 'walk_up' || anim === 'sit_up' || anim === 'board' || anim === 'hold_up' || climbing;
 
     ctx.clearRect(x, y, size, size);
 
-    if (anim === 'walk_left' || anim === 'walk_right') {
+    if (anim === 'walk_left' || anim === 'walk_right' || anim === 'hold_left' || anim === 'hold_right') {
       drawSideCharacter(
         ctx,
         x,
         y,
-        anim === 'walk_right' ? 'right' : 'left',
+        anim.endsWith('right') ? 'right' : 'left',
         frame,
         colors,
         bodyColor,
         darkColor,
         lightColor,
+        holding,
+        eyes,
       );
       return;
     }
 
-    const walking = anim.startsWith('walk');
+    const walking = anim.startsWith('walk') || holding;
     // Passing / contact / passing / contact. The head moves only one pixel;
     // the planted shoe stays on row 31 throughout the cycle.
-    const bounce = walking ? [0, 1, 0, 1][frame % 4] : 0;
+    const bounce = walking && !holding ? [0, 1, 0, 1][frame % 4] : 0;
     const leftLift = walking ? [0, 0, 1, 0][frame % 4] : 0;
     const rightLift = walking ? [1, 0, 0, 0][frame % 4] : 0;
     const armSwing = walking ? [0, 1, 0, -1][frame % 4] : 0;
@@ -634,12 +640,22 @@ export function drawCharacter(
 
     if (!facesAway) {
       // ── Face ──
-      const isBlink = anim === 'idle' && frame === 2;
+      const isBlink = eyes === 'blink' || (eyes === undefined && anim === 'idle' && frame === 2);
       const eyeY = 8;
       if (isBlink) {
         ctx.fillStyle = '#000';
         ctx.fillRect(x + 12, y + eyeY + 1 + bounce, 3, 1);
         ctx.fillRect(x + 18, y + eyeY + 1 + bounce, 3, 1);
+      } else if (eyes !== undefined) {
+        // Prepainted expression variants keep glasses/hair in front of the eyes.
+        // Pupils stay inside a four-pixel white; no floating face overlay.
+        const glance = eyes === 'left' ? 0 : eyes === 'right' ? 2 : 1;
+        for (const left of [11, 18]) {
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(x + left, y + eyeY + bounce, 4, 3);
+          ctx.fillStyle = '#4466aa'; ctx.fillRect(x + left + glance, y + eyeY + bounce, 2, eyes === 'up' ? 2 : 3);
+          ctx.fillStyle = '#17243b'; ctx.fillRect(x + left + glance, y + eyeY + bounce + (eyes === 'up' ? 0 : 1), 2, 1);
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(x + left + glance + 1, y + eyeY + bounce, 1, 1);
+        }
       } else {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(x + 12, y + eyeY + bounce, 3, 3);
@@ -759,7 +775,14 @@ export function drawCharacter(
 
     // ── Arms ──
     ctx.fillStyle = darkColor;
-    if (anim === 'paddle') {
+    if (holding) {
+      // Both hands keep contact with the frame while the feet take short steps.
+      ctx.fillRect(x + 5, y + 14, 4, 6);
+      ctx.fillRect(x + 23, y + 14, 4, 6);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(x + 5, y + 12, 3, 3);
+      ctx.fillRect(x + 24, y + 12, 3, 3);
+    } else if (anim === 'paddle') {
       // A seated two-handed stroke. Keep the shoulders and head steady while
       // the hands follow the canoe's four paddle poses; the hull hides the lap.
       const reach = [0, 2, 1, -1][frame % 4];
@@ -789,11 +812,9 @@ export function drawCharacter(
       ctx.fillRect(x + 21, y + 16 + bounce, 4, 6);
       // Hands
       ctx.fillStyle = skinColor;
-      if (frame % 2 === 0) {
-        ctx.fillRect(x + 2, y + 20 + bounce, 3, 2);
-      } else {
-        ctx.fillRect(x + 23, y + 20 + bounce, 3, 2);
-      }
+      // Both hands stay attached; alternate the key press, not visibility.
+      ctx.fillRect(x + 3, y + 20 + bounce + frame % 2, 3, 2);
+      ctx.fillRect(x + 22, y + 21 + bounce - frame % 2, 3, 2);
     } else if (sitting) {
       ctx.fillRect(x + 5, y + 16 + bounce, 4, 6);
       ctx.fillRect(x + 23, y + 16 + bounce, 4, 6);
@@ -877,8 +898,10 @@ function drawSideCharacter(
     bodyColor: string,
     darkColor: string,
     lightColor: string,
+    holding = false,
+    eyes?: AvatarEyes,
   ) {
-    const bounce = [0, 1, 0, 1][frame % 4];
+    const bounce = holding ? 0 : [0, 1, 0, 1][frame % 4];
     const stride = [0, 2, 0, -2][frame % 4];
     const rect = (left: number, top: number, width: number, height: number, color: string) => {
       ctx.fillStyle = color;
@@ -899,67 +922,143 @@ function drawSideCharacter(
 
     // Rear limbs sit behind the torso. Knees overlap the fixed hip, and arms
     // swing opposite the same-side leg instead of marching together.
-    rect(12, 17, 3, 4, darkColor);
-    rect(12 + stride, 20, 3, 3, darkColor);
-    rect(12 + stride, 23, 3, 2, colors.skinTone);
-    leg(-stride, [0, 0, 1, 0][frame % 4]);
-
-    // Long hair, afros, caps and bandanas retain a recognizable rear silhouette.
-    const hairStyle = colors.hairStyle % 8;
-    if (hairStyle === 2) {
-      rect(11, 4, 9, 15, colors.hairColor);
-      rect(9, 10, 4, 11, colors.hairColor);
-    } else if (hairStyle === 6) {
-      rect(8, 2, 12, 12, colors.hairColor);
-      rect(10, 0, 8, 3, colors.hairColor);
-      rect(6, 5, 4, 7, colors.hairColor);
-    } else if (hairStyle === 4) {
-      rect(12, 0, 3, 5, colors.hairColor);
-      rect(9, 2, 8, 4, colors.hairColor);
-    } else if (hairStyle === 3) {
-      rect(9, 3, 11, 4, bodyColor);
-      rect(7, 6, 15, 2, darkColor);
-    } else if (hairStyle === 7) {
-      rect(8, 3, 12, 5, colors.hairColor);
-      rect(7, 7, 14, 2, colors.hairColor);
-      rect(8, 9, 3, 4, colors.hairColor);
-    } else if (hairStyle !== 5) {
-      rect(9, 3, 11, 5, colors.hairColor);
-      if (hairStyle === 1) rect(8, 1, 3, 3, colors.hairColor);
+    if (holding) {
+      rect(13, 17, 11, 3, darkColor);
+      rect(24, 16, 3, 3, colors.skinTone);
+    } else {
+      rect(12, 17, 3, 4, darkColor);
+      rect(12 + stride, 20, 3, 3, darkColor);
+      rect(12 + stride, 23, 3, 2, colors.skinTone);
     }
-
-    // Head profile: one eye and a two-pixel nose on the leading edge.
-    rect(11, 5, 10, 9, colors.skinTone);
-    rect(19, 8, 3, 4, colors.skinTone);
-    rect(18, 8, 2, 2, '#ffffff');
-    rect(19, 8, 1, 2, '#1b2440');
-    rect(20, 12, 2, 1, 'rgba(0,0,0,0.18)');
-    if (colors.facialHair > 0) rect(18, 12, 4, 2, colors.hairColor);
+    leg(-stride, [0, 0, 1, 0][frame % 4]);
 
     rect(14, 14, 4, 2, colors.skinTone);
 
-    // Narrow profile torso with a lit leading edge.
+    // Paint the body and skin before the visible hair. Drawing skin over the
+    // haircut erased its crown and temple whenever a character turned sideways.
     rect(10, 15, 11, 9, bodyColor);
     rect(10, 16, 2, 6, darkColor);
     rect(19, 16, 2, 6, lightColor);
     rect(14, 15, 5, 1, lightColor);
     rect(11, 23, 10, 1, '#443322');
+    if (colors.shirtDesign === 1 || colors.shirtDesign === 7) rect(11, 19, 10, 1, 'rgba(255,255,255,.45)');
+    if (colors.shirtDesign === 2) rect(20, 16, 1, 7, 'rgba(255,255,255,.5)');
+    // Only the front edge of a chest emblem is visible in a true profile.
+    const emblem = ['', '', '', '#ff4444', '#ffdd44', '#ffffff', '#dddddd', '#eeeeee', '#44ddff', '#ffff44', '#ffffff', '#eeeeee'][colors.shirtDesign];
+    if (emblem) {
+      rect(20, 18, 1, 3, emblem);
+      if (colors.shirtDesign === 9) rect(19, 20, 2, 1, emblem);
+    }
 
-    // The leading sleeve keeps its shoulder while the forearm changes angle.
-    rect(17, 17, 3, 4, bodyColor);
-    rect(17 - stride, 20, 3, 3, bodyColor);
-    rect(18 - stride, 23, 3, 2, colors.skinTone);
+    rect(11, 5, 10, 9, colors.skinTone);
+    rect(20, 8, 2, 4, colors.skinTone);
+    rect(22, 9, 1, 2, colors.skinTone);
+    rect(11, 6, 2, 7, 'rgba(0,0,0,.1)');
+    rect(18, 12, 3, 1, 'rgba(255,255,255,.08)');
+    rect(21, 11, 1, 1, 'rgba(0,0,0,.13)');
+
+    const hair = colors.hairColor, highlight = 'rgba(255,255,255,.13)', shade = 'rgba(0,0,0,.16)';
+    switch (colors.hairStyle % 8) {
+      case 0: // Short, with a visible temple and a clean nape.
+        rect(10, 4, 11, 4, hair); rect(9, 5, 3, 6, hair); rect(12, 7, 3, 2, hair);
+        rect(12, 5, 6, 1, highlight); rect(10, 8, 1, 3, shade); break;
+      case 1: // Spiky silhouette follows the front-view haircut.
+        rect(10, 5, 11, 3, hair); rect(9, 5, 4, 6, hair);
+        rect(11, 2, 3, 4, hair); rect(16, 1, 2, 5, hair); rect(19, 3, 2, 3, hair);
+        rect(16, 2, 1, 3, highlight); rect(10, 8, 1, 3, shade); break;
+      case 2: // Long hair falls over the back shoulder, never over the face.
+        rect(10, 4, 11, 4, hair); rect(9, 7, 5, 11, hair); rect(9, 17, 4, 2, hair);
+        rect(18, 7, 2, 1, hair); rect(12, 5, 6, 1, highlight);
+        rect(10, 9, 1, 7, highlight); rect(13, 12, 1, 5, shade); break;
+      case 3: // Cap and bandana use the selected shirt color, just like the terminal.
+        rect(10, 3, 11, 4, bodyColor); rect(9, 5, 3, 4, bodyColor);
+        rect(17, 7, 7, 1, darkColor); rect(13, 4, 6, 1, highlight); break;
+      case 4:
+        rect(12, 0, 4, 7, hair); rect(10, 3, 8, 2, hair); rect(10, 7, 4, 2, hair);
+        rect(13, 1, 1, 4, highlight); break;
+      case 5:
+        rect(13, 5, 5, 1, 'rgba(255,255,255,.2)'); break;
+      case 6:
+        rect(8, 2, 13, 7, hair); rect(6, 4, 3, 8, hair); rect(8, 8, 5, 6, hair);
+        rect(13, 7, 3, 2, hair); rect(10, 3, 6, 2, highlight); rect(8, 10, 2, 3, shade); break;
+      case 7:
+        rect(9, 4, 12, 4, bodyColor); rect(8, 6, 3, 3, bodyColor);
+        rect(7, 8, 3, 2, bodyColor); rect(8, 10, 2, 3, bodyColor);
+        rect(11, 5, 7, 1, highlight); rect(10, 7, 11, 1, darkColor); break;
+    }
+    // Ear, single eye and small nose keep the same face readable in profile.
+    rect(14, 9, 2, 3, colors.skinTone); rect(14, 10, 1, 1, 'rgba(0,0,0,.14)');
+    if (eyes === 'blink') rect(18, 9, 2, 1, '#1b2440');
+    else {
+      const lookingBack = facing === 'right' ? eyes === 'left' : eyes === 'right';
+      const pupil = lookingBack ? 18 : 19;
+      rect(18, 8, 2, 3, '#ffffff'); rect(pupil, 8, 1, eyes === 'up' ? 2 : 3, '#4466aa');
+      rect(pupil, eyes === 'up' ? 8 : 9, 1, 1, '#1b2440');
+    }
+    switch (colors.mouthStyle) {
+      case 1: rect(20, 12, 2, 1, '#cc6666'); rect(21, 11, 1, 1, '#cc6666'); break;
+      case 2: rect(20, 11, 2, 1, '#886666'); rect(21, 12, 1, 1, '#886666'); break;
+      case 3: rect(20, 12, 2, 2, '#331111'); break;
+      case 4: rect(20, 12, 2, 1, '#ffffff'); break;
+      case 5: rect(20, 12, 2, 1, '#cc6666'); rect(21, 13, 2, 1, '#ff6699'); break;
+      default: rect(20, 12, 2, 1, 'rgba(0,0,0,.18)');
+    }
+    switch (colors.facialHair) {
+      case 1:
+        ctx.globalAlpha = .4; rect(17, 12, 1, 1, hair); rect(19, 13, 1, 1, hair); rect(21, 12, 1, 1, hair); ctx.globalAlpha = 1; break;
+      case 2: rect(19, 11, 3, 1, hair); rect(19, 10, 1, 1, hair); break;
+      case 3:
+        rect(16, 11, 2, 3, hair); rect(17, 13, 5, 2, hair); rect(19, 15, 2, 1, hair);
+        rect(17, 12, 1, 2, highlight); break;
+      case 4: rect(20, 12, 2, 3, hair); rect(20, 15, 1, 1, hair); break;
+      case 5: rect(20, 13, 1, 2, hair); break;
+    }
+    switch (colors.faceAccessory) {
+      case 1: case 3: {
+        const rim = colors.faceAccessory === 3 ? '#ccaa44' : '#666666';
+        rect(17, 7, 5, 1, rim); rect(17, 11, 5, 1, rim); rect(17, 8, 1, 3, rim); rect(21, 8, 1, 3, rim);
+        rect(18, 8, 3, 3, 'rgba(200,220,255,.15)');
+        if (colors.faceAccessory === 1) rect(14, 8, 3, 1, rim);
+        else rect(21, 12, 1, 4, rim);
+        break;
+      }
+      case 2:
+        rect(17, 8, 5, 3, '#111111'); rect(14, 8, 3, 1, '#333333'); rect(18, 8, 2, 1, highlight); break;
+      case 4:
+        rect(17, 7, 5, 4, '#222222'); rect(12, 6, 5, 1, '#333333'); rect(15, 7, 2, 1, '#333333'); break;
+      case 5:
+        rect(14, 8, 8, 3, '#00bbbb'); rect(14, 8, 8, 1, '#008888'); rect(18, 9, 3, 1, '#77ffff'); break;
+    }
+
+    // The near hand passes in front of the thigh on its backward swing.
     leg(stride, [1, 0, 0, 0][frame % 4]);
-
-    // Keep the avatar's head accessory readable from the side without reverting to a front view.
-    if (colors.headAccessory === 1) {
-      rect(10, 0, 11, 3, '#ffd700');
-      rect(12, -2, 2, 3, '#ffd700');
-      rect(18, -1, 2, 2, '#ffd700');
-    } else if (colors.headAccessory === 2) {
-      rect(11, -3, 8, 7, '#111111');
-      rect(8, 3, 14, 2, '#111111');
-    } else if (colors.headAccessory === 3) {
-      rect(10, 0, 11, 1, '#ffdd44');
+    // The leading sleeve keeps its shoulder while the forearm changes angle.
+    if (holding) {
+      rect(17, 17, 3, 4, bodyColor);
+      rect(19, 18, 7, 3, bodyColor);
+      rect(26, 17, 3, 3, colors.skinTone);
+    } else {
+      rect(17, 17, 3, 4, bodyColor);
+      rect(17 - stride, 20, 3, 3, bodyColor);
+      rect(18 - stride, 23, 3, 2, colors.skinTone);
+    }
+    // Profile accessories stay inside this 32px atlas cell in every walk frame.
+    switch (colors.headAccessory) {
+      case 1:
+        rect(10, 2, 11, 3, '#ffd700'); rect(11, 0, 2, 2, '#ffd700'); rect(17, 0, 2, 2, '#ffd700');
+        rect(17, 3, 2, 1, '#0044ff'); rect(12, 3, 2, 1, '#ff0000'); break;
+      case 2:
+        rect(11, 0, 8, 5, '#111111'); rect(9, 5, 14, 2, '#111111');
+        rect(11, 3, 8, 2, '#cc0000'); rect(12, 1, 1, 2, 'rgba(255,255,255,.15)'); break;
+      case 3:
+        rect(11, 0, 9, 1, '#ffdd44'); rect(10, 1, 1, 1, '#ffdd44'); rect(20, 1, 1, 1, '#ffdd44'); rect(11, 2, 9, 1, '#ffdd44'); break;
+      case 4:
+        rect(10, 2, 3, 4, '#880000'); rect(10, 0, 1, 3, '#cc0000');
+        rect(17, 2, 3, 4, '#cc0000'); rect(19, 0, 1, 3, '#cc0000'); break;
+      case 5:
+        rect(14, 2, 1, 4, '#888888'); rect(13, 0, 3, 2, '#00ff00'); rect(14, 0, 1, 1, '#bbffbb'); break;
+      case 6:
+        rect(13, 6, 1, 3, '#22aa22'); rect(11, 4, 5, 3, '#ff69b4');
+        rect(12, 3, 3, 5, '#ff69b4'); rect(13, 5, 1, 1, '#ffdd44'); break;
     }
   }

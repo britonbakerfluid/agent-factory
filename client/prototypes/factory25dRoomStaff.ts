@@ -1,17 +1,23 @@
 import * as THREE from 'three';
+import { FRONT_COUNTER } from '@shared/factory25d-layout';
 import { DEFAULT_AVATAR } from '@shared/constants';
-import { avatarTexture } from './factory25dAvatarTexture';
+import { avatarTexture, setAvatarTextureFrame } from './factory25dAvatarTexture';
+import { avatarEyePose } from './factory25dAvatarEyes';
 import { createNameTag } from './factory25dLabels';
 import { contactShadow } from './factory25dContactShadows';
 import { AvatarWalkCycle } from './factory25dAvatarGait';
+import { BoardManager } from './factory25dBoardManager';
+import type { installBoardDragging } from './factory25dBoardDrag';
 import type { BoardData } from './factory25dBoardData';
 import type { AvatarConfig } from '@shared/types';
 
-const poses = ['idle', 'walk_right', 'walk_left', 'walk_up', 'work', 'board'];
+const poses = ['idle', 'walk_right', 'walk_left', 'walk_up', 'work', 'board', 'walk_down', 'hold_left', 'hold_right', 'hold_up'];
 /** Room staff use the normal avatar painter but never create agent sessions, levels, or activity credit. */
-export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: HTMLCanvasElement, openBoard: () => void) {
+export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: HTMLCanvasElement, openBoard: () => void,
+  boardMotion: ReturnType<typeof installBoardDragging>) {
+  let eyeTime = 0, eyesFrozen = false;
   function staff(name: string, avatar: AvatarConfig, action: () => void) {
-    const { sheet, texture } = avatarTexture(avatar, poses);
+    const { sheet, texture } = avatarTexture(avatar, poses, true);
     const material = new THREE.MeshStandardMaterial({ map: texture, alphaTest: .08, side: THREE.DoubleSide, roughness: 1,
       emissive: '#101126', emissiveIntensity: .6 });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(.86, .86), material);
@@ -24,7 +30,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
     const feet = new THREE.Vector3(), walk = new AvatarWalkCycle();
     return { mesh, shadow, label, walk,
       pose(row: number, frame: number, point: THREE.Vector3, camera: THREE.Camera, visible: boolean) {
-        texture.offset.set(frame / 4, 1 - (row + 1) / poses.length);
+        setAvatarTextureFrame(texture, row, frame, avatarEyePose(eyeTime, name === 'board manager' ? 37 : 83, 'relaxed', eyesFrozen));
         mesh.position.copy(point); mesh.position.y += (sheet.feet[row][frame] / 32 - .5) * .86 + .004;
         feet.set(0, (.5 - sheet.feet[row][frame] / 32) * .86, 0);
         mesh.visible = shadow.visible = visible;
@@ -36,21 +42,33 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
   }
   const manager = staff('board manager', { ...DEFAULT_AVATAR, shirtColor: '#5f8f78', color: '#5f8f78', hairStyle: 2, hairColor: '#604332', faceAccessory: 1, pantsColor: '#2b3440' }, openBoard);
   const desk = staff('front desk', { ...DEFAULT_AVATAR, shirtColor: '#b6854f', color: '#b6854f', hairStyle: 0, hairColor: '#242630', skinTone: '#c68e5a', mouthStyle: 1 }, () => document.querySelector<HTMLButtonElement>('.team-desk-hotspot')?.click());
-  const managerPoint = new THREE.Vector3(), clerkPoint = new THREE.Vector3(-2.2, .018, 6.05);
-  let previousTime = 0, managerX = .85, managerStatus = '', deskStatus = '';
+  const managerPoint = new THREE.Vector3(), clerkPoint = new THREE.Vector3(FRONT_COUNTER.x+.65, .018, FRONT_COUNTER.z-.6);
+  const managerLife = new BoardManager(boardMotion.home, boardMotion.restingYaw);
+  let previousTime = 0, managerStatus = '', deskStatus = '';
   return {
     update(now: number, camera: THREE.Camera, visible: boolean, reduced: boolean, data: BoardData,
       task?: { point: THREE.Vector3; name: string; startsAt: number }) {
+      eyeTime = now / 1000; eyesFrozen = reduced;
       const dt = previousTime ? Math.min(.05, (now - previousTime) / 1000) : 0; previousTime = now;
-      const targetX = task ? task.point.x + .14 : .85;
-      const dx = THREE.MathUtils.clamp(targetX - managerX, -dt * 1.1, dt * 1.1);
-      managerX = reduced ? targetX : managerX + dx;
-      board.updateWorldMatrix(true, false);
-      managerPoint.set(managerX, .018, .54); board.localToWorld(managerPoint);
-      const walking = !reduced && Math.abs(dx) > .001;
+      const noteOffset = task ? managerLife.offset(task.point.x + .14, .68) : undefined;
+      const movedBoard = managerLife.update(dt, board.position, boardMotion.isBusy(), visible,
+        noteOffset && { x: board.position.x + noteOffset.x, z: board.position.z + noteOffset.z });
+      if (movedBoard) boardMotion.moveByStaff(movedBoard);
+      // Staff stand on the room floor. The board transform never carries them.
+      managerPoint.set(managerLife.position.x, .018, managerLife.position.z);
+      board.parent!.updateWorldMatrix(true, false); board.parent!.localToWorld(managerPoint);
+      const { motion, phase, holding, grip } = managerLife;
+      const walking = Math.hypot(motion.x, motion.z) > .0001;
       const frame = manager.walk.sample({ x: managerPoint.x, z: managerPoint.z }, now / 1000, walking, reduced);
-      manager.pose(walking ? dx > 0 ? 1 : 2 : task ? 5 : 3, walking ? frame : task && !reduced ? Math.floor(now / 220) % 4 : 0, managerPoint, camera, visible);
-      const managerActivity = task ? `updating ${task.name}’s note` : 'keeping the board organized';
+      const row = holding ? Math.abs(grip.x) > Math.abs(grip.z) ? grip.x > 0 ? 7 : 8 : 9
+        : walking ? Math.abs(motion.x) > Math.abs(motion.z) ? motion.x > 0 ? 1 : 2 : motion.z > 0 ? 6 : 3
+        : phase === 'writing' ? 5 : 0;
+      const pulling = holding && motion.x * grip.x + motion.z * grip.z > 0;
+      manager.pose(row, walking ? pulling ? (4 - frame) % 4 : frame : phase === 'writing' && !reduced ? Math.floor(now / 220) % 4 : 0, managerPoint, camera, visible);
+      const managerActivity = phase === 'waiting' ? 'waiting for you to finish moving the board'
+        : phase === 'approaching' ? 'walking over to collect the board'
+        : holding ? 'putting the whiteboard back'
+        : phase === 'writing' && task ? `updating ${task.name}’s note` : 'keeping the board organized';
       if (managerStatus !== managerActivity) { managerStatus = managerActivity; manager.label.setDetails('board manager', managerActivity, 'room staff · click to read the whiteboard'); }
       // The receptionist faces visitors across the counter, then checks the room's team screen.
       const checking = !reduced && now % 18000 > 14500;
@@ -58,7 +76,10 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
       const people = new Set(data.agents.map(agent => agent.owner)).size;
       const deskActivity = data.connected ? `${people} people here · welcoming the team` : 'waiting for the factory connection';
       if (deskStatus !== deskActivity) { deskStatus = deskActivity; desk.label.setDetails('front desk', deskActivity, 'room staff · click to see who’s here'); }
-      canvas.dataset.roomStaff = '2'; canvas.dataset.boardManager = task ? 'updating-note' : 'watching-board';
+      canvas.dataset.roomStaff = '2'; canvas.dataset.boardManager = phase;
+      canvas.dataset.boardManagerPose = poses[row];
+      canvas.dataset.boardManagerPosition = `${managerLife.position.x.toFixed(3)},${managerLife.position.z.toFixed(3)}`;
+      canvas.dataset.boardPosition = `${board.position.x.toFixed(3)},${board.position.z.toFixed(3)}`;
     },
     dispose() { manager.dispose(); desk.dispose(); }
   };

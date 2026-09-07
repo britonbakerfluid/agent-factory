@@ -11,6 +11,9 @@ export function createPatioStations(parent: THREE.Group) {
   for (const station of PATIO_STATIONS) {
     const desk = new THREE.Group(); desk.position.set(station.x, patioFloorHeight(station), station.z); parent.add(desk);
     const solar = station.id === 'patio-5';
+    // Broad occlusion from the tabletop survives overcast skies; the existing
+    // narrow foot contacts anchor the legs without a hard rectangular shadow.
+    contactShadow(desk, { width: 1.3, depth: .5, spread: .3, opacity: .11 });
     // All decks meet the same standing work pose as the indoor cabinets.
     propPart(desk, [1.5, 0.075, 0.65], [0, 0.41, 0], solar ? teal : oak);
     for (const x of [-0.58, 0.58]) {
@@ -38,7 +41,11 @@ export function createPatioStations(parent: THREE.Group) {
   // Join the pair of desks into one picnic table, with a bench on the far side.
   propPart(parent, [1.25, 0.075, 0.65], [13.65, lower + 0.41, 3.8], oak);
   propPart(parent, [4.15, 0.07, 0.28], [13.65, lower + 0.24, 3.22], teal);
-  for (const x of [11.95, 15.35]) propPart(parent, [0.075, 0.21, 0.25], [x, lower + 0.105, 3.22], iron);
+  for (const x of [11.95, 15.35]) {
+    propPart(parent, [0.075, 0.21, 0.25], [x, lower + 0.105, 3.22], iron);
+    contactShadow(parent, { x, z: 3.22, floorY: lower, width: .1, depth: .25, spread: .10, opacity: .28 });
+  }
+  contactShadow(parent, { x: 13.65, z: 3.22, floorY: lower, width: 4.15, depth: .28, spread: .2, opacity: .14 });
   return {
     setFeedback(states: Map<string, StationFeedback>, reducedMotion = false) {
       for (const [id, material] of screens) {

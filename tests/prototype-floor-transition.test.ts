@@ -1,7 +1,7 @@
 import { describe,expect,it } from 'vitest';
 import * as THREE from 'three';
 import { floorTravelCamera,upperFloorLift,createFloorSection,GARAGE_SECTION_X,GARAGE_SECTION_Y } from '../client/prototypes/factory25dFloorTransition';
-import { FACTORY_ELEVATOR,GARAGE_ELEVATOR,GARAGE_LEVEL,toFactoryWorld,constrainFactoryStep,fromFactoryWorld,clearFactorySegment,routeToStation } from '../shared/factory25d-layout';
+import { FACTORY_ELEVATOR,GARAGE_ELEVATOR,GARAGE_LEVEL,FRONT_VENDING,toFactoryWorld,constrainFactoryStep,fromFactoryWorld,clearFactorySegment,routeToStation } from '../shared/factory25d-layout';
 import { elevatorTrip } from '../client/prototypes/factory25dElevatorTrip';
 
 const home=()=>{const camera=new THREE.OrthographicCamera(-8,8,5.64,-5.64,.1,50);camera.position.set(0,9,14.6);camera.lookAt(0,.35,.45);camera.updateMatrixWorld();return camera;};
@@ -116,10 +116,12 @@ describe('physical floor descent',()=>{
 
 describe('vending machine walking clearance',()=>{
   it('routes around the front desk cabinet while keeping the lounge and counter aisle open',()=>{
-    const from={x:-1,z:8.1},to={x:-1,z:10};
+    // Keep both endpoints outside the relocated machine's footprint.
+    const from={x:FRONT_VENDING.x,z:FRONT_VENDING.z-FRONT_VENDING.halfDepth-.6};
+    const to={x:FRONT_VENDING.x,z:FRONT_VENDING.z+FRONT_VENDING.halfDepth+.6};
     expect(clearFactorySegment(from,to)).toBe(false);
     const constrained=fromFactoryWorld(constrainFactoryStep(toFactoryWorld(from),toFactoryWorld(to)));
-    expect(constrained.z).toBeLessThan(8.41);
+    expect(constrained.z).toBeLessThan(FRONT_VENDING.z-FRONT_VENDING.halfDepth);
     const path=[from,...routeToStation(from,to)];expect(path.at(-1)).toEqual(to);
     for(let i=1;i<path.length;i++)expect(clearFactorySegment(path[i-1],path[i])).toBe(true);
     // The front-counter entrance stays clear; farther down, pedestrians now
