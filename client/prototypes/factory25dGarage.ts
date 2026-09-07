@@ -1,3 +1,4 @@
+import { garageElevatorPose } from './factory25dWorld';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {propPart,standard} from './factory25dProps';
@@ -131,29 +132,37 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
   }
  };const pickHost=canvas.parentElement!;pickHost.addEventListener('click',select,true);
  return {scene,room,cars,camera,carAnimation,miniWork,lighting,lightSwitches,travelBackground,setDriveAction(action:(car:GarageCarId)=>void){driveAction=action;},upperFloorOffset:()=>physicalTrip?upperFloorLift(floorProgress):0,setCarAction(action:typeof carAction){carAction=action;},visit:(next:boolean)=>visit(next,true),setWorkAction(action:()=>void){nav.querySelector<HTMLButtonElement>('[aria-label="Work in the garage"]')!.onclick=action;},setStationFeedback(states:Map<string,{active:boolean;color:string;heat:number}>){furnishings.workScreens.forEach((material,i)=>{const state=states.get(`garage-${i}`);material.emissive.set(state?.active?state.color:'#11352f');material.emissiveIntensity=state?.active ? .8+(state.heat??0)*.15 : .2;});},isActive:()=>open,isTransitioning:()=>!!trip||floorPreview!==undefined,isCrossSection:()=>physicalTrip&&floorProgress>0&&floorProgress<1,
- update(now:number,canOpen:boolean,projectionCamera:THREE.Camera=home,controlledAgent?:WorldAgent,serverNow=Date.now(),driving=false){
+ update(now:number,canOpen:boolean,projectionCamera:THREE.Camera=home,controlledAgent?:WorldAgent,serverNow=Date.now(),driving=false,passengers:readonly WorldAgent[]=[]){
   available=canOpen;carPickingAvailable=open&&driving;visibleCamera=projectionCamera;walkingAgent=controlledAgent;walkingNow=serverNow;
   if(pendingCar&&now-pendingCar.at>8000){pendingCar=undefined;rev.disabled=false;status.textContent='No reply yet. Check the factory connection and try again.';}
   const carPhase=(selectedCar==='mini'?miniWork.phase():undefined)??carAnimation.visits.get(selectedCar);
   if(showCars&&carPhase){const message=`${names[ids.indexOf(selectedCar)]} · ${carPhase}`;if(status.textContent!==message)status.textContent=message;status.hidden=!open||!available;showingVisit=true;}
   else if(showingVisit){status.textContent=`${names[ids.indexOf(selectedCar)]} · ready`;showingVisit=false;}
+  let upperDoor=0,lowerDoor=0;
   physicalTrip=false;floorProgress=Number(open);
   if(trip){
    const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
    const state=elevatorTrip(now-trip.start,trip.from,trip.to,reduced,trip.passenger);
    open=state.garage;floorProgress=state.garage01;physicalTrip=!reduced&&!state.done;transit.style.opacity=String(state.veil);
    transit.classList.toggle('is-reduced',reduced);
-   upperLift.update(open?0:state.door,true);lowerLift.update(open?state.door:0,true);
+   upperDoor=open?0:state.door;lowerDoor=open?state.door:0;
    document.body.classList.toggle('garage-open',open);
    if(state.done){trip=undefined;transit.hidden=true;document.body.classList.remove('garage-travelling');nav.hidden=!open;collection.hidden=!open||!showCars;down.hidden=!available;if(walkingAgent?.manualControl)down.blur();else down.focus();}
   }else{
    const ride=walkingAgent?.manualControl?.elevatorTrip;
    if(ride){
     const toGarage=factoryRoomAt(fromFactoryWorld(ride.arrival))==='garage';
-    const state=elevatorTrip(walkingNow-ride.startedAt,!toGarage,toGarage);
-    upperLift.update(state.garage?0:state.door,true);lowerLift.update(state.garage?state.door:0,true);
-   }else{upperLift.update(elevatorApproachOpenness(walkingAgent,'factory'));lowerLift.update(elevatorApproachOpenness(walkingAgent,'garage'));}
+    const state=elevatorTrip(walkingNow-ride.startedAt,!toGarage,toGarage,false,true);
+    upperDoor=state.garage?0:state.door;lowerDoor=state.garage?state.door:0;
+   }else{upperDoor=elevatorApproachOpenness(walkingAgent,'factory');lowerDoor=elevatorApproachOpenness(walkingAgent,'garage');}
   }
+  for(const agent of passengers){
+   const pose=garageElevatorPose(agent,serverNow,'factory25d');
+   upperDoor=Math.max(upperDoor,pose?.room==='factory'?pose.door:elevatorApproachOpenness(agent,'factory'));
+   lowerDoor=Math.max(lowerDoor,pose?.room==='garage'?pose.door:elevatorApproachOpenness(agent,'garage'));
+  }
+  upperLift.update(upperDoor,!!trip);lowerLift.update(lowerDoor,!!trip);
+  canvas.dataset.elevatorDoors=`${upperDoor.toFixed(2)},${lowerDoor.toFixed(2)}`;
   if(floorPreview!==undefined){physicalTrip=true;floorProgress=floorPreview;open=floorPreview>=.5;document.body.classList.toggle('garage-open',open);}
   scene.position.set(physicalTrip?GARAGE_SECTION_X:0,physicalTrip?GARAGE_SECTION_Y:0,0);
   travelBackground.copy(factory.background as THREE.Color).lerp(scene.background as THREE.Color,floorProgress);

@@ -3,7 +3,7 @@ import { positionAt } from '@shared/world-layouts';
 import type { EnvironmentType, Position, WorldAgent, WorldMovement } from '@shared/types';
 import { slotPosition } from '@shared/world-layouts';
 import { WORKSTATIONS, routeToStation } from './factory25dWorkstations';
-import { manualElevatorPresentation } from './factory25dManualTravel';
+import { manualElevatorPresentation, elevatorPassengerPresentation } from './factory25dManualTravel';
 
 export type RoomPoint = { x: number; z: number };
 const oldEntrance = toFactoryWorld({ x: 6.7, z: 12.8 });
@@ -75,14 +75,14 @@ export function agentPosition(agent: WorldAgent, now: number, environment: Envir
 }
 
 /** Elevator passengers stay behind the doors while the server crosses between floor strips. */
-export function garageElevatorPose(agent: WorldAgent, now: number, environment: EnvironmentType): { x: number; z: number; floor: number; room: FactoryRoom; hidden: boolean } | undefined {
+export function garageElevatorPose(agent: WorldAgent, now: number, environment: EnvironmentType): { x: number; z: number; floor: number; room: FactoryRoom; hidden: boolean; door: number; facing: 'up' | 'down'; walking: boolean } | undefined {
   if(environment!=='factory25d') return;
   if(agent.manualControl) {
     const pose=manualElevatorPresentation(agent.manualControl,now);if(!pose)return;
-    return {...factoryScenePoint(pose.point),floor:pose.room==='garage'?GARAGE_LEVEL+.018:.018,room:pose.room,hidden:pose.hidden};
+    return {...factoryScenePoint(pose.point),floor:pose.room==='garage'?GARAGE_LEVEL+.018:.018,room:pose.room,hidden:pose.hidden,door:pose.door,facing:pose.facing,walking:pose.walking};
   }
   if(!agent.world.movement)return;
   const trip=factoryElevatorTripAt(factoryMovementForScene(agent.world.movement),now); if(!trip) return;
-  const landing=trip.progress>=1?trip.arrival:trip.departure,room=factoryRoomAt(landing);
-  return {...factoryScenePoint(landing),floor:room==='garage'?GARAGE_LEVEL+.018:.018,room,hidden:trip.progress>0&&trip.progress<1};
+  const pose=elevatorPassengerPresentation(toFactoryWorld(trip.departure),toFactoryWorld(trip.arrival),trip.progress*1770);
+  return {...factoryScenePoint(pose.point),floor:pose.room==='garage'?GARAGE_LEVEL+.018:.018,room:pose.room,hidden:pose.hidden,door:pose.door,facing:pose.facing,walking:pose.walking};
 }

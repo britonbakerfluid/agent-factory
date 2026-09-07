@@ -1,5 +1,7 @@
 import { factoryRoomAt, factoryScenePoint, factoryWorldPoint, fromFactoryWorld, FACTORY_ELEVATOR, GARAGE_ELEVATOR, type FactoryRoom } from '@shared/factory25d-layout';
 import { MANUAL_ELEVATOR_SWITCH_MS } from '@shared/factory25d-manual-travel';
+import { elevatorDoorAt } from './factory25dElevatorTrip';
+import type { Position } from '@shared/types';
 import type { EnvironmentType, ManualControlState, WorldAgent } from '@shared/types';
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
@@ -9,15 +11,24 @@ const smooth = (value: number) => { const t = clamp(value); return t * t * (3 - 
 export function manualElevatorPresentation(control: ManualControlState, now: number) {
   const trip = control.elevatorTrip;
   if (!trip) return undefined;
-  const elapsed = now - trip.startedAt, arriving = elapsed >= MANUAL_ELEVATOR_SWITCH_MS;
-  const landing = fromFactoryWorld(arriving ? trip.arrival : trip.departure);
+  return elevatorPassengerPresentation(trip.departure, trip.arrival, now - trip.startedAt);
+}
+
+/** Shared by autonomous and controlled passengers, in the exact same physical doorway. */
+export function elevatorPassengerPresentation(departure: Position, arrival: Position, elapsed: number) {
+  const arriving = elapsed >= MANUAL_ELEVATOR_SWITCH_MS;
+  const landing = fromFactoryWorld(arriving ? arrival : departure);
   const room = factoryRoomAt(landing), local = factoryScenePoint(landing);
   const lift = room === 'garage' ? GARAGE_ELEVATOR : FACTORY_ELEVATOR;
-  const progress = arriving ? smooth((elapsed - 1210) / 240) : smooth(elapsed / 240);
+  const progress = arriving ? smooth((elapsed - 1070) / 380) : smooth((elapsed - 160) / 250);
+  // Behind the metal panels, but in front of the cabin's back wall.
+  const cabinZ = -4.10;
   const point = arriving
-    ? { x: lift.x + (local.x - lift.x) * progress, z: -3.94 + (local.z + 3.94) * progress }
-    : { x: local.x + (lift.x - local.x) * progress, z: local.z + (-3.94 - local.z) * progress };
-  return { point: factoryWorldPoint(point, room), room, hidden: elapsed >= 240 && elapsed < 1210 };
+    ? { x: lift.x + (local.x - lift.x) * progress, z: cabinZ + (local.z - cabinZ) * progress }
+    : { x: local.x + (lift.x - local.x) * progress, z: local.z + (cabinZ - local.z) * progress };
+  return { point: factoryWorldPoint(point, room), room, hidden: elapsed >= 610 && elapsed < 850,
+    door: elevatorDoorAt(elapsed), facing: arriving ? 'down' as const : 'up' as const,
+    walking: arriving ? elapsed > 1070 && elapsed < 1450 : elapsed > 160 && elapsed < 410 };
 }
 
 /** Only follow actual crossings. Looking at another room never creates a stream of return requests. */

@@ -98,6 +98,10 @@ export function createBoardArtwork(panel: THREE.Group, centerY: number) {
   const paperGroup = new THREE.Group();
   panel.add(paperGroup);
   let noteTargets: BoardNote[] = [];
+  type PaperMove = { id: string; mesh: THREE.Mesh; contact: THREE.Mesh; note: BoardNote; from: THREE.Vector3; to: THREE.Vector3; start: number };
+  let paperMoves: PaperMove[] = [], previous = new Map<string, { center: THREE.Vector3; target: THREE.Vector3; start?: number }>();
+  let hasDrawn = false, samePage = true, lastPage = 0;
+
   function clearPaper() {
     for (const child of [...paperGroup.children]) {
       const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
@@ -162,12 +166,40 @@ export function createBoardArtwork(panel: THREE.Group, centerY: number) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     paperGroup.add(mesh);
-    noteTargets.push({ agent, center: mesh.position.clone(), width: width + 0.014, height: height + 0.014 });
+    const note = { agent, center: mesh.position.clone(), width: width + 0.014, height: height + 0.014 };
+    noteTargets.push(note);
+    const old = previous.get(agent.id), target = mesh.position.clone();
+    if (hasDrawn && samePage && (!old || old.center.distanceTo(target) > .001)) {
+      const from = old?.center.clone() ?? new THREE.Vector3(.38, centerY - .38, .14);
+      const start = old?.start !== undefined && old.target.distanceTo(target) < .001 ? old.start : performance.now() + 700 + paperMoves.length * 180;
+      paperMoves.push({ id: agent.id, mesh, contact, note, from, to: target, start });
+      mesh.position.copy(from); note.center.copy(from); contact.visible = false;
+    }
+
   }
 
   return {
+    managerTask: () => paperMoves[0] ? { point: paperMoves[0].note.center, name: paperMoves[0].note.agent.name, startsAt: paperMoves[0].start } : undefined,
+    update(now: number, reduced: boolean) {
+      const active = paperMoves.length > 0;
+      paperMoves = paperMoves.filter(move => {
+        const t = reduced ? 1 : Math.max(0, Math.min(1, (now - move.start) / 750));
+        const eased = t * t * (3 - 2 * t);
+        move.mesh.position.lerpVectors(move.from, move.to, eased);
+        move.mesh.position.z += Math.sin(t * Math.PI) * .065;
+        move.note.center.copy(move.mesh.position);
+        move.contact.visible = t === 1;
+        return t < 1;
+      });
+      return active;
+    },
     draw(data: BoardData, page = 0, now = Date.now()) {
-      clearPaper();
+      previous = new Map(noteTargets.map(note => {
+        const move = paperMoves.find(item => item.id === note.agent.id);
+        return [note.agent.id, { center: note.center.clone(), target: move?.to.clone() ?? note.center.clone(), start: move?.start }];
+      }));
+      samePage = lastPage === page; lastPage = page;
+      paperMoves = []; clearPaper();
       const active = data.agents.filter((agent) => boardColumn(agent.activity));
       const resting = data.agents.filter((agent) => ['idle', 'waiting', 'stopped'].includes(agent.activity));
       const ungrouped = data.agents.length - active.length - resting.length;
@@ -251,6 +283,7 @@ export function createBoardArtwork(panel: THREE.Group, centerY: number) {
         '#486079',
       );
       rear.texture.needsUpdate = true;
+      hasDrawn = true;
       return { notes: noteTargets, page, pageCount };
     },
   };

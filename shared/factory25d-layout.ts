@@ -77,6 +77,7 @@ export const FACTORY_OBSTACLES: Obstacle[] = [
   { left: -5.85, right: -0.55, near: 6.43, far: 6.86 },
   { left: -1.54, right: -0.46, near: 8.41, far: 9.59 }, // Front desk room's bottom-right vending machine, facing left.
   { left: 0.25, right: 1.1, near: 7.05, far: 8.75 },
+  { left: .22, right: 1.34, near: 9.52, far: 10.66 }, // Orange chair; board it from the open right-hand side.
 ].map(o => {
   const clearance = 'clearance' in o && typeof o.clearance === 'number' ? o.clearance : margin;
   return { left: o.left - clearance, right: o.right + clearance, near: o.near - clearance, far: o.far + clearance };

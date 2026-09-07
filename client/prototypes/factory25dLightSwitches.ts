@@ -63,7 +63,7 @@ export function createLightInteractions(canvas: HTMLCanvasElement, switches: Roo
   host.addEventListener('pointerdown', event => { down = { x: event.clientX, y: event.clientY }; }, { capture: true, signal: abort.signal });
   host.addEventListener('click', event => {
     if (event.detail === 0 || !(event.target instanceof Element)) return;
-    if (event.target.closest('.factory-controls, .factory-preview-tools, .scene-sound, [role="dialog"], #inspect-navigation')) return;
+    if (event.target.closest('.factory-controls, .factory-preview-tools, .agent-label, .scene-sound, [role="dialog"], #inspect-navigation')) return;
     if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 6) {
       if (event.target.closest('.scene-light-switch')) { event.preventDefault(); event.stopImmediatePropagation(); }
       return;

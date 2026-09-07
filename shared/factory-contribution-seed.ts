@@ -33,6 +33,12 @@ export const CONTRIBUTION_IDENTITIES: ContributionIdentity[] = [
     "factoryUsernames": [
       "BrayPay"
     ]
+  },
+  {
+    "githubLogin": "sachin-fluid",
+    "factoryUsernames": [
+      "Sachin"
+    ]
   }
 ];
 export const CONTRIBUTION_SEED: ContributionRecord[] = [
@@ -60,5 +66,10 @@ export const CONTRIBUTION_SEED: ContributionRecord[] = [
     "githubLogin": "braypay",
     "mergedPullRequests": 5,
     "checkedAt": 1788727168759
+  },
+  {
+    "githubLogin": "sachin-fluid",
+    "mergedPullRequests": 40,
+    "checkedAt": 1788796903962
   }
 ];

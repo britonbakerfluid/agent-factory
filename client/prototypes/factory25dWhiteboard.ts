@@ -524,9 +524,12 @@ export function createWhiteboardInteraction({
   );
 
   return {
+    openBoard: () => changeView('board'),
     getData: () => boardData,
+    managerTask: artwork.managerTask,
     isRoomView: () => view === 'room',
     update(now: number) {
+      if (artwork.update(now, reducedMotion.matches)) layoutDirty = true;
       boardDragging.update(now);
       updateCamera(now);
       if (flipMotion) {

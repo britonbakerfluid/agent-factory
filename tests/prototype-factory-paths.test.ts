@@ -56,7 +56,7 @@ describe('visible factory arrivals and safe server paths', () => {
   });
 
   it('preserves valid live patrol waypoints, progress and idle positions', () => {
-    const patrol: WorldMovement = { from: { x: 828, y: 488 }, to: { x: 376, y: 608 }, startedAt: 1000, arrivesAt: 21000,
+    const patrol: WorldMovement = { from: { x: 828, y: 488 }, to: { x: 388, y: 608 }, startedAt: 1000, arrivesAt: 21000,
       waypoints: [{ x: 881.4, y: 477.4 }, { x: 1026.6, y: 298.6 }, { x: 1026.6, y: 214.6 }, { x: 1026.6, y: 177.4 },
         { x: 1026.6, y: 163.4 }, { x: 996.2, y: 114.6 }, { x: 629.8, y: 104.6 }, { x: 557.4, y: 410.2 }] };
     expect(factoryMovementIsClear(patrol)).toBe(true); expect(factoryMovementForScene(patrol)).toBe(patrol);
@@ -112,7 +112,7 @@ describe('visible factory arrivals and safe server paths', () => {
     const liftIndex = path.findIndex(p => Math.hypot(p.x - FACTORY_ELEVATOR.x, p.z - FACTORY_ELEVATOR.z) < .001);
     expect(path[liftIndex + 1]).toEqual(GARAGE_ELEVATOR);
     const progress = (lengths.slice(0, liftIndex).reduce((a, b) => a + b, 0) + lengths[liftIndex] / 2) / lengths.reduce((a, b) => a + b, 0);
-    expect(garageElevatorPose(agent(stale), 1000 + progress * 10000, 'factory25d')).toMatchObject({ hidden: true, room: 'factory', x: FACTORY_ELEVATOR.x, z: FACTORY_ELEVATOR.z });
+    expect(garageElevatorPose(agent(stale), 1000 + progress * 10000, 'factory25d')).toMatchObject({ hidden: false, room: 'garage', x: GARAGE_ELEVATOR.x, z: expect.closeTo(-4.1) });
   });
 
   it('waits safely if a workstation destination itself becomes blocked', () => {

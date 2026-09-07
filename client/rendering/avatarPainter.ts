@@ -583,7 +583,8 @@ export function drawCharacter(
     const skinColor = colors.skinTone;
     const hairColor = colors.hairColor;
     const climbing = anim === 'climb';
-    const facesAway = anim === 'work' || anim === 'walk_up' || climbing;
+    const sitting = anim === 'sit' || anim === 'sit_up';
+    const facesAway = anim === 'work' || anim === 'walk_up' || anim === 'sit_up' || anim === 'board' || climbing;
 
     ctx.clearRect(x, y, size, size);
 
@@ -679,7 +680,7 @@ export function drawCharacter(
 
     // ── Shirt / body ──
     ctx.fillStyle = bodyColor;
-    if (anim === 'sit') {
+    if (sitting) {
       ctx.fillRect(x + 8, y + 15 + bounce, 16, 8);
     } else if (anim === 'work') {
       ctx.fillRect(x + 6, y + 15 + bounce, 16, 8);
@@ -689,7 +690,7 @@ export function drawCharacter(
 
     // Body shading (right side)
     ctx.fillStyle = darkColor;
-    if (anim === 'sit') {
+    if (sitting) {
       ctx.fillRect(x + 22, y + 15 + bounce, 2, 8);
     } else if (anim === 'work') {
       ctx.fillRect(x + 20, y + 15 + bounce, 2, 8);
@@ -699,7 +700,7 @@ export function drawCharacter(
 
     // Body highlight (left side)
     ctx.fillStyle = lightColor;
-    if (anim === 'sit') {
+    if (sitting) {
       ctx.fillRect(x + 8, y + 16 + bounce, 1, 4);
     } else if (anim === 'work') {
       ctx.fillRect(x + 6, y + 16 + bounce, 1, 4);
@@ -709,7 +710,7 @@ export function drawCharacter(
 
     // Collar
     ctx.fillStyle = lightColor;
-    if (anim === 'sit') {
+    if (sitting) {
       ctx.fillRect(x + 12, y + 15 + bounce, 8, 1);
     } else if (anim === 'work') {
       ctx.fillRect(x + 10, y + 15 + bounce, 8, 1);
@@ -719,7 +720,7 @@ export function drawCharacter(
 
     // ── Shirt design ──
     const drawDesign = SHIRT_DESIGNS[colors.shirtDesign % SHIRT_DESIGNS.length];
-    if (anim === 'sit') {
+    if (sitting) {
       drawDesign(ctx, x, y, bounce, 0, darkColor, lightColor);
     } else if (anim === 'work') {
       drawDesign(ctx, x - 2, y, bounce, 0, darkColor, lightColor);
@@ -729,7 +730,7 @@ export function drawCharacter(
 
     // ── Belt ──
     ctx.fillStyle = '#443322';
-    if (anim === 'sit') {
+    if (sitting) {
       ctx.fillRect(x + 8, y + 22 + bounce, 16, 1);
     } else if (anim === 'work') {
       ctx.fillRect(x + 6, y + 22 + bounce, 16, 1);
@@ -738,7 +739,7 @@ export function drawCharacter(
     }
     // Belt buckle
     ctx.fillStyle = '#887744';
-    if (anim === 'sit') {
+    if (sitting) {
       ctx.fillRect(x + 15, y + 22 + bounce, 2, 1);
     } else if (anim === 'work') {
       ctx.fillRect(x + 13, y + 22 + bounce, 2, 1);
@@ -748,7 +749,7 @@ export function drawCharacter(
 
     // ── Pants ──
     ctx.fillStyle = colors.pantsColor;
-    if (anim === 'sit') {
+    if (sitting) {
       ctx.fillRect(x + 8, y + 23, 16, 4);
     } else if (anim === 'work') {
       ctx.fillRect(x + 6, y + 23 + bounce, 16, 4);
@@ -768,6 +769,12 @@ export function drawCharacter(
       ctx.fillStyle = skinColor;
       ctx.fillRect(x + 15, y + 19 + reach, 4, 3);
       ctx.fillRect(x + 24, y + 19 + reach, 3, 3);
+    } else if (anim === 'board') {
+      ctx.fillRect(x + 5, y + 16, 4, 6);
+      ctx.fillRect(x + 23, y + 11, 3, 9);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(x + 24, y + 8 - frame % 2, 3, 4);
+      ctx.fillRect(x + 5, y + 21, 3, 2);
     } else if (climbing) {
       // Alternate reaching hands, keeping the same saved clothes and silhouette.
       for (const [side, armX] of [5, 24].entries()) {
@@ -787,7 +794,7 @@ export function drawCharacter(
       } else {
         ctx.fillRect(x + 23, y + 20 + bounce, 3, 2);
       }
-    } else if (anim === 'sit') {
+    } else if (sitting) {
       ctx.fillRect(x + 5, y + 16 + bounce, 4, 6);
       ctx.fillRect(x + 23, y + 16 + bounce, 4, 6);
       ctx.fillStyle = skinColor;
@@ -835,7 +842,7 @@ export function drawCharacter(
         ctx.fillRect(x + legX - 1, y + shoeY + 1, 5, 1);
       }
       return;
-    } else if (anim === 'sit') {
+    } else if (sitting) {
       ctx.fillRect(x + 10, y + 26, 4, 4);
       ctx.fillRect(x + 18, y + 26, 4, 4);
     } else {
@@ -846,7 +853,7 @@ export function drawCharacter(
 
     // ── Shoes ──
     ctx.fillStyle = colors.shoeColor;
-    if (anim !== 'sit') {
+    if (!sitting) {
       const legOffset = anim.startsWith('walk') ? (frame % 2 === 0 ? 2 : -2) : 0;
       ctx.fillRect(x + 9, y + 30 + bounce, 5, 2);
       ctx.fillRect(x + 17, y + 30 + bounce + legOffset, 5, 2);
