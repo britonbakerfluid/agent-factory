@@ -25,7 +25,7 @@ it('makes short quiet action sounds with softened edges and no downloaded sample
     expect(samples.every(sample => Number.isFinite(sample) && Math.abs(sample) <= .75)).toBe(true);
     prints.add(String(samples.slice(50, 60)));
   }
-  expect(prints.size).toBe(6);
+  expect(prints.size).toBe(Object.keys(PROP_SOUND_SPECS).length);
 });
 
 it('caps overlapping voices and repeat clicks, reuses buffers, and cancels all tails without replay', () => {
@@ -38,7 +38,9 @@ it('caps overlapping voices and repeat clicks, reuses buffers, and cancels all t
   };
   const audio = createPropAudio(context as unknown as BaseAudioContext, destination as unknown as AudioNode);
   expect(sources).toHaveLength(0); expect(context.createBuffer).not.toHaveBeenCalled();
-  for (const kind of Object.keys(PROP_SOUND_SPECS) as PropSoundKind[]) expect(audio.play(kind)).toBe(true);
+  const kinds = Object.keys(PROP_SOUND_SPECS) as PropSoundKind[];
+  for (const kind of kinds.slice(0, PROP_SOUND_VOICE_LIMIT)) expect(audio.play(kind)).toBe(true);
+  expect(audio.play(kinds[PROP_SOUND_VOICE_LIMIT])).toBe(false);
   expect(audio.activeVoiceCount).toBe(PROP_SOUND_VOICE_LIMIT);
   for (let click = 0; click < 100; click++) expect(audio.play('vending-select')).toBe(false);
   expect(sources).toHaveLength(6); expect(context.createBuffer).toHaveBeenCalledTimes(6);

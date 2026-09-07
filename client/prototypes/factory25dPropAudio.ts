@@ -5,6 +5,7 @@ export const PROP_SOUND_SPECS = {
   'lamp-switch': { seconds: .055, cooldown: .085, gain: .4 },
   'candle-on': { seconds: .23, cooldown: .18, gain: .42 },
   'candle-off': { seconds: .18, cooldown: .18, gain: .38 },
+  'phone-buzz': { seconds: .24, cooldown: 1.45, gain: .62 },
 } as const;
 export type PropSoundKind = keyof typeof PROP_SOUND_SPECS;
 export const PROP_SOUND_VOICE_LIMIT = 6;
@@ -41,6 +42,10 @@ export function propSoundSamples(kind: PropSoundKind, sampleRate: number): Float
     } else if (kind === 'candle-on') {
       const scrape = Math.exp(-t * 29), flare = Math.sin(Math.PI * t / duration) ** 2;
       sample = noise * .17 * scrape + brown * .6 * flare;
+    } else if (kind === 'phone-buzz') {
+      // One brief motor vibration against the tabletop, rather than a ringtone.
+      const envelope = Math.sin(Math.PI * t / duration) ** .7;
+      sample = (sine(137, t) * .24 + sine(274, t) * .035 + brown * .12) * envelope;
     } else {
       sample = brown * .85 * Math.sin(Math.PI * t / duration) ** 2;
     }
@@ -50,7 +55,7 @@ export function propSoundSamples(kind: PropSoundKind, sampleRate: number): Float
   return output;
 }
 
-interface PropVoice { source: AudioBufferSourceNode; envelope: GainNode; endsAt: number }
+interface PropVoice { source: AudioBufferSourceNode; envelope: GainNode; endsAt: number; kind: PropSoundKind }
 
 /** Transient sounds feed the existing room-effects bus and its master volume. */
 export function createPropAudio(context: BaseAudioContext, destination: AudioNode) {
@@ -61,9 +66,9 @@ export function createPropAudio(context: BaseAudioContext, destination: AudioNod
   function release(voice: PropVoice) {
     voices.delete(voice); voice.source.disconnect(); voice.envelope.disconnect();
   }
-  function stop() {
-    for (const voice of [...voices]) { voice.source.stop(); release(voice); }
-    lastPlayed.clear();
+  function stop(kind?: PropSoundKind) {
+    for (const voice of [...voices]) if (!kind || voice.kind === kind) { voice.source.stop(); release(voice); }
+    if (kind) lastPlayed.delete(kind); else lastPlayed.clear();
   }
   return {
     play(kind: PropSoundKind, energy = 1) {
@@ -84,7 +89,7 @@ export function createPropAudio(context: BaseAudioContext, destination: AudioNod
       const source = context.createBufferSource(); source.buffer = buffer;
       const envelope = context.createGain(); envelope.gain.value = spec.gain * strength;
       source.connect(envelope).connect(destination);
-      const voice = { source, envelope, endsAt: start + spec.seconds };
+      const voice = { source, envelope, endsAt: start + spec.seconds, kind };
       voices.add(voice); source.onended = () => release(voice);
       source.start(start); source.stop(voice.endsAt);
       return true;

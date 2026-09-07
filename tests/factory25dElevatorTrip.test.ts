@@ -1,14 +1,15 @@
 import {describe,expect,it} from 'vitest';
 import {elevatorTrip} from '../client/prototypes/factory25dElevatorTrip';
 describe('elevator room transition',()=>{
-  it('moves continuously between visible floors in both directions',()=>{
+  it.each([false,true])('moves continuously in both directions (passenger: %s)',passenger=>{
     for(const from of [false,true]) {
-      expect(elevatorTrip(759,from,!from).garage).toBe(from);
-      expect(elevatorTrip(760,from,!from)).toMatchObject({garage:!from,veil:0,door:0});
-      const middle=elevatorTrip(765,from,!from);
+      const ride=(time:number)=>elevatorTrip(time*(passenger?1:1.35),from,!from,false,passenger);
+      expect(ride(759).garage).toBe(from);
+      expect(ride(761)).toMatchObject({garage:!from,veil:0,door:0});
+      const middle=ride(765);
       expect(middle.garage01).toBeCloseTo(.5);
-      expect(elevatorTrip(1800,from,!from)).toMatchObject({done:true,garage:!from,veil:0,door:0});
-      expect(elevatorTrip(1800,from,!from).lift).toBeCloseTo(0);
+      expect(ride(1800)).toMatchObject({done:true,garage:!from,veil:0,door:0});
+      expect(ride(1800).lift).toBeCloseTo(0);
     }
   });
   it('provides a brief stationary transition for reduced motion',()=>{

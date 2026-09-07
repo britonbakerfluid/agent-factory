@@ -602,7 +602,13 @@ export function drawCharacter(
       return;
     }
 
-    const bounce = (anim.startsWith('walk') && frame % 2 === 0) ? -2 : 0;
+    const walking = anim.startsWith('walk');
+    // Passing / contact / passing / contact. The head moves only one pixel;
+    // the planted shoe stays on row 31 throughout the cycle.
+    const bounce = walking ? [0, 1, 0, 1][frame % 4] : 0;
+    const leftLift = walking ? [0, 0, 1, 0][frame % 4] : 0;
+    const rightLift = walking ? [1, 0, 0, 0][frame % 4] : 0;
+    const armSwing = walking ? [0, 1, 0, -1][frame % 4] : 0;
     const breathe = (anim === 'idle' && frame === 2) ? 1 : 0;
 
     // ── Head (skin) — rounded shape ──
@@ -747,12 +753,22 @@ export function drawCharacter(
     } else if (anim === 'work') {
       ctx.fillRect(x + 6, y + 23 + bounce, 16, 4);
     } else {
-      ctx.fillRect(x + 8, y + 23 + bounce + breathe, 16, 4);
+      ctx.fillRect(x + 8, y + 23 + bounce + breathe, 16, walking ? 3 : 4);
     }
 
     // ── Arms ──
     ctx.fillStyle = darkColor;
-    if (climbing) {
+    if (anim === 'paddle') {
+      // A seated two-handed stroke. Keep the shoulders and head steady while
+      // the hands follow the canoe's four paddle poses; the hull hides the lap.
+      const reach = [0, 2, 1, -1][frame % 4];
+      ctx.fillRect(x + 5, y + 16, 4, 5);
+      ctx.fillRect(x + 8, y + 19 + reach, 8, 3);
+      ctx.fillRect(x + 23, y + 16, 4, 4 + reach);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(x + 15, y + 19 + reach, 4, 3);
+      ctx.fillRect(x + 24, y + 19 + reach, 3, 3);
+    } else if (climbing) {
       // Alternate reaching hands, keeping the same saved clothes and silhouette.
       for (const [side, armX] of [5, 24].entries()) {
         const reach = [3, 1, 0, 1][(frame + side * 2) % 4];
@@ -777,8 +793,18 @@ export function drawCharacter(
       ctx.fillStyle = skinColor;
       ctx.fillRect(x + 5, y + 21 + bounce, 3, 2);
       ctx.fillRect(x + 24, y + 21 + bounce, 3, 2);
+    } else if (walking) {
+      // Sleeves stay attached at the shoulder. Each hand swings opposite its
+      // leg, shortening the forearm in depth rather than moving the whole arm.
+      for (const [armX, handX, reach] of [[5, 5, -armSwing], [23, 24, armSwing]]) {
+        ctx.fillStyle = darkColor;
+        ctx.fillRect(x + armX, y + 16 + bounce, 4, 3);
+        ctx.fillRect(x + armX, y + 19 + bounce, 4, 3 - reach);
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x + handX, y + 22 + bounce - reach, 3, 2);
+      }
     } else {
-      const swing = anim.startsWith('walk') ? (frame % 2 === 0 ? 3 : -3) : 0;
+      const swing = 0;
       ctx.fillRect(x + 5, y + 16 + bounce + swing, 4, 6);
       ctx.fillRect(x + 23, y + 16 + bounce - swing, 4, 6);
       // Hands
@@ -796,6 +822,17 @@ export function drawCharacter(
         ctx.fillRect(x + legX, y + 25 - lift, 5, 5);
         ctx.fillStyle = colors.shoeColor;
         ctx.fillRect(x + legX - 1, y + 30 - lift, 6, 2);
+      }
+      return;
+    } else if (walking) {
+      for (const [legX, lift] of [[10, leftLift], [18, rightLift]]) {
+        const shoeY = 30 - lift;
+        ctx.fillStyle = colors.pantsColor;
+        ctx.fillRect(x + legX, y + 25 + bounce, 4, shoeY - 25 - bounce);
+        ctx.fillStyle = colors.shoeColor;
+        ctx.fillRect(x + legX - 1, y + shoeY, 5, 2);
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(x + legX - 1, y + shoeY + 1, 5, 1);
       }
       return;
     } else if (anim === 'sit') {
@@ -834,18 +871,31 @@ function drawSideCharacter(
     darkColor: string,
     lightColor: string,
   ) {
-    const bounce = frame % 2 === 0 ? -1 : 0;
-    const stride = frame % 2 === 0 ? 2 : -2;
+    const bounce = [0, 1, 0, 1][frame % 4];
+    const stride = [0, 2, 0, -2][frame % 4];
     const rect = (left: number, top: number, width: number, height: number, color: string) => {
       ctx.fillStyle = color;
       const px = facing === 'right' ? x + left : x + 32 - left - width;
       ctx.fillRect(px, y + top + bounce, width, height);
     };
 
-    // Rear arm and leg sit behind the torso so the silhouette clearly reads in profile.
-    rect(10, 18 - stride, 3, 7, darkColor);
-    rect(11, 24 - stride, 4, 6, colors.pantsColor);
-    rect(10, 29 - stride, 6, 2, colors.shoeColor);
+    const leg = (shift: number, lift: number) => {
+      // Both legs pivot under the same profile hip. Separating the hips in X
+      // made one contact pose splay out and the other fold across itself.
+      const hipX = 14;
+      rect(hipX, 24, 4, 3, colors.pantsColor);
+      rect(hipX + shift, 26, 4, 4 - lift - bounce, colors.pantsColor);
+      // Cancel the torso bob at the shoe: its contact point is the ground.
+      rect(hipX + shift - 1, 30 - lift - bounce, 6, 2, colors.shoeColor);
+      rect(hipX + shift - 1, 31 - lift - bounce, 6, 1, '#111111');
+    };
+
+    // Rear limbs sit behind the torso. Knees overlap the fixed hip, and arms
+    // swing opposite the same-side leg instead of marching together.
+    rect(12, 17, 3, 4, darkColor);
+    rect(12 + stride, 20, 3, 3, darkColor);
+    rect(12 + stride, 23, 3, 2, colors.skinTone);
+    leg(-stride, [0, 0, 1, 0][frame % 4]);
 
     // Long hair, afros, caps and bandanas retain a recognizable rear silhouette.
     const hairStyle = colors.hairStyle % 8;
@@ -888,12 +938,11 @@ function drawSideCharacter(
     rect(14, 15, 5, 1, lightColor);
     rect(11, 23, 10, 1, '#443322');
 
-    // Front arm and leg swing opposite the rear pair.
-    rect(19, 17 + stride, 3, 7, bodyColor);
-    rect(20, 22 + stride, 3, 2, colors.skinTone);
-    rect(17, 24 + stride, 4, 6, colors.pantsColor);
-    rect(17, 29 + stride, 6, 2, colors.shoeColor);
-    rect(17, 30 + stride, 6, 1, '#111111');
+    // The leading sleeve keeps its shoulder while the forearm changes angle.
+    rect(17, 17, 3, 4, bodyColor);
+    rect(17 - stride, 20, 3, 3, bodyColor);
+    rect(18 - stride, 23, 3, 2, colors.skinTone);
+    leg(stride, [1, 0, 0, 0][frame % 4]);
 
     // Keep the avatar's head accessory readable from the side without reverting to a front view.
     if (colors.headAccessory === 1) {

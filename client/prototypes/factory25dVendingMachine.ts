@@ -5,6 +5,7 @@ import { signTexture } from './factory25dLabels';
 import { propPart, standard } from './factory25dProps';
 import { createVendingDispenser, type VendingInteractionOptions } from './factory25dVendingDispense';
 import { createSnackGeometry, snackKind } from './factory25dVendingSnacks';
+import { VendingCabinetRock } from './factory25dVendingMotion';
 
 /** Physical cabinet size, excluding the soft pool of light in front. */
 export const VENDING_MACHINE_SIZE = { width: .96, depth: .68, height: 1.36 } as const;
@@ -12,7 +13,8 @@ export const VENDING_MACHINE_SIZE = { width: .96, depth: .68, height: 1.36 } as 
 /** A freestanding snack machine; local +Z is its front and local Y=0 is the floor. */
 export function createVendingMachine(parent: THREE.Object3D) {
   const root = new THREE.Group(); root.name = 'corner-vending-machine'; parent.add(root);
-  const cabinet = new THREE.Group(); root.add(cabinet);
+  const visual = new THREE.Group(); visual.name = 'vending-cabinet-motion'; root.add(visual);
+  const cabinet = new THREE.Group(); visual.add(cabinet);
   const materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
   const material = (color: string, roughness = .75, emissive = '#000000', intensity = 1) => {
     const result = standard(color, roughness, emissive); result.emissiveIntensity = intensity;
@@ -28,16 +30,18 @@ export function createVendingMachine(parent: THREE.Object3D) {
   materials.add(stockMaterial);
   const box = (size: [number, number, number], at: [number, number, number], mat: THREE.Material) => propPart(cabinet, size, at, mat);
 
-  // Separate shell pieces leave a real cavity behind the display glass.
+  // Butt-jointed shell panels leave a real cavity behind the display glass.
+  // The back fits BETWEEN the sides, base and roof: overlapping full-size
+  // panels put teal and enamel on the same plane and flicker when rocked.
   box([.85, .08, .56], [0, .055, -.005], dark);
   for (const x of [-.34, .34]) box([.1, .045, .13], [x, .0225, .19], dark);
-  box([.92, 1.23, .075], [0, .715, -.2725], teal);
-  for (const x of [-.4225, .4225]) box([.075, 1.23, .62], [x, .715, 0], enamel);
+  box([.77, .86, .075], [0, .87, -.2725], teal);
+  for (const x of [-.4225, .4225]) box([.075, .86, .62], [x, .87, 0], enamel);
   box([.92, .06, .62], [0, 1.33, 0], enamel);
   box([.79, .035, .51], [0, 1.365 - .035, -.015], edge);
   box([.92, .34, .62], [0, .27, 0], enamel);
-  box([.92, .125, .035], [0, 1.2375, .2925], enamel);
-  box([.135, .785, .04], [.3525, .8375, .29], enamel);
+  box([.77, .125, .035], [0, 1.2375, .2925], enamel);
+  box([.1, .73, .04], [.335, .81, .29], enamel);
   box([.025, 1.19, .025], [-.433, .715, .322], coral);
   // A recessed, vented service panel gives the visible left side some depth.
   box([.006, .31, .31], [-.463, .325, -.045], edge);
@@ -46,7 +50,7 @@ export function createVendingMachine(parent: THREE.Object3D) {
   for (let row = 0; row < 3; row++) box([.017, .017, .1 - row * .017], [-.477, 1.14 - row * .045, .055], cream);
 
   box([.65, .755, .025], [-.0675, .805, -.155], dark);
-  box([.65, .024, .37], [-.0675, 1.185, .04], teal);
+  box([.635, .024, .37], [-.0675, 1.185, .04], teal);
   const shelfRows = [1.065, .845, .625];
   for (const [row, y] of shelfRows.entries()) {
     const light = row === 2 ? warm : cool;
@@ -97,7 +101,7 @@ export function createVendingMachine(parent: THREE.Object3D) {
     const mat = new THREE.MeshStandardMaterial({ map: texture, emissiveMap: texture,
       emissive: '#ffffff', emissiveIntensity: emission, roughness: .55 }); materials.add(mat);
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
-    panel.position.set(x, y, .316); root.add(panel); return mat;
+    panel.position.set(x, y, .316); visual.add(panel); return mat;
   };
   const header = sign('FLUID', .715, .103, 0, 1.24, '#243f3d', '#ffe5b9', .65);
   sign('SNACKS + SIPS', .48, .039, -.0675, .456, '#9fdfd8', '#244340', .35);
@@ -107,12 +111,12 @@ export function createVendingMachine(parent: THREE.Object3D) {
   const glassMaterial = new THREE.MeshStandardMaterial({ color: '#a9dfd4', roughness: .19, metalness: .12,
     transparent: true, opacity: .045, depthWrite: false }); materials.add(glassMaterial);
   const glass = new THREE.Mesh(new THREE.PlaneGeometry(.634, .73), glassMaterial);
-  glass.position.set(-.0675, .802, .279); glass.renderOrder = 2; root.add(glass);
+  glass.position.set(-.0675, .802, .279); glass.renderOrder = 2; visual.add(glass);
   const gleamMaterial = new THREE.MeshBasicMaterial({ color: '#d8fff1', transparent: true, opacity: .075,
     depthWrite: false, toneMapped: false }); materials.add(gleamMaterial);
   for (const x of [-.307, .157]) {
     const gleam = new THREE.Mesh(new THREE.PlaneGeometry(.017, .64), gleamMaterial);
-    gleam.position.set(x, .81, .281); gleam.rotation.z = -.11; gleam.renderOrder = 3; root.add(gleam);
+    gleam.position.set(x, .81, .281); gleam.rotation.z = -.11; gleam.renderOrder = 3; visual.add(gleam);
   }
 
   // Merge static parts by material: the product detail stays inexpensive on phones.
@@ -145,7 +149,10 @@ export function createVendingMachine(parent: THREE.Object3D) {
   spill.rotation.x = -Math.PI / 2; spill.position.set(0, .02, .82); root.add(spill);
   const light = new THREE.PointLight('#9be1c7', .8, 2.1, 2);
   light.position.set(-.045, .65, .51); root.add(light);
-  const dispenser = createVendingDispenser(root);
+  const motion = new VendingCabinetRock();
+  const dispenser = createVendingDispenser(root, {
+    accepted: () => motion.press(), released: () => motion.release(), rockAngle: () => visual.rotation.x,
+  });
   let lastElapsed: number | undefined;
 
   return {
@@ -157,12 +164,16 @@ export function createVendingMachine(parent: THREE.Object3D) {
     get dispensedBodies() { return dispenser.bodies; },
     takeDispensed: (id: number) => dispenser.take(id),
     update(elapsed: number, reduced: boolean, deltaSeconds?: number) {
+      const dt = deltaSeconds ?? (lastElapsed === undefined ? 1 / 60 : elapsed - lastElapsed);
+      const pose = motion.update(dt, reduced, dispenser.visible);
+      visual.rotation.x = pose.pitch;
+      visual.position.set(0, pose.y, pose.z);
       // Very slow transformer warmth, never a flashing sign or a strobe.
       const warmth = reduced ? 0 : Math.sin(elapsed * .45) * .025;
       header.emissiveIntensity = .65 + warmth;
       spillMaterial.uniforms.glow.value = .2 + warmth * .15;
       light.intensity = .8 + warmth;
-      dispenser.update(deltaSeconds ?? (lastElapsed === undefined ? 1 / 60 : elapsed - lastElapsed));
+      dispenser.update(dt);
       lastElapsed = elapsed;
     },
     dispose() {

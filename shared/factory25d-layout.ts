@@ -10,7 +10,7 @@ export const MINI_WORK_PACK_MS = 4_500;
 export const MINI_WORK_RETRIEVAL_MS = 2_300;
 // These matching door landings are connected by the elevator shaft.
 export const GARAGE_MINI_LOOKOUTS = [-1.15, .35].map(x => ({ x, z: GARAGE_WORLD_Z + 3.05 }));
-export const FACTORY_ELEVATOR = { x: -6.7, z: -2.9 };
+export const FACTORY_ELEVATOR = { x: -7.1, z: -2.9 };
 export const GARAGE_ELEVATOR = { x: -10.5, z: GARAGE_WORLD_Z - 2.9 };
 // New arrivals enter through the visible, open patio doorway.
 export const FACTORY_ENTRANCE = { x: 7.55, z: -2.5 };
@@ -20,6 +20,7 @@ export function factoryWorldPoint(point: { x: number; z: number }, room: Factory
 export const INDOOR_COLUMNS = [-5.5, -3.3, -1.1, 1.1, 3.3, 5.5];
 export const INDOOR_ROWS = [-3.8, 0.33];
 export const INTERIOR_Z = 1.95;
+export const BRAND_SHELF = { x:-6.8, z:8.15, width:1.25, depth:.5 } as const;
 export type Workstation = { id: string; room: FactoryRoom; x: number; z: number; label: string; halfWidth?: number };
 export const INDOOR_STATIONS: Workstation[] = INDOOR_ROWS.flatMap((z, row) =>
   INDOOR_COLUMNS.map((x, column) => ({ id: `inside-${row * 6 + column}`, room: 'factory', x, z: z + INTERIOR_Z, label: 'arcade station' })),
@@ -60,6 +61,7 @@ type Obstacle = { left: number; right: number; near: number; far: number };
 const margin = 0.12;
 export const FACTORY_OBSTACLES: Obstacle[] = [
   ...PATIO_OBSTACLES,
+  { left:BRAND_SHELF.x-BRAND_SHELF.width/2, right:BRAND_SHELF.x+BRAND_SHELF.width/2, near:BRAND_SHELF.z-BRAND_SHELF.depth/2, far:BRAND_SHELF.z+BRAND_SHELF.depth/2 }, // Brand objects on the small front-counter shelf.
   ...WORKSTATIONS.filter(station => station.id !== MINI_WORKSTATION_ID).map(station => ({ left: station.x - (station.halfWidth ?? (station.room === 'patio' ? 0.77 : 0.36)), right: station.x + (station.halfWidth ?? (station.room === 'patio' ? 0.77 : 0.36)), near: station.z - 0.3, far: station.z + 0.32 })),
   ...GARAGE_CAR_IDS.map(id => { const bay=GARAGE_CAR_BAYS[id],bounds=GARAGE_PARKED_BOUNDS[id]; return {left:bay.x+bounds.left,right:bay.x+bounds.right,near:GARAGE_WORLD_Z+bay.z+bounds.near,far:GARAGE_WORLD_Z+bay.z+bounds.far}; }),
   { left: 9.65, right: 12, near: GARAGE_WORLD_Z - 4.3, far: GARAGE_WORLD_Z + 5.4 }, // Vehicle ramp; pedestrians use the open floor.

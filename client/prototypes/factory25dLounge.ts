@@ -1,7 +1,7 @@
 import * as THREE from "three";
+import { createBeanbagConsole } from "./factory25dBeanbagConsole";
 import type { SceneLightSwitch } from "./factory25dLightSwitches";
 import { propPart, standard } from "./factory25dProps";
-import { signTexture } from "./factory25dLabels";
 import type { BoardData } from "./factory25dBoardData";
 import { createLoungeChat } from "./factory25dLoungeChat";
 import { contactShadow } from "./factory25dContactShadows";
@@ -102,6 +102,7 @@ export function createLoungeDetails(
   const beanbag = new THREE.Mesh(cushion, fabric);
   beanbag.castShadow = beanbag.receiveShadow = true;
   bag.add(beanbag);
+  createBeanbagConsole(beanbag);
   const seamMaterial = new THREE.LineBasicMaterial({ color: "#b86130" });
   for (const side of [-1, 1]) {
     const seamPoints = [
@@ -224,29 +225,6 @@ export function createLoungeDetails(
     round: true,
   });
 
-  // Pixel lettering emits light, while a separate source spills onto nearby furniture.
-  const neon = new THREE.Group();
-  neon.position.set(2.5, 1.12, 3.76);
-  parent.add(neon);
-  propPart(neon, [1.66, 0.42, 0.06], [0, 0, 0], standard("#271c38", 1));
-  const neonFace = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.55, 0.3),
-    new THREE.MeshBasicMaterial({
-      map: signTexture("LOUNGE", "#ffc0ea", "#271c38", 2, 1.55 / 0.3),
-    }),
-  );
-  neonFace.position.z = 0.034;
-  neon.add(neonFace);
-  const neonWash = new THREE.PointLight("#f284d9", 5.2, 4.5, 2);
-  neonWash.position.set(0, 0.02, 0.23);
-  neon.add(neonWash);
-  for (const x of [-0.56, 0.56])
-    propPart(
-      neon,
-      [0.025, 0.82, 0.03],
-      [x, -0.52, -0.03],
-      standard("#403346", 1),
-    );
   // A shaded floor lamp gives the couch its own warm pool, with one shadow map.
   const floorLamp = new THREE.Group();
   floorLamp.position.set(3.25, 0.018, 5.18);
@@ -286,9 +264,6 @@ export function createLoungeDetails(
   }
   lightSwitches.push(lampSwitch('front-desk-lamp', 'Front desk lamp', shade, lampLight, shade.material, bulb),
     lampSwitch('lounge-floor-lamp', 'Lounge floor lamp', floorShade, pool, floorShade.material));
-  let neonOn = true;
-  lightSwitches.push({ id: 'lounge-sign', label: 'Lounge neon sign', kind: 'light', target: neonFace,
-    isOn: () => neonOn, setOn(on) { neonOn = on; neonWash.visible = on; neonFace.material.color.set(on ? '#ffffff' : '#312338'); } });
   const activity = createLoungeChat(table, canvas, camera, renderer, getMembers);
   return {
     chat: activity,

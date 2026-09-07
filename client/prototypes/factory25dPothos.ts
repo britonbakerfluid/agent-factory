@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createPothosFoliage, positionPothosLeaf, pothosMaterial, pothosSway, pothosVineGeometry } from './factory25dPothosFoliage';
+import { createPothosFoliage, createPothosStrand, pothosMaterial, pothosSway } from './factory25dPothosFoliage';
 
 /** Heart-shaped, unsplit pothos leaves and hanging vines, all solid geometry. */
 export function createHangingPothos(scene: THREE.Scene, hookHeight: number) {
@@ -9,7 +9,6 @@ export function createHangingPothos(scene: THREE.Scene, hookHeight: number) {
   const foliage = createPothosFoliage();
   const clay = matte('#8c7469'); const rim = matte('#b09a84');
   const rope = matte('#c0bca1');
-  const { leafGeometry, leafMaterials, veinGeometry, veinMaterial, stemMaterial } = foliage;
   const potY = hookHeight - 0.83;
   function add(geometry: THREE.BufferGeometry, material: THREE.Material, position: THREE.Vector3, parent: THREE.Group = group) {
     const mesh = new THREE.Mesh(geometry, material);
@@ -26,8 +25,6 @@ export function createHangingPothos(scene: THREE.Scene, hookHeight: number) {
   }
   const vines: THREE.Group[] = [];
   for (let vine = 0; vine < 6; vine += 1) {
-    const trail = new THREE.Group();
-    trail.position.y = potY + 0.15;
     const angle = vine / 6 * Math.PI * 2;
     const length = 0.78 + (vine % 3) * 0.37;
     const x = Math.cos(angle) * 0.21; const z = Math.sin(angle) * 0.21;
@@ -36,14 +33,10 @@ export function createHangingPothos(scene: THREE.Scene, hookHeight: number) {
       new THREE.Vector3(x * 1.6 + Math.sin(vine) * 0.08, -length * 0.55, z * 1.5 + 0.07),
       new THREE.Vector3(x * 1.5 + Math.cos(vine) * 0.15, -length, z * 1.3 + 0.13),
     ]);
-    add(pothosVineGeometry(curve), stemMaterial, new THREE.Vector3(), trail);
-    for (let index = 0; index < 9; index += 1) {
-      const leaf = new THREE.Group(); positionPothosLeaf(leaf, curve, index, vine, angle);
-      add(leafGeometry, leafMaterials[(index + vine) % 3], new THREE.Vector3(), leaf);
-      const vein = add(veinGeometry, veinMaterial, new THREE.Vector3(), leaf);
-      vein.applyMatrix4(foliage.veinMatrix);
-      trail.add(leaf);
-    }
+    // Same authored leaf/vein transforms and colours; each strand now needs
+    // three draws instead of nineteen. The vine still owns the whole sway.
+    const trail = createPothosStrand(foliage, curve, vine, angle);
+    trail.position.y = potY + 0.15;
     group.add(trail); vines.push(trail);
   }
   scene.add(group);

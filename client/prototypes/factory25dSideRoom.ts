@@ -198,8 +198,9 @@ export function createSideRoom(scene: THREE.Scene) {
       time: number,
       wetAmount = rainAmount,
       reducedMotion = false,
+      viewWidth = 16,
     ) {
-      terraces.update(snow, rainAmount, night, time, reducedMotion);
+      terraces.update(snow, rainAmount, night, time, reducedMotion, viewWidth);
       water.update(wetAmount, rainAmount, snow, night, time, reducedMotion);
       rain.visible = rainAmount > 0.05;
       snowflakes.visible = snow > 0.05;

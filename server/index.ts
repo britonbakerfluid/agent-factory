@@ -1,5 +1,6 @@
 import { TeamRoster } from './team-roster.js';
 import { VisitorBasketball } from './visitor-basketball.js';
+import { GarageDrivingManager } from './garage-driving.js';
 import { registerTeamRoutes } from './routes/team.js';
 import { ContributionService, createContributionFilePersistence, registerContributionRoutes } from './contributions.js';
 import { watchPresenceConnection } from './ws/presence-heartbeat.js';
@@ -138,6 +139,7 @@ async function main() {
   const grabs = new GrabManager(state, broadcast);
   state.setGrabbedSessionCheck(sessionId => grabs.activeGrabs().some(grab => grab.sessionId === sessionId));
   const visitorBalls = new VisitorBasketball(broadcast);
+  const garageDriving = new GarageDrivingManager(state, broadcast);
 
   // HTTP routes
   registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status());
@@ -164,6 +166,7 @@ async function main() {
     broadcast.sendWorldSnapshot(socket, state.getSnapshot());
     grabs.sendActive(socket);
     visitorBalls.sendActive(socket);
+    garageDriving.sendActive(socket);
     if (principal) {
       broadcast.sendTo(socket, {
         type: 'auth_result',
@@ -178,6 +181,7 @@ async function main() {
       controls.releaseSocket(socket, reason);
       grabs.releaseSocket(socket, reason);
       visitorBalls.disconnect(socket);
+      garageDriving.disconnect(socket);
     };
     socket.on('close', () => dropSocket('Browser disconnected'));
     socket.on('error', () => dropSocket('Browser disconnected'));
@@ -186,11 +190,15 @@ async function main() {
       try {
         const msg = JSON.parse(String(raw));
         switch (msg.type) {
+          case 'garage_drive':
+            if (!request.headers.origin || isSameHostOrigin(request.headers.origin, request.headers.host)) garageDriving.receive(socket, msg);
+            break;
           case 'visitor_ball':
             visitorBalls.receive(socket, msg);
             break;
           case 'request_state':
             broadcast.sendWorldSnapshot(socket, state.getSnapshot());
+            garageDriving.sendActive(socket);
             break;
 
 
@@ -326,6 +334,7 @@ async function main() {
     broadcast.broadcastWorldDelta(notification.delta);
     for (const change of notification.delta.changes) {
       if (change.kind === 'agent_remove') {
+        garageDriving.syncAgent(undefined, change.sessionId);
         controls.releaseSession(change.sessionId, 'Agent session ended');
         grabs.releaseSession(change.sessionId, 'Agent session ended');
       } else if (change.kind === 'agent_upsert'
@@ -334,6 +343,7 @@ async function main() {
         controls.releaseSession(change.agent.sessionId, 'Agent session ended');
         grabs.syncSession(change.agent);
       } else if (change.kind === 'agent_upsert') {
+        garageDriving.syncAgent(change.agent);
         grabs.syncSession(change.agent);
       }
     }
@@ -348,6 +358,7 @@ async function main() {
   const worldTimer = setInterval(() => { state.advanceWorld(); visitorBalls.expire(); }, 1_000);
   controls.start();
   grabs.start();
+  garageDriving.start();
 
   let shuttingDown = false;
   const shutdown = async () => {
@@ -365,6 +376,7 @@ async function main() {
     registry.stop();
     controls.stop();
     grabs.stop();
+    garageDriving.stop();
     await team.flush();
     await persistence.close();
   });

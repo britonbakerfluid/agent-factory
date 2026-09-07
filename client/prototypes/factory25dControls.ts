@@ -211,7 +211,11 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   }
   const movementKeys: Record<string, 'up' | 'down' | 'left' | 'right'> = { KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right' };
   document.addEventListener('keydown', event => {
-    if (!state.active || !movementAvailable() || (event.target as HTMLElement)?.closest('input,textarea,select,button,[contenteditable="true"]')) return;
+    const target = event.target as HTMLElement;
+    if (!state.active || !movementAvailable() || target?.closest('input,textarea,select,[contenteditable="true"]')) return;
+    // Clicking a control must not strand the B/WASD shortcuts on its focused
+    // button. Space still belongs to the focused button's native activation.
+    if (event.code === 'Space' && target?.closest('button,summary')) return;
     const key = movementKeys[event.code];
     if (key) { event.preventDefault(); state.move(key, true); }
     else if (event.code === 'Space' && !event.repeat) { event.preventDefault(); state.shoot(); }

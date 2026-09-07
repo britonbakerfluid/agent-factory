@@ -1,0 +1,631 @@
+{
+  "scope": "Source geometry, visible instances, dry weather; before camera culling and extra rendering passes.",
+  "models": {
+    "mini": {
+      "triangles": 11972,
+      "colorDraws": 84,
+      "kilobytes": 807,
+      "materials": 10
+    },
+    "porsche": {
+      "triangles": 11920,
+      "colorDraws": 76,
+      "kilobytes": 796,
+      "materials": 9
+    },
+    "delorean": {
+      "triangles": 11410,
+      "colorDraws": 100,
+      "kilobytes": 786,
+      "materials": 11
+    },
+    "f1": {
+      "triangles": 7968,
+      "colorDraws": 75,
+      "kilobytes": 533,
+      "materials": 7
+    },
+    "optionalBlenderTerrain": {
+      "triangles": 18062,
+      "colorDraws": 1,
+      "kilobytes": 454,
+      "materials": 1
+    },
+    "fern": {
+      "triangles": 10752,
+      "colorDraws": 24,
+      "largest": [
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 17,
+          "triangles": 1020,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 17,
+          "triangles": 1020,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 17,
+          "triangles": 1020,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 17,
+          "triangles": 1020,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 17,
+          "triangles": 1020,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 17,
+          "triangles": 1020,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 17,
+          "triangles": 1020,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 17,
+          "triangles": 1020,
+          "colorDraws": 1
+        }
+      ]
+    },
+    "palm": {
+      "triangles": 13752,
+      "colorDraws": 30,
+      "largest": [
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 19,
+          "triangles": 1140,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 19,
+          "triangles": 1140,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 19,
+          "triangles": 1140,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 19,
+          "triangles": 1140,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 19,
+          "triangles": 1140,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 19,
+          "triangles": 1140,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 19,
+          "triangles": 1140,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 19,
+          "triangles": 1140,
+          "colorDraws": 1
+        }
+      ]
+    },
+    "rubber": {
+      "triangles": 1940,
+      "colorDraws": 22,
+      "largest": [
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        }
+      ]
+    },
+    "broad": {
+      "triangles": 1780,
+      "colorDraws": 15,
+      "largest": [
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 1,
+          "triangles": 172,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 1,
+          "triangles": 172,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 1,
+          "triangles": 172,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 1,
+          "triangles": 172,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 1,
+          "triangles": 172,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        }
+      ]
+    },
+    "calathea": {
+      "triangles": 1890,
+      "colorDraws": 28,
+      "largest": [
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 1,
+          "triangles": 76,
+          "colorDraws": 1
+        }
+      ]
+    },
+    "bonsai": {
+      "triangles": 11820,
+      "colorDraws": 27,
+      "largest": [
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 63,
+          "triangles": 4788,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 63,
+          "triangles": 4032,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 120,
+          "colorDraws": 1
+        }
+      ]
+    },
+    "trailing": {
+      "triangles": 3288,
+      "colorDraws": 15,
+      "largest": [
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 7,
+          "triangles": 532,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 7,
+          "triangles": 532,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 7,
+          "triangles": 532,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 5,
+          "triangles": 380,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 5,
+          "triangles": 380,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 112,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 112,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 112,
+          "colorDraws": 1
+        }
+      ]
+    },
+    "hangingPothos": {
+      "triangles": 5568,
+      "colorDraws": 24,
+      "largest": [
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 112,
+          "colorDraws": 1
+        },
+        {
+          "name": "TubeGeometry",
+          "instances": 1,
+          "triangles": 112,
+          "colorDraws": 1
+        }
+      ]
+    }
+  },
+  "rooms": {
+    "windowLandscape": {
+      "triangles": 121868,
+      "colorDraws": 75,
+      "largest": [
+        {
+          "name": "BufferGeometry",
+          "instances": 1,
+          "triangles": 101200,
+          "colorDraws": 1
+        },
+        {
+          "name": "BufferGeometry",
+          "instances": 100,
+          "triangles": 7000,
+          "colorDraws": 1
+        },
+        {
+          "name": "BufferGeometry",
+          "instances": 150,
+          "triangles": 4500,
+          "colorDraws": 1
+        },
+        {
+          "name": "CylinderGeometry",
+          "instances": 150,
+          "triangles": 3000,
+          "colorDraws": 1
+        },
+        {
+          "name": "CylinderGeometry",
+          "instances": 100,
+          "triangles": 2000,
+          "colorDraws": 1
+        },
+        {
+          "name": "IcosahedronGeometry",
+          "instances": 95,
+          "triangles": 1900,
+          "colorDraws": 1
+        },
+        {
+          "name": "DodecahedronGeometry",
+          "instances": 35,
+          "triangles": 1260,
+          "colorDraws": 1
+        },
+        {
+          "name": "BufferGeometry",
+          "instances": 1,
+          "triangles": 230,
+          "colorDraws": 1
+        }
+      ]
+    },
+    "patioNormal": {
+      "triangles": 232638,
+      "colorDraws": 402,
+      "largest": [
+        {
+          "name": "Planter pothos leaves",
+          "instances": 2252,
+          "triangles": 81072,
+          "colorDraws": 1
+        },
+        {
+          "name": "Dwarf mountain pine needles",
+          "instances": 800,
+          "triangles": 43200,
+          "colorDraws": 1
+        },
+        {
+          "name": "Planter pothos veins",
+          "instances": 2252,
+          "triangles": 27024,
+          "colorDraws": 1
+        },
+        {
+          "name": "Japanese maple leaves",
+          "instances": 729,
+          "triangles": 11664,
+          "colorDraws": 1
+        },
+        {
+          "name": "Planter stems",
+          "instances": 563,
+          "triangles": 11260,
+          "colorDraws": 1
+        },
+        {
+          "name": "Visible tree branches",
+          "instances": 220,
+          "triangles": 4400,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        }
+      ]
+    },
+    "patioInspection": {
+      "triangles": 322718,
+      "colorDraws": 402,
+      "largest": [
+        {
+          "name": "Planter pothos leaves",
+          "instances": 2252,
+          "triangles": 171152,
+          "colorDraws": 1
+        },
+        {
+          "name": "Dwarf mountain pine needles",
+          "instances": 800,
+          "triangles": 43200,
+          "colorDraws": 1
+        },
+        {
+          "name": "Planter pothos veins",
+          "instances": 2252,
+          "triangles": 27024,
+          "colorDraws": 1
+        },
+        {
+          "name": "Japanese maple leaves",
+          "instances": 729,
+          "triangles": 11664,
+          "colorDraws": 1
+        },
+        {
+          "name": "Planter stems",
+          "instances": 563,
+          "triangles": 11260,
+          "colorDraws": 1
+        },
+        {
+          "name": "Visible tree branches",
+          "instances": 220,
+          "triangles": 4400,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        },
+        {
+          "name": "ExtrudeGeometry",
+          "instances": 9,
+          "triangles": 684,
+          "colorDraws": 1
+        }
+      ]
+    }
+  }
+}

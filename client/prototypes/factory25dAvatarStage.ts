@@ -3,6 +3,7 @@ import type { AvatarConfig } from '@shared/types';
 import { DEFAULT_AVATAR } from '@shared/constants';
 import { avatarSheet, AVATAR_ANIMATIONS } from './factory25dAvatar';
 import { avatarTexture } from './factory25dAvatarTexture';
+import { AVATAR_FRAME_DISTANCE } from './factory25dAvatarGait';
 import { blendCamera, cameraPose } from './factory25dCameraMotion';
 import type { createLiveAgents } from './factory25dLiveAgents';
 
@@ -20,7 +21,7 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
   key.name = 'avatar-edit-key'; fill.name = 'avatar-edit-fill';
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let sheet: ReturnType<typeof avatarSheet>, texture: THREE.CanvasTexture | undefined;
-  let active = false, entering = false, started = 0, direction = 0, walking = false;
+  let active = false, entering = false, started = 0, direction = 0, walking = false, walkStarted = 0;
   let targetId: string | undefined, hiddenMesh: THREE.Object3D | undefined, targetScene = factory;
   let originalVisible = true, from = cameraPose(camera), room = from, floor = 0;
   let width = 0, height = 0, roomHeight = 1, lastProgress = -1;
@@ -56,7 +57,10 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
       width = height = 0; lastProgress = -1; document.body.classList.add('avatar-stage-open');
     },
     setAvatar,
-    pose(turn: number, walk: boolean) { direction = turn; walking = walk; },
+    pose(turn: number, walk: boolean) {
+      if (walk && !walking) walkStarted = performance.now();
+      direction = turn; walking = walk;
+    },
     close() { if (active && entering) { entering = false; from = cameraPose(camera); started = performance.now(); lastProgress = -1; } },
     update(now: number) {
       if (!active) return;
@@ -84,7 +88,8 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
       const brightness = entering ? Math.min(1, (now - started) / 600) : 1 - progress;
       key.intensity = brightness * 3.2; fill.intensity = brightness * 1.3;
       const row = !walking && direction === 0 ? 0 : AVATAR_ANIMATIONS.indexOf(`walk_${['down', 'right', 'up', 'left'][direction]}`);
-      const frame = walking && !reduced.matches ? Math.floor(now / 160) % 4 : 0;
+      // Preview the same stride at the normal two scene units per second.
+      const frame = walking && !reduced.matches ? Math.floor(Math.max(0, now - walkStarted) / 1000 * 2 / AVATAR_FRAME_DISTANCE) % 4 : 0;
       texture?.offset.set(frame / 4, 1 - (row + 1) / AVATAR_ANIMATIONS.length);
       model.position.y = floor + (sheet.feet[row][frame] / 32 - .5) * .86 + .004;
       if (!entering && progress === 1) finish();

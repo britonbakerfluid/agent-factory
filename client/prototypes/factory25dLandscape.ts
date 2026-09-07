@@ -50,6 +50,13 @@ function polygonDistance(x: number, z: number, points: readonly GroundPoint[]) {
   }
   return inside ? -distance : distance;
 }
+
+/** Activities use the actual rendered lake surface and shore, including its
+ * compressed panorama proportions. Negative distance is inside the water. */
+export const LANDSCAPE_LAKE = {
+  height: lakeY + .003,
+  shoreDistance: (x: number, z: number) => polygonDistance(x, z, lakeOutline),
+};
 const westMesa: GroundPoint[] = [
   [-11, -7.5],
   [-8, -7.9],

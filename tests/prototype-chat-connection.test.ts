@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { watchBoardData, sendFactoryChat, forgetFactoryLogin, factoryHost, type BoardData } from '../client/prototypes/factory25dBoardData';
+import { watchBoardData, sendFactoryChat, forgetFactoryLogin, factoryHost, onFactoryMessage, onFactoryConnection, type BoardData } from '../client/prototypes/factory25dBoardData';
+import { PhoneMessageArrivals } from '../client/prototypes/factory25dPhoneNotifications';
 import { StateManager } from '../server/state';
 import { DEFAULT_AVATAR } from '../shared/constants';
 
@@ -170,4 +171,28 @@ it('keeps phone previews read-only while retaining same-origin behavior for depl
     vi.stubGlobal('location',{hostname,origin:`https://${hostname}`,search:''});
     expect(factoryHost()).toBe(`https://${hostname}`);
   }
+});
+
+it('only notifies the phone for accepted incoming appends, never snapshot/reconnect history or own echoes', () => {
+  const arrivals = new PhoneMessageArrivals(); let notifications = 0;
+  const stopMessages = onFactoryMessage(message => { notifications += arrivals.receive(message); });
+  const stopConnection = onFactoryConnection(connected => { if (!connected) arrivals.disconnect(); });
+  try {
+    stop = watchBoardData(data => { changes.push(data); arrivals.setOwnUsername(data.principal?.username); });
+    const socket = FactorySocket.instances[0];
+    socket.receive({ type: 'world_snapshot', snapshot: snapshot(10) }); expect(notifications).toBe(0);
+    socket.receive({ type: 'auth_result', success: true, username: 'Briton', ownerId: 'briton' });
+    const incoming = { ...chat, message: 'a new incoming message', timestamp: 43 };
+    const delta = { type: 'world_delta', delta: { previousRevision: 10, revision: 11, changes: [{ kind: 'chat_append', chat: incoming }] } };
+    socket.receive(delta); socket.receive(delta); expect(notifications).toBe(1);
+    const own = { username: 'Briton', message: 'my own response', timestamp: 44 };
+    socket.receive({ type: 'world_delta', delta: { previousRevision: 11, revision: 12, changes: [{ kind: 'chat_append', chat: own }] } });
+    expect(notifications).toBe(1);
+    socket.close(); vi.advanceTimersByTime(1000);
+    const missed = { ...chat, message: 'during disconnection', timestamp: 45 };
+    FactorySocket.instances[1].receive({ type: 'world_snapshot', snapshot: snapshot(20, [chat, incoming, own, missed]) });
+    expect(notifications).toBe(1);
+    FactorySocket.instances[1].receive({ type: 'world_delta', delta: { previousRevision: 20, revision: 21, changes: [{ kind: 'chat_append', chat: { ...chat, message: 'after reconnect', timestamp: 46 } }] } });
+    expect(notifications).toBe(2);
+  } finally { stopMessages(); stopConnection(); }
 });
