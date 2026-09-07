@@ -1,0 +1,66 @@
+/* Factory pixel-island styling; keep aligned with the main room dock. */
+      .mc-island {
+        position: fixed;
+        z-index: 32;
+        left: 50%;
+        bottom: max(20px, env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: max-content;
+        max-width: calc(100vw - 24px);
+        padding: 10px 16px;
+        color: #e2e9eb;
+        background: #080b12f5;
+        border-top: 1px solid #53616a85;
+        clip-path: polygon(16px 0, calc(100% - 16px) 0, calc(100% - 16px) 4px, calc(100% - 8px) 4px, calc(100% - 8px) 8px, calc(100% - 4px) 8px, calc(100% - 4px) 16px, 100% 16px, 100% calc(100% - 16px), calc(100% - 4px) calc(100% - 16px), calc(100% - 4px) calc(100% - 8px), calc(100% - 8px) calc(100% - 8px), calc(100% - 8px) calc(100% - 4px), calc(100% - 16px) calc(100% - 4px), calc(100% - 16px) 100%, 16px 100%, 16px calc(100% - 4px), 8px calc(100% - 4px), 8px calc(100% - 8px), 4px calc(100% - 8px), 4px calc(100% - 16px), 0 calc(100% - 16px), 0 16px, 4px 16px, 4px 8px, 8px 8px, 8px 4px, 16px 4px);
+        animation: island-enter 230ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      @keyframes island-enter { from { opacity: 0; translate: 0 8px; scale: 0.96; } to { opacity: 1; translate: 0 0; scale: 1; } }
+      .mc-island[data-instant="true"] { animation: none; }
+      .mc-button, .mc-button {
+        --pixel-face: #1b232b; --pixel-edge: #46545e;
+        position: relative; isolation: isolate;
+        flex-shrink: 0; min-height: 44px; padding: 8px 12px;
+        border: 0; border-radius: 0; background: var(--pixel-edge);
+        clip-path: polygon(6px 0, calc(100% - 6px) 0, calc(100% - 6px) 3px, calc(100% - 3px) 3px, calc(100% - 3px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 3px) calc(100% - 6px), calc(100% - 3px) calc(100% - 3px), calc(100% - 6px) calc(100% - 3px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 3px), 3px calc(100% - 3px), 3px calc(100% - 6px), 0 calc(100% - 6px), 0 6px, 3px 6px, 3px 3px, 6px 3px);
+        color: #dce7e9; font: 400 14px/20px GeistPixel, monospace;
+        white-space: nowrap; cursor: pointer;
+        transition: transform 100ms ease;
+      }
+      .mc-button::before, .mc-button::before { content: ''; position: absolute; z-index: -1; inset: 2px; clip-path: inherit; background: var(--pixel-face); }
+      .mc-button:hover:not(:disabled), .mc-button:hover { --pixel-face: #2e3b45; --pixel-edge: #718692; }
+      .mc-button:active:not(:disabled), .mc-button:active { transform: translateY(2px); }
+      .mc-button:focus-visible, .mc-button:focus-visible { outline: none; --pixel-edge: #b4f3e4; --pixel-face: #2e3b45; }
+
+.mc-button {box-shadow:none;font-size:12px;line-height:18px;touch-action:none;}
+.mc-button.mc-primary {--pixel-face:#25453f;--pixel-edge:#7ca99c;color:#dceee9;}
+.mc-hud.mc-island {top:auto;right:auto;bottom:max(20px,env(safe-area-inset-bottom));width:max-content;max-width:calc(100vw - 24px);text-shadow:none;gap:20px;pointer-events:auto;}
+.mc-hud .mc-kicker {font-size:9px;letter-spacing:.6px;margin:0 0 3px;color:#bac8cc;}
+.mc-hud .mc-time {font-size:21px;line-height:1.2;color:#e2e9eb;}
+.mc-hud .mc-muted {font-size:10px;margin:3px 0 0;line-height:1.2;color:#99afb6;}
+.mc-hud .mc-muted span {margin:0 3px;}
+.mc-hud-actions {align-items:center;gap:6px;}
+.mc-key-hint {bottom:114px;color:#d0dbe2;}
+.mc-drift {bottom:144px;background:#080b12f5;border-radius:0;}
+.mc-panel {background:#101522;border-color:#46545e;border-radius:0;}
+.mc-stats {background:#101522;border-color:#46545e;border-radius:0;}
+.mc-ui[data-touch="true"] .mc-hud {bottom:118px;}
+.mc-ui[data-touch="true"] .mc-drift {bottom:220px;}
+@media(max-width:700px){
+ .mc-hud.mc-island {gap:8px;padding:10px 12px;flex-wrap:wrap;justify-content:center;width:max-content;max-width:calc(100vw - 16px);}
+ .mc-hud>div:first-child {display:grid;grid-template-columns:auto auto;column-gap:10px;align-items:center;}
+ .mc-hud .mc-kicker {grid-column:1/-1;text-align:center;}
+ .mc-hud .mc-time {font-size:18px;}
+ .mc-hud-actions .mc-button {font-size:10px;padding:7px 9px;min-height:44px;}
+ .mc-key-hint {bottom:136px;padding:0 16px;font-size:10px;}
+ .mc-ui[data-touch="true"] .mc-hud {bottom:110px;}
+ .mc-ui[data-touch="true"] .mc-drift {bottom:237px;}
+}
+@media(max-height:540px) and (min-width:701px){
+ .mc-ui[data-touch="true"] .mc-hud {bottom:90px;}
+ .mc-ui[data-touch="true"] .mc-drift {bottom:193px;}
+ .mc-key-hint {bottom:102px;}
+}
+@media(prefers-reduced-motion:reduce){.mc-island{animation:none}.mc-button{transition:none}}

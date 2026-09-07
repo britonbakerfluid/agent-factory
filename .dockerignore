@@ -48,3 +48,6 @@ config/
 
 # Local design QA captures
 design-qa*
+
+# Dormant local experiments are preserved in Git, never sent to production builds.
+experiments/
