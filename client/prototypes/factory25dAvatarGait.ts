@@ -3,6 +3,17 @@ type Point = { x: number; z: number };
 /** Four frames cover a .8-unit stride for the room's short-legged avatars. */
 export const AVATAR_FRAME_DISTANCE = .2;
 
+/** Reusing a directional pose at rest must not advance its feet. */
+export function stationaryAvatarFrame(animation: string, elapsed: number, fps: number, reduced = false): number {
+  if (reduced || fps <= 0 || !Number.isFinite(elapsed) || animation.startsWith('walk_')) return 0;
+  if (animation === 'idle') {
+    // The blink frame should close the eyes briefly, not for a full 1-fps beat.
+    const period = Math.max(2.4, 8 / fps);
+    return elapsed % period >= period - .12 ? 2 : 0;
+  }
+  return Math.floor(elapsed * fps) % 4;
+}
+
 /** Display-only gait. Each actor owns its phase; wall-clock time never advances a foot. */
 export class AvatarWalkCycle {
   private previous?: Point & { at: number };

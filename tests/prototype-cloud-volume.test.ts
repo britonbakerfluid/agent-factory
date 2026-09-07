@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { cloudStyleFromSearch, createCloudVolume } from '../client/prototypes/factory25dCloudVolume';
-import { CLEAR_WEATHER, type WeatherVisualState } from '../client/sky/weather';
+import { CLEAR_WEATHER, parseWeatherOverride, weatherPalette, type WeatherVisualState } from '../client/sky/weather';
 import { paletteForElevation } from '../client/sky/skyPhase';
+import { setAtmosphereHaze } from '../client/prototypes/factory25dAtmosphere';
+import type { CloudFigurePreview } from '../client/prototypes/factory25dCloudFigure';
 
 const day = paletteForElevation(45, false);
-const cloudy: WeatherVisualState = { ...CLEAR_WEATHER, cloud01: .72, cloudForm01: .52 };
+const cloudy: WeatherVisualState = { ...CLEAR_WEATHER, mode: 'cloudy', cloud01: .72, cloudForm01: .52 };
 const cleanup: Array<() => void> = [];
 afterEach(() => { cleanup.splice(0).forEach(dispose => dispose()); });
 
-function fixture(previousTarget: THREE.WebGLRenderTarget | null = null) {
+function fixture(previousTarget: THREE.WebGLRenderTarget | null = null, cloudyBillows = true, figure: CloudFigurePreview = 'auto') {
   let target = previousTarget, alpha = .37;
   const clearColor = new THREE.Color('#264970');
   const frames: Array<{
@@ -31,12 +33,98 @@ function fixture(previousTarget: THREE.WebGLRenderTarget | null = null) {
       });
     }),
   };
-  const volume = createCloudVolume(renderer as unknown as THREE.WebGLRenderer, 15.84, 3.598);
+  const volume = createCloudVolume(renderer as unknown as THREE.WebGLRenderer, 15.84, 3.598, cloudyBillows, figure);
   cleanup.push(() => volume.dispose());
   return { volume, renderer, frames, current: () => ({ target, color: clearColor.clone(), alpha }) };
 }
 
 describe('volumetric window clouds', () => {
+  it('keeps the preview figure inside eligible clouds and removes it in other weather', () => {
+    const { volume, frames } = fixture(null, true, 'fluid');
+    volume.update(.1, cloudy, day, 0, false, true);
+    const figure = frames[0].quad.material.uniforms.cloudFigure.value as THREE.Vector3;
+    expect(figure.toArray()).toEqual([1, 1, 0]);
+    volume.update(.1, cloudy, day, 0, true, true);
+    expect(figure.x).toBe(0);
+    for (const mode of ['clear', 'rain', 'snow', 'thunderstorm', 'fog', 'post-rain']) {
+      volume.update(.1, parseWeatherOverride(`?skyWeather=${mode}`)!, day, 0, false, true);
+      expect(figure.x).toBe(0);
+    }
+    const legacy = fixture(null, false, 'fluid');
+    legacy.volume.update(.1, cloudy, day, 0, false, true);
+    expect(legacy.frames[0].quad.material.uniforms.cloudFigure.value.x).toBe(0);
+  });
+
+  it('pauses a forming cloud offscreen and starts a fresh formation after night', () => {
+    const { volume, frames } = fixture();
+    for (let frame = 0; frame < 260; frame++) volume.update(.1, cloudy, day, 0, false, true);
+    const figure = frames[0].quad.material.uniforms.cloudFigure.value as THREE.Vector3;
+    const before = figure.clone();
+    expect(before.y).toBeGreaterThan(0); expect(before.y).toBeLessThan(1);
+    volume.update(120, cloudy, day, 0, false, false);
+    volume.update(0, cloudy, day, 0, false, true);
+    expect(figure).toEqual(before);
+    volume.update(.1, cloudy, day, 0, true, true);
+    volume.update(.1, cloudy, day, 0, false, true);
+    expect(figure.x).toBe(0); expect(figure.y).toBe(0);
+  });
+
+  it('shares the mountain air color and gives daytime undersides a stronger blue cast', () => {
+    const next = fixture(), legacy = fixture(null, false);
+    const palette = weatherPalette(day, cloudy);
+    for (const test of [next, legacy]) test.volume.update(.1, cloudy, palette, 0, false, true);
+    const uniforms = next.frames[0].quad.material.uniforms;
+    const expected = setAtmosphereHaze(new THREE.Color(), palette, false);
+    expect(uniforms.cloudHaze.value).toEqual(expected);
+    const shade = uniforms.cloudShade.value as THREE.Color;
+    const previous = legacy.frames[0].quad.material.uniforms.cloudShade.value as THREE.Color;
+    expect(shade.b / shade.r).toBeGreaterThan(previous.b / previous.r);
+    expect(shade.g).toBeGreaterThan(shade.r);
+    expect(shade.b).toBeLessThan(uniforms.cloudLit.value.b);
+  });
+
+  it('updates shared haze with sunset and night palettes instead of baking in daytime blue', () => {
+    const { volume, frames } = fixture();
+    volume.update(.1, cloudy, day, 0, false, true);
+    const haze = frames[0].quad.material.uniforms.cloudHaze.value as THREE.Color;
+    const daylight = haze.clone();
+    for (const [elevation, night] of [[0, false], [-20, true]] as const) {
+      const palette = weatherPalette(paletteForElevation(elevation, false), cloudy);
+      volume.update(.1, cloudy, palette, 6, night, true);
+      expect(frames.at(-1)!.quad.material.uniforms.cloudHaze.value).toBe(haze);
+      expect(haze).toEqual(setAtmosphereHaze(new THREE.Color(), palette, night));
+      expect(haze.equals(daylight)).toBe(false);
+    }
+  });
+
+  it('limits the new formation to dry cloudy daytime and supports the legacy comparison', () => {
+    const next = fixture(), legacy = fixture(null, false);
+    next.volume.update(.1, cloudy, day, 0, false, true);
+    legacy.volume.update(.1, cloudy, day, 0, false, true);
+    const uniforms = next.frames[0].quad.material.uniforms;
+    expect(uniforms.cloudBillows.value).toBe(1);
+    expect(legacy.frames[0].quad.material.uniforms.cloudBillows.value).toBe(0);
+    next.volume.update(.1, cloudy, day, 0, true, true);
+    expect(uniforms.cloudBillows.value).toBe(0);
+    next.volume.update(.1, { ...cloudy, rain01: .01 }, day, 0, false, true);
+    expect(uniforms.cloudBillows.value).toBe(0);
+    next.volume.update(.1, { ...cloudy, cloud01: 1, cloudForm01: 1 }, day, 0, false, true);
+    expect(uniforms.cloudBillows.value).toBe(0);
+    next.volume.update(.1, cloudy, day, 0, false, true);
+    expect(uniforms.cloudBillows.value).toBe(1);
+  });
+
+  it.each(['clear', 'fog', 'rain', 'thunderstorm', 'snow', 'post-rain'])('preserves the %s sky, including its lighting and precipitation deck', mode => {
+    const next = fixture(), legacy = fixture(null, false);
+    const weather = parseWeatherOverride(`?skyWeather=${mode}`)!;
+    for (const test of [next, legacy]) test.volume.update(.1, weather, day, -2, false, true, .6);
+    const actual = next.frames[0].quad.material.uniforms;
+    const previous = legacy.frames[0].quad.material.uniforms;
+    expect(actual.cloudBillows.value).toBe(0);
+    for (const key of ['cloudCover', 'cloudDeck', 'cloudLit', 'cloudShade', 'cloudLight', 'cloudFlash']) {
+      expect(actual[key].value).toEqual(previous[key].value);
+    }
+  });
   it('lights the density volume on the strike frame and clears it promptly after the pulse',()=>{
     const {volume,frames}=fixture();
     volume.update(0,cloudy,day,0,false,true);
@@ -101,6 +189,7 @@ describe('volumetric window clouds', () => {
     expect(noise).toBeInstanceOf(THREE.Data3DTexture);
     expect(data).toBeInstanceOf(Uint8Array);
     expect(data.byteLength).toBe(32 * 1024);
+    expect([first.frames[0].target.width, first.frames[0].target.height]).toEqual([640, 145]);
     expect([noise.image.width, noise.image.height, noise.image.depth]).toEqual([32, 32, 32]);
     expect(new Set(data).size).toBeGreaterThan(200);
     expect(otherNoise).not.toBe(noise);
@@ -167,7 +256,8 @@ describe('volumetric window clouds', () => {
     const { quad, target } = frames[0];
     const uniforms = quad.material.uniforms, time = uniforms.cloudTime.value;
     const protectedDispose = vi.spyOn(previousTarget, 'dispose');
-    const owned = [uniforms.cloudNoise.value as THREE.Data3DTexture, target, quad.material, quad.geometry];
+    const owned = [uniforms.cloudNoise.value as THREE.Data3DTexture, uniforms.cloudFigureMasks.value as THREE.DataTexture,
+      target, quad.material, quad.geometry];
     const disposals = owned.map(resource => vi.spyOn(resource, 'dispose'));
     volume.dispose(); volume.dispose();
     volume.update(10, { ...cloudy, rain01: 1 }, day, 2, true, true);

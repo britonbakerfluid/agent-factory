@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { GarageDriveCar, GarageTireMark } from '@shared/factory25d-driving';
+import { createGarageTimeJump } from './factory25dGarageTimeJump';
+import { GARAGE_DRIVE_PROFILES, type GarageDriveCar, type GarageTireMark } from '@shared/factory25d-driving';
 
 export const GARAGE_VISUAL_MARK_LIMIT = 512;
 const FLOOR_Y = .022; // Above the slab and the .0195-high parking paint.
@@ -16,6 +17,7 @@ type Rig = {
   root: THREE.Group; vehicle: THREE.Object3D; body: THREE.Group; children: THREE.Object3D[];
   wheels: Wheel[]; paints: Paint[]; glows: Paint[]; materials: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[] }[];
   wheelbase: number; pivotY: number; steer: number; impact: number; damage: number; forward: number;
+  clickRoll: number; clickVelocity: number;
   state?: GarageDriveCar;
 };
 
@@ -44,11 +46,12 @@ function validMark(mark: GarageTireMark) {
 }
 function sameMark(a: GarageTireMark | undefined, b: GarageTireMark) {
   return a?.id === b.id && a.x1 === b.x1 && a.z1 === b.z1 && a.x2 === b.x2 && a.z2 === b.z2
-    && a.width === b.width && a.opacity === b.opacity && a.createdAt === b.createdAt;
+    && a.width === b.width && a.opacity === b.opacity && a.createdAt === b.createdAt && a.kind === b.kind && a.y1 === b.y1 && a.y2 === b.y2;
 }
 
 /** Server-authored garage-local tracks; this module never creates driving events or moves a car root. */
 export function createGarageDriveVisuals(room: THREE.Group, cars: Map<string, THREE.Group>) {
+  const timeJump = createGarageTimeJump(room);
   const positions = new THREE.BufferAttribute(new Float32Array(GARAGE_VISUAL_MARK_LIMIT * 12), 3).setUsage(THREE.DynamicDrawUsage);
   const colors = new THREE.BufferAttribute(new Float32Array(GARAGE_VISUAL_MARK_LIMIT * 16), 4).setUsage(THREE.DynamicDrawUsage);
   const uvs = new THREE.BufferAttribute(new Float32Array(GARAGE_VISUAL_MARK_LIMIT * 8), 2).setUsage(THREE.DynamicDrawUsage);
@@ -91,10 +94,10 @@ export function createGarageDriveVisuals(room: THREE.Group, cars: Map<string, TH
     const dx = mark.x2 - mark.x1, dz = mark.z2 - mark.z1, length = Math.hypot(dx, dz);
     const half = clamp(mark.width, .015, .22) / 2, nx = -dz / length * half, nz = dx / length * half;
     // Adjacent server segments share endpoints. No local trail interpolation across teleports.
-    positions.setXYZ(slot * 4, mark.x1 + nx, FLOOR_Y, mark.z1 + nz);
-    positions.setXYZ(slot * 4 + 1, mark.x1 - nx, FLOOR_Y, mark.z1 - nz);
-    positions.setXYZ(slot * 4 + 2, mark.x2 + nx, FLOOR_Y, mark.z2 + nz);
-    positions.setXYZ(slot * 4 + 3, mark.x2 - nx, FLOOR_Y, mark.z2 - nz);
+    positions.setXYZ(slot * 4, mark.x1 + nx, FLOOR_Y + finite(mark.y1 ?? 0), mark.z1 + nz);
+    positions.setXYZ(slot * 4 + 1, mark.x1 - nx, FLOOR_Y + finite(mark.y1 ?? 0), mark.z1 - nz);
+    positions.setXYZ(slot * 4 + 2, mark.x2 + nx, FLOOR_Y + finite(mark.y2 ?? 0), mark.z2 + nz);
+    positions.setXYZ(slot * 4 + 3, mark.x2 - nx, FLOOR_Y + finite(mark.y2 ?? 0), mark.z2 - nz);
     for (let corner = 0; corner < 4; corner++) {
       uvs.setXY(slot * 4 + corner, corner % 2, corner < 2 ? 0 : length / .18);
       colors.setXYZW(slot * 4 + corner, 1, 1, 1, clamp(mark.opacity, 0, .8));
@@ -103,6 +106,7 @@ export function createGarageDriveVisuals(room: THREE.Group, cars: Map<string, TH
     marks[slot] = { ...mark }; slots.set(mark.id, slot); dirty = true;
   }
   function appendMarks(incoming: readonly GarageTireMark[]) {
+    timeJump.appendMarks(incoming);
     if (disposed) return;
     for (let i = Math.max(0, incoming.length - GARAGE_VISUAL_MARK_LIMIT); i < incoming.length; i++) {
       const mark = incoming[i]; if (!validMark(mark)) continue;
@@ -114,6 +118,7 @@ export function createGarageDriveVisuals(room: THREE.Group, cars: Map<string, TH
     geometry.setDrawRange(0, count * 6);
   }
   function replaceMarks(incoming: readonly GarageTireMark[]) {
+    timeJump.replaceMarks(incoming);
     if (disposed) return;
     const start = Math.max(0, incoming.length - GARAGE_VISUAL_MARK_LIMIT);
     let same = incoming.length - start === count;
@@ -176,17 +181,23 @@ export function createGarageDriveVisuals(room: THREE.Group, cars: Map<string, TH
       });
       materials.push({ mesh: node, original }); node.material = Array.isArray(original) ? changed : changed[0];
     });
-    const rig: Rig = { root, vehicle, body, children, wheels, paints, glows, materials, wheelbase, pivotY, steer: 0, impact: 0, damage: 0, forward: 0 };
+    const rig: Rig = { root, vehicle, body, children, wheels, paints, glows, materials, wheelbase, pivotY, steer: 0, impact: 0, damage: 0, forward: 0, clickRoll: 0, clickVelocity: 0 };
     rigs.set(id, rig); return rig;
   }
-  function poseCar(state: GarageDriveCar) { if (!disposed) states.set(state.id, { ...state }); }
+  function poseCar(state: GarageDriveCar) { if (!disposed) { states.set(state.id, { ...state }); timeJump.pose(state.timeJump); } }
 
   return {
     appendMarks, replaceMarks, poseCar,
+    nudge(id: string) {
+      if (disposed) return;
+      const rig = rigFor(id); if (!rig) return;
+      rig.clickVelocity = clamp(rig.clickVelocity - .34, -.5, .5);
+    },
     poseCars(nextStates: readonly GarageDriveCar[]) { states.clear(); for (const state of nextStates) poseCar(state); },
     get markCount() { return count; },
     update(dt: number, { visible = true, reducedMotion = false, now }: { visible?: boolean; reducedMotion?: boolean; now?: number } = {}) {
       if (disposed) return;
+      timeJump.update(now ?? 0, visible, reducedMotion);
       marksMesh.visible = visible;
       if (!visible) return;
       if (dirty) { positions.needsUpdate = colors.needsUpdate = uvs.needsUpdate = born.needsUpdate = true; dirty = false; }
@@ -236,18 +247,29 @@ export function createGarageDriveVisuals(room: THREE.Group, cars: Map<string, TH
         }
         const acceleration = step > 0 ? clamp((forward - rig.forward) / step, -10, 10) : 0;
         const lateral = moving ? clamp(finite(state.slip), -1, 1) * Math.abs(forward) : 0;
+        // A bounded suspension impulse is interruptible; the rigid body never
+        // scales. All trim, glass and doors share the same body transform.
+        if (reducedMotion) rig.clickRoll = rig.clickVelocity = 0;
+        else {
+          const count = Math.max(1, Math.ceil(step * 120)), h = step / count;
+          const mass = GARAGE_DRIVE_PROFILES[id as GarageDriveCar['id']].mass;
+          for (let i = 0; i < count; i++) {
+            rig.clickVelocity += (-110 * rig.clickRoll / mass - 14 * rig.clickVelocity) * h;
+            rig.clickRoll = clamp(rig.clickRoll + rig.clickVelocity * h, -.035, .035);
+          }
+        }
         const rollLimit = MAX_ROLL + hover * .012;
         const roadRoll = rig.steer * forward * forward * .0012 + lateral * .006;
         const airRoll = rig.steer * Math.abs(forward) * .008 + Math.sin(elapsed * .8) * .006;
         const roll = clamp(roadRoll * (1 - hover) + airRoll * hover, -rollLimit, rollLimit);
         const pitch = clamp(-acceleration * .0014 + rig.impact, -MAX_PITCH, MAX_PITCH);
-        rig.body.rotation.z = reducedMotion ? 0 : clamp(rig.body.rotation.z + (roll - rig.body.rotation.z) * damping, -rollLimit, rollLimit);
+        rig.body.rotation.z = reducedMotion ? 0 : clamp(rig.body.rotation.z + (roll + rig.clickRoll - rig.body.rotation.z) * damping, -rollLimit - Math.abs(rig.clickRoll), rollLimit + Math.abs(rig.clickRoll));
         rig.body.rotation.x = reducedMotion ? 0 : clamp(rig.body.rotation.x + (pitch - rig.body.rotation.x) * damping, -MAX_PITCH, MAX_PITCH);
         rig.body.position.y = rig.pivotY + (reducedMotion ? 0 : Math.sin(elapsed * 1.8) * .012 * hover);
         rig.impact = reducedMotion ? 0 : rig.impact * Math.exp(-10 * step); rig.forward = forward;
         for (const paint of rig.paints) {
-          paint.material.color.copy(paint.original.color).lerp(dust, damage * .3);
-          paint.material.roughness = Math.min(1, paint.original.roughness + damage * .25);
+          paint.material.color.copy(paint.original.color).lerp(dust, damage * .58);
+          paint.material.roughness = Math.min(1, paint.original.roughness + damage * .5);
         }
         for (const glow of rig.glows) glow.material.emissiveIntensity = glow.original.emissiveIntensity + hover * .75;
       }
@@ -256,6 +278,7 @@ export function createGarageDriveVisuals(room: THREE.Group, cars: Map<string, TH
       if (disposed) return; disposed = true;
       for (const rig of rigs.values()) releaseRig(rig);
       rigs.clear(); states.clear(); slots.clear(); marksMesh.removeFromParent();
+      timeJump.dispose();
       geometry.dispose(); material.dispose(); texture.dispose();
     },
   };

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GARAGE_WORLD_Z, GARAGE_LEVEL } from '@shared/factory25d-layout';
 import { GARAGE_MARK_LIFETIME_MS, GARAGE_MAX_MARKS, type GarageDriveCar, type GarageDriveInput, type GarageDriveRequest, type GarageDriveResult, type GarageDriveState, type GarageTireMark } from '@shared/factory25d-driving';
-import type { GarageCarId } from '@shared/factory25d-garage';
+import { garageRampHeightAt, type GarageCarId } from '@shared/factory25d-garage';
 import { isControlPreview, onFactoryConnection, onFactoryMessage, sendGarageDrive } from './factory25dBoardData';
 import type { createLiveAgents } from './factory25dLiveAgents';
 import { createGarageDriveVisuals } from './factory25dGarageDriveVisuals';
@@ -9,7 +9,7 @@ import { GarageDriveInterpolation } from './factory25dDriveInterpolation';
 import { createDrivingControls } from './factory25dDrivingControls';
 
 /** Public car controls use the same room, models, clock and avatar renderers. */
-export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.Group>, agents: ReturnType<typeof createLiveAgents>, beforeClaim: () => void) {
+export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.Group>, agents: ReturnType<typeof createLiveAgents>, canvas: HTMLCanvasElement, beforeClaim: () => void) {
   const abort = new AbortController(), poses = new GarageDriveInterpolation(), visuals = createGarageDriveVisuals(room, cars);
   const marks = new Map<number, GarageTireMark>(), seats = new Map<GarageCarId, THREE.Object3D>(), seatPoint = new THREE.Vector3();
   let visitorId: string | undefined, owned: GarageCarId | undefined, parking: GarageCarId | undefined, pending: { car: GarageCarId; at: number } | undefined;
@@ -18,10 +18,9 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
   let available = false, disposed = false, lastSend = -Infinity, lastPacket = -Infinity, serverClock = Date.now(), packetClock = performance.now();
   let engine: { car: GarageCarId; throttle: number } | undefined;
   const busy = new Set<string>();
-  const controls = createDrivingControls({
+  const controls = createDrivingControls(canvas, {
     input(value) { input = value; if (owned) send({ type: 'garage_drive', action: 'input', car: owned, input }); },
     leave() { if (owned) send({ type: 'garage_drive', action: 'release', car: owned }); },
-    reset() { const car = owned ?? parking; if (car) send({ type: 'garage_drive', action: 'reset', car }); },
   });
   function send(message: GarageDriveRequest) { return preview ? preview.send(message) : sendGarageDrive(message); }
   function drop(message: string) { owned = undefined; pending = undefined; input = { throttle: 0, steer: 0, drift: false }; controls.show(undefined); controls.announce(message); }
@@ -33,14 +32,14 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
       if (message.action === 'claim') {
         visitorId = message.visitorId; owned = message.car; pending = undefined; lastPacket = performance.now();
         if (parking === owned) parking = undefined;
-        controls.parking(false); controls.show(owned);
-        controls.announce(owned === 'delorean' ? 'wheels up · WASD to fly · click another car to switch' : 'S / ↓ to reverse out · click another car to switch');
-      } else { parking = message.action === 'release' ? message.car : undefined; controls.parking(!!parking); drop(message.action === 'release' ? 'parking back in its bay' : 'repaired and back in its bay'); }
+        controls.show(owned); visuals.nudge(owned);
+        controls.announce(`${owned === 'delorean' ? 'wheels up' : 'ready to drive'} · WASD or drag to drive · space or a second finger to drift · click this car again or Escape to park`);
+      } else { parking = message.action === 'release' ? message.car : undefined; drop(message.action === 'release' ? 'parking back in its bay' : 'back in its bay · repairs take time'); }
       return;
     }
     const now = performance.now(); lastPacket = now; serverClock = message.serverTime; packetClock = now;
     states = message.cars; busy.clear(); for (const car of states) if (car.mode !== 'parked') busy.add(car.id);
-    if (parking && states.find(car => car.id === parking)?.mode === 'parked') { parking = undefined; controls.parking(false); controls.announce(''); }
+    if (parking && states.find(car => car.id === parking)?.mode === 'parked') { parking = undefined; controls.announce(''); }
     poses.push(states, message.serverTime, now);
     if (message.replaceMarks) marks.clear();
     for (const mark of message.marks) marks.set(mark.id, mark);
@@ -50,14 +49,14 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
     if (owned) {
       const car = states.find(car => car.id === owned);
       if (!car || car.mode !== 'driving' || car.driverVisitorId !== visitorId) {
-        parking = car?.mode === 'returning' && car.driverVisitorId === visitorId ? car.id : undefined; controls.parking(!!parking);
+        parking = car?.mode === 'returning' && car.driverVisitorId === visitorId ? car.id : undefined;
         drop(parking ? 'parking back in its bay' : 'car controls released');
       }
     }
   }
   const stopMessages = onFactoryMessage(message => { if (message.type === 'garage_drive_state' || message.type === 'garage_drive_result') receive(message); });
   const stopConnection = onFactoryConnection(connected => {
-    if (!connected && !isControlPreview()) { poses.clear(); states = []; busy.clear(); parking = undefined; controls.parking(false); drop('factory disconnected · the car will park itself'); }
+    if (!connected && !isControlPreview()) { poses.clear(); states = []; busy.clear(); parking = undefined; drop('factory disconnected · the car will park itself'); }
   });
   if (import.meta.env.DEV && isControlPreview()) void import('./factory25dDrivingPreview').then(({ createDrivingPreview }) => {
     if (disposed) return;
@@ -68,7 +67,8 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
   return {
     busy, isActive: () => !!owned || !!pending, engine: () => engine,
     claim(car: GarageCarId) {
-      if (!available || owned === car || pending) return;
+      if (!available || pending) return;
+      if (owned === car) { controls.stop(); visuals.nudge(car); send({ type: 'garage_drive', action: 'release', car }); return; }
       const target = states.find(state => state.id === car);
       if (target && target.mode !== 'parked' && !(target.mode === 'returning' && target.driverVisitorId === visitorId)) {
         controls.announce('someone is using that car · choose another for now'); return;
@@ -92,8 +92,9 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
       const rendered = poses.sample(now); engine = undefined;
       for (const state of rendered) {
         const car = cars.get(state.id); if (!car) continue;
+        car.visible = !(state.timeJump && !state.timeJump.arrived);
         car.position.set(state.x, .025 + (state.hoverHeight ?? 0), state.z); car.rotation.y = state.yaw;
-        for (const shadow of car.children) if (shadow.userData.role === 'ground_shadow') shadow.position.y = shadow.userData.restY - (state.hoverHeight ?? 0) / car.scale.y;
+        for (const shadow of car.children) if (shadow.userData.role === 'ground_shadow') shadow.position.y = shadow.userData.restY + (garageRampHeightAt(state.x, state.z) - (state.hoverHeight ?? 0)) / car.scale.y;
         visuals.poseCar(state);
         if (state.mode !== 'parked' && visible) {
           const throttle = Math.min(1, Math.abs(state.throttle) * .4 + Math.hypot(state.vx, state.vz) / 9);

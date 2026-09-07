@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import './vendor/mistLogo.js';
 import type { MistLogo } from './vendor/mistLogo.js';
 import { MIST_FLAG, MIST_INK_WINDOW, createMistClothGeometry, mistCanvasPoint, mistClothVertex } from './factory25dMistCloth';
+import { createPatioFlagPole } from './factory25dPatioFlagCloth';
 import './factory25dMistFlag.css';
 
 /** The real authored Mist canvas is an animated ink layer on a lit cloth mesh. */
@@ -14,13 +15,7 @@ export function createMistFlag(parent: THREE.Scene, canvas: HTMLCanvasElement) {
     const mesh = new THREE.Mesh(geometry, material); mesh.position.set(x, y, z);
     mesh.castShadow = true; mesh.receiveShadow = true; root.add(mesh); return mesh;
   }
-  const metal = new THREE.MeshStandardMaterial({ color: '#262d32', roughness: .72, metalness: .22 }); resources.push(metal);
-  part(new THREE.CylinderGeometry(.032, .044, MIST_FLAG.poleHeight, 8), metal, 0, MIST_FLAG.poleHeight / 2);
-  part(new THREE.BoxGeometry(.18, .12, .18), metal, 0, .06);
-  part(new THREE.SphereGeometry(.07, 8, 6), metal, 0, MIST_FLAG.poleHeight + .015);
-  for (const y of [MIST_FLAG.top - .025, MIST_FLAG.top - MIST_FLAG.height + .025]) {
-    part(new THREE.TorusGeometry(.037, .008, 4, 8), metal, 0, y).rotation.x = Math.PI / 2;
-  }
+  const pole = createPatioFlagPole(); root.add(pole.root);
 
   // A measurable, inert host lets the original pointer API retain its exact
   // coordinate system. It has no autonomous RAF, audio, focus or accessibility UI.
@@ -128,7 +123,7 @@ export function createMistFlag(parent: THREE.Scene, canvas: HTMLCanvasElement) {
       if (inkTick !== lastInk) { lastInk = inkTick; logo.advance(inkTime); inkTime = 0; paint(); }
     },
     dispose() {
-      if (disposed) return; disposed = true; abort.abort(); leave(); button.remove(); logo.remove(); root.removeFromParent(); resources.forEach(resource => resource.dispose());
+      if (disposed) return; disposed = true; abort.abort(); leave(); button.remove(); logo.remove(); root.removeFromParent(); pole.dispose(); resources.forEach(resource => resource.dispose());
     },
   };
 }

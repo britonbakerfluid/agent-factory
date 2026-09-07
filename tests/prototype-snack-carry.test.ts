@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { WorldAgent } from '../shared/types';
 import { createSnackCarry, type SnackCarrier } from '../client/prototypes/factory25dSnackCarry';
+import { AVATAR_ANIMATIONS } from '../client/prototypes/factory25dAvatar';
 import { VendingPilePhysics } from '../client/prototypes/factory25dVendingPhysics';
 
 const disposers: (() => void)[] = [];
@@ -20,7 +21,7 @@ function fixture() {
     mesh.userData.room = 'factory'; room.add(mesh);
     const point = root.localToWorld(pile.bodies[0].position.clone()); point.x -= .2; point.y = .3;
     mesh.position.copy(point);
-    const texture = new THREE.Texture(); texture.offset.set(0, 6 / 7);
+    const texture = new THREE.Texture(); texture.offset.set(0, 1 - 1 / AVATAR_ANIMATIONS.length);
     const session = { sessionId: id, activity: 'idle', world: { zone: 'idle' } } as WorldAgent;
     const entry = { mesh, texture, session }; entries.push(entry);
     disposers.push(() => { mesh.geometry.dispose(); mesh.material.dispose(); texture.dispose(); });
@@ -57,7 +58,7 @@ describe('snack ownership and carried pixel sprites', () => {
   it('follows turns, room reparenting and avatar replacement, then clears when work starts', () => {
     const f = fixture(), a = f.agent('a'); f.carry.update(0); f.carry.update(1);
     const snack = a.mesh.children[0], right = snack.position.x;
-    a.texture.offset.set(.25, 1 - 3 / 7); f.carry.update(2);
+    a.texture.offset.set(.25, 1 - 3 / AVATAR_ANIMATIONS.length); f.carry.update(2);
     expect(snack.position.x).toBeLessThan(0); expect(right).toBeGreaterThan(0);
     const garage = new THREE.Scene(); garage.add(a.mesh); a.mesh.userData.room = 'garage';
     f.carry.update(3, false); expect(snack.parent).toBe(a.mesh);

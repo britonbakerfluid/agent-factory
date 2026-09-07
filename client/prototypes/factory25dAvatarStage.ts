@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { AvatarConfig } from '@shared/types';
 import { DEFAULT_AVATAR } from '@shared/constants';
 import { avatarSheet, AVATAR_ANIMATIONS } from './factory25dAvatar';
-import { avatarTexture } from './factory25dAvatarTexture';
+import { avatarTexture, setAvatarTextureFrame } from './factory25dAvatarTexture';
+import { avatarEyePose } from './factory25dAvatarEyes';
 import { AVATAR_FRAME_DISTANCE } from './factory25dAvatarGait';
 import { blendCamera, cameraPose } from './factory25dCameraMotion';
 import { avatarClearanceRoute, avatarWalkablePoint } from './factory25dAvatarClearance';
@@ -77,7 +78,7 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
     if (!document.querySelector('dialog[open]')) document.querySelector<HTMLButtonElement>('.factory-edit-avatar')?.focus({ preventScroll: true });
   }
   function setAvatar(avatar: AvatarConfig) {
-    texture?.dispose(); ({ sheet, texture } = avatarTexture(avatar));
+    texture?.dispose(); ({ sheet, texture } = avatarTexture(avatar, AVATAR_ANIMATIONS, true));
     material.map = texture; material.needsUpdate = true;
   }
   return {
@@ -165,7 +166,7 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
       // Let the actor clear the prop at room scale before settling the close-up.
       const delay = entering ? Math.max(0, walkDuration - 250) : 0;
       const progress = reduced.matches ? 1 : Math.max(0, Math.min(1, (now - started - delay) / 850));
-      if (resized || progress !== lastProgress) blendCamera(camera, from, entering ? destination : returning, progress, aspect);
+      if (resized || progress !== lastProgress) blendCamera(camera, from, entering ? destination : returning, progress, aspect, focus);
       lastProgress = progress;
       const brightness = entering ? Math.min(1, (now - started) / 600) : 1 - progress;
       key.intensity = brightness * 3.2; fill.intensity = brightness * 1.3;
@@ -174,7 +175,7 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
       // Preview the same stride at the normal two scene units per second.
       const frame = reduced.matches ? 0 : travelling ? Math.floor(travelled / AVATAR_FRAME_DISTANCE) % 4
         : walking ? Math.floor(Math.max(0, now - walkStarted) / 1000 * 2 / AVATAR_FRAME_DISTANCE) % 4 : 0;
-      texture?.offset.set(frame / 4, 1 - (row + 1) / AVATAR_ANIMATIONS.length);
+      if (texture) setAvatarTextureFrame(texture, row, frame, avatarEyePose(now / 1000, 113, walking || travelling ? 'moving' : 'relaxed', reduced.matches));
       model.position.copy(anchor);
       model.position.y = floor + (sheet.feet[row][frame] / 32 - .5) * .86 + .004;
       if (!entering && progress === 1 && !travelling) finish();

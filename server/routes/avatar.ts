@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { AuthService } from '../auth.js';
 import type { AvatarProfiles } from '../avatar-profiles.js';
 import { readBrowserPrincipal } from './auth.js';
@@ -6,6 +6,36 @@ import { isSameHostOrigin, usesSecureTransport } from '../request-security.js';
 import { parseAvatarConfig } from '../../shared/avatar-customization.js';
 
 export function registerAvatarRoutes(app: FastifyInstance, auth: AuthService, profiles: AvatarProfiles) {
+  // Explicit terminal edits share durable preferences with the browser. Ordinary
+  // hooks still cannot overwrite them with an old copy of the local config.
+  function installationOwner(request: FastifyRequest, reply: FastifyReply) {
+    reply.header('Cache-Control', 'no-store');
+    const device = auth.authenticateDevice(request.headers.authorization);
+    if (device.kind !== 'authenticated') {
+      reply.status(401).send({ error: 'Installation authentication required.' }); return;
+    }
+    if (!usesSecureTransport(request)) {
+      reply.status(403).send({ error: 'HTTPS is required to save your avatar.' }); return;
+    }
+    return device.ownerId;
+  }
+  app.get('/api/avatar/installation', async (request, reply) => {
+    const ownerId = installationOwner(request, reply);
+    if (!ownerId) return;
+    return profiles.get(ownerId);
+  });
+  app.put<{ Body: { avatar?: unknown } }>('/api/avatar/installation', { bodyLimit: 4096 }, async (request, reply) => {
+    const ownerId = installationOwner(request, reply);
+    if (!ownerId) return;
+    const avatar = parseAvatarConfig(request.body?.avatar);
+    if (!avatar) return reply.status(400).send({ error: 'That appearance is invalid.' });
+    try { return await profiles.save(ownerId, avatar); }
+    catch {
+      request.log.error('Could not persist terminal avatar profile');
+      return reply.status(503).send({ error: 'Your avatar could not be saved. Please try again.' });
+    }
+  });
+
   app.get('/api/avatar', async (request, reply) => {
     reply.header('Cache-Control', 'no-store');
     const principal = readBrowserPrincipal(request, auth);

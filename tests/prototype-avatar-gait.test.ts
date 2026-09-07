@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { AvatarWalkCycle } from '../client/prototypes/factory25dAvatarGait';
+import { AvatarWalkCycle, stationaryAvatarFrame } from '../client/prototypes/factory25dAvatarGait';
+
+describe('stationary avatar poses', () => {
+  it('holds the directional pose at rest through every activity cadence', () => {
+    for (const direction of ['up', 'down', 'left', 'right']) for (const fps of [1, 2, 7])
+      for (let elapsed = 0; elapsed < 8; elapsed += .13)
+        expect(stationaryAvatarFrame(`walk_${direction}`, elapsed, fps)).toBe(0);
+  });
+  it('makes short blinks instead of holding closed eyes for a slow work beat', () => {
+    for (const fps of [1, 2, 7]) {
+      const period = Math.max(2.4, 8 / fps);
+      expect(stationaryAvatarFrame('idle', period - .14, fps)).toBe(0);
+      expect(stationaryAvatarFrame('idle', period - .06, fps)).toBe(2);
+      expect(stationaryAvatarFrame('idle', period + .01, fps)).toBe(0);
+    }
+    expect(stationaryAvatarFrame('idle', 7.94, 1, true)).toBe(0);
+    expect(stationaryAvatarFrame('idle', 7.94, 0)).toBe(0);
+    expect(stationaryAvatarFrame('work', .3, 7)).toBe(2);
+    expect(stationaryAvatarFrame('work', .3, 7, true)).toBe(0);
+  });
+});
 
 describe('distance-driven avatar footsteps', () => {
   it('has the same stride at 30 and 120 fps, and advances with distance rather than elapsed time', () => {

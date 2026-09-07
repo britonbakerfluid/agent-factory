@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { FRONT_COUNTER, INTERIOR_Z } from '@shared/factory25d-layout';
 import { createBeanbagConsole } from "./factory25dBeanbagConsole";
 import type { SceneLightSwitch } from "./factory25dLightSwitches";
 import { propPart, standard } from "./factory25dProps";
@@ -184,7 +185,7 @@ export function createLoungeDetails(
   });
 
   const lamp = new THREE.Group();
-  lamp.position.set(-4.85, 0.53, 4.62);
+  lamp.position.set(FRONT_COUNTER.x-1.14, FRONT_COUNTER.topY, FRONT_COUNTER.z-INTERIOR_Z-.04);
   parent.add(lamp);
   const brass = standard("#947a48", 0.85);
   const base = new THREE.Mesh(

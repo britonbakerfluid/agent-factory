@@ -51,6 +51,7 @@ export function createWindowInteraction({
   let lastWidth = 0;
   let lastHeight = 0;
   const destination = new THREE.Vector3();
+  const focus = new THREE.Vector3();
   const finalQuaternion = new THREE.Quaternion();
   let finalHeight = top - bottom;
 
@@ -89,8 +90,9 @@ export function createWindowInteraction({
     from.height *= canvas.clientHeight / Math.max(1, roomPixelHeight);
     scroll.set(entryX, true);
     destination.x = scroll.position;
+    focus.set(scroll.position, (top + bottom) / 2, -4.5);
     blendCamera(weatherCamera, from, { position: destination, quaternion: finalQuaternion, height: finalHeight }, 0,
-      canvas.clientWidth / Math.max(1, canvas.clientHeight));
+      canvas.clientWidth / Math.max(1, canvas.clientHeight), focus);
     previousTime = performance.now();
     onChange(true);
     back.focus({ preventScroll: true });
@@ -200,6 +202,7 @@ export function createWindowInteraction({
         if (open) scroll.update((now - previousTime) / 1000, reducedMotion.matches);
         previousTime = now;
         destination.x = scroll.position;
+        focus.set(scroll.position, (top + bottom) / 2, -4.5);
         scrubber.value = String(scroll.limit ? (scroll.position / scroll.limit + 1) * 50 : 50);
         scrubber.disabled = scroll.limit === 0;
         left.disabled = scroll.target <= -scroll.limit + 0.001;
@@ -210,7 +213,7 @@ export function createWindowInteraction({
         const to: CameraPose = open
           ? { position: destination, quaternion: finalQuaternion, height: finalHeight }
           : { ...room, height: room.height * canvas.clientHeight / Math.max(1, restoredHeight) };
-        blendCamera(weatherCamera, from, to, t, canvas.clientWidth / Math.max(1, canvas.clientHeight));
+        blendCamera(weatherCamera, from, to, t, canvas.clientWidth / Math.max(1, canvas.clientHeight), focus);
         if (t === 1) {
           moving = false;
           if (!open) finishExit();

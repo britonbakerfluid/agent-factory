@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/wolzey/agent-factory/cli/internal/config"
 	"github.com/wolzey/agent-factory/cli/internal/designer"
+	"github.com/wolzey/agent-factory/cli/internal/identity"
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 )
 
@@ -29,7 +30,18 @@ func runAvatar(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	result, err := designer.Run(&cfg.Avatar)
+	device, identityErr := identity.LoadOrCreate()
+	initial := cfg.Avatar
+	if identityErr == nil {
+		if current, syncErr := syncAvatar(cmd.Context(), avatarHTTPClient, cfg.ServerURL, device.Secret, nil); syncErr == nil {
+			if current.Saved {
+				initial = current.Avatar
+			}
+		} else {
+			ui.Warn("Starting from your local avatar: " + syncErr.Error())
+		}
+	}
+	result, err := designer.Run(&initial)
 	if err != nil {
 		return fmt.Errorf("avatar designer error: %w", err)
 	}
@@ -46,7 +58,14 @@ func runAvatar(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println()
-	ui.Success("Avatar updated! Changes take effect on your next Claude Code/Codex session.")
+	if identityErr != nil {
+		ui.Warn("Avatar saved locally. Your installation identity could not be loaded, so the factory has not been updated.")
+	} else if _, syncErr := syncAvatar(cmd.Context(), avatarHTTPClient, cfg.ServerURL, device.Secret, &result.Avatar); syncErr != nil {
+		ui.Warn("Avatar saved locally, but not synced: " + syncErr.Error())
+		ui.Info("Run 'agent-factory avatar' and save again when the factory is available.")
+	} else {
+		ui.Success("Avatar updated in the factory and saved locally!")
+	}
 	fmt.Println()
 	return nil
 }

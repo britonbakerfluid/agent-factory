@@ -5,7 +5,8 @@ import type { WorldAgent, WorldSnapshot } from '@shared/types';
 import { factoryRoomAt, factoryScenePoint, factoryWorldPoint, fromFactoryWorld, GARAGE_LEVEL, GARAGE_WORLD_Z } from '@shared/factory25d-layout';
 import { DEFAULT_AVATAR } from '@shared/constants';
 import { avatarSheet, AVATAR_ANIMATIONS } from './factory25dAvatar';
-import { avatarTexture } from './factory25dAvatarTexture';
+import { avatarTexture, setAvatarTextureFrame } from './factory25dAvatarTexture';
+import { avatarEyePose } from './factory25dAvatarEyes';
 import { agentPosition, garageElevatorPose } from './factory25dWorld';
 import { createNameTag } from './factory25dLabels';
 import { watchContributions } from './factory25dContributions';
@@ -15,13 +16,14 @@ import { onFactoryMessage } from './factory25dBoardData';
 import { createFactoryEffects, type EffectAnchor } from './factory25dEffects';
 import { effectPose, effectSeed, FactoryEffectsState, vortexStrength } from './factory25dEffectsState';
 import { createFactoryTombstones } from './factory25dTombstones';
-import { agentStateStyle, resolveAgentVisualState } from './factory25dAgentStates';
+import { agentStateStyle, resolveAgentVisualState, stationaryAgentAnimation } from './factory25dAgentStates';
 import { ManualMotionBuffer } from './factory25dManualMotion';
 import { BEANBAG_REST } from '@shared/factory25d-rest';
-import { AvatarWalkCycle } from './factory25dAvatarGait';
+import { AvatarWalkCycle, stationaryAvatarFrame } from './factory25dAvatarGait';
 
 type Sprite = { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>; texture: THREE.CanvasTexture;
-  shadow: THREE.Mesh; sheet: ReturnType<typeof avatarSheet>; signature: string; labelFeet: THREE.Vector3; walk: AvatarWalkCycle };
+  shadow: THREE.Mesh; sheet: ReturnType<typeof avatarSheet>; signature: string; labelFeet: THREE.Vector3; walk: AvatarWalkCycle;
+  eyeSeed: number; eyeMode: 'relaxed' | 'thinking' | 'attentive' | 'asleep'; eyesFrozen: boolean };
 type Entry = Sprite & { session: WorldAgent; label: ReturnType<typeof createNameTag>; children: Map<string, Sprite>;
   lastX: number; lastZ: number; baseHeight: number; manualMotion: ManualMotionBuffer; garageWalk: AvatarWalkCycle; seatBlend: number; poseTime: number };
 
@@ -36,22 +38,26 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
   const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
   const anchors = new Map<string, EffectAnchor>();
   let snapshot: WorldSnapshot | undefined, clockOffset = 0;
+  let eyeTime = 0;
   let view: { camera: THREE.Camera; factory: boolean; patio: boolean; occluder: THREE.Object3D; floor: (point: { x: number; z: number }) => number } | undefined;
-  function sprite(agent: WorldAgent, scale = 1): Sprite {
-    const { sheet, texture } = avatarTexture(agent.avatar ?? DEFAULT_AVATAR);
+  function sprite(agent: WorldAgent, scale = 1, identity = agent.sessionId): Sprite {
+    const { sheet, texture } = avatarTexture(agent.avatar ?? DEFAULT_AVATAR, AVATAR_ANIMATIONS, true);
     const material = new THREE.MeshStandardMaterial({ map: texture, alphaTest: 0.08, side: THREE.DoubleSide,
       emissive: '#101126', emissiveIntensity: 0.6, roughness: 1 });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.86 * scale, 0.86 * scale), material);
     mesh.castShadow = true; mesh.userData.sessionId = agent.sessionId; factory.add(mesh);
     const shadow = contactShadow(factory, { width: 0.22 * scale, depth: 0.12 * scale, spread: 0.065, opacity: 0.3, round: true });
-    return { mesh, texture, shadow, sheet, signature: JSON.stringify(agent.avatar), labelFeet: new THREE.Vector3(), walk: new AvatarWalkCycle() };
+    return { mesh, texture, shadow, sheet, signature: JSON.stringify(agent.avatar), labelFeet: new THREE.Vector3(), walk: new AvatarWalkCycle(),
+      eyeSeed: effectSeed(identity), eyeMode: 'relaxed', eyesFrozen: false };
   }
   function removeSprite(item: Sprite) {
     item.mesh.removeFromParent(); item.mesh.geometry.dispose(); item.mesh.material.dispose(); item.texture.dispose();
     item.shadow.removeFromParent(); // Contact shadow geometry/materials are shared by the room.
   }
   function setFrame(item: Sprite, row: number, frame: number, floorY: number, scale = 1) {
-    item.texture.offset.set(frame / 4, 1 - (row + 1) / AVATAR_ANIMATIONS.length);
+    const eyes = avatarEyePose(eyeTime, item.eyeSeed, item.eyeMode,
+      motionPreference.matches || item.eyesFrozen);
+    setAvatarTextureFrame(item.texture, row, frame, eyes);
     item.mesh.position.y = floorY + (item.sheet.feet[row][frame] / 32 - 0.5) * 0.86 * scale + 0.004;
     item.labelFeet.set(0, (0.5 - item.sheet.feet[row][frame] / 32) * 0.86 * scale, 0);
   }
@@ -82,18 +88,20 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
     contributionFor: contributions.forUser,
     serverNow: () => Date.now() + clockOffset,
     poseGarageWorker(id: string, point: { x: number; z: number }, walking: boolean, working: boolean, elapsed: number, activity: string) {
+      eyeTime = elapsed;
       const entry = entries.get(id); if (!entry || !view) return;
       const dx = point.x - entry.mesh.position.x;
       const style = agentStateStyle(resolveAgentVisualState(entry.session));
       const row = walking ? AVATAR_ANIMATIONS.indexOf(dx > 0 ? 'walk_right' : 'walk_left') : working ? AVATAR_ANIMATIONS.indexOf(style.pose) : 0;
       const floorY = GARAGE_LEVEL + .018;
       const walkFrame = entry.garageWalk.sample(point, elapsed, walking, motionPreference.matches);
-      place(entry, point.x, point.z); setFrame(entry, row, walking ? walkFrame : Math.floor(elapsed * (motionPreference.matches ? 0 : style.fps)) % 4, floorY);
+      place(entry, point.x, point.z); setFrame(entry, row, walking ? walkFrame : stationaryAvatarFrame(AVATAR_ANIMATIONS[row], elapsed, style.fps, motionPreference.matches), floorY);
       entry.mesh.scale.set(1, 1, 1); entry.mesh.rotation.set(0, 0, 0); entry.mesh.material.opacity = 1;
       entry.label.setActivity(working ? `${activity} · ${entry.session.activity}` : activity);
       entry.label.update(entry.mesh, floorY, view.camera, canvas, garage?.isVisible() ?? false, undefined, entry.labelFeet);
     },
     poseGaragePassenger(id: string, point: { x: number; z: number }, height: number, seat: number, walking: boolean, elapsed: number, activity: string) {
+      eyeTime = elapsed;
       const entry = entries.get(id); if (!entry || !view) return;
       const local = factoryScenePoint(point), dx = local.x - entry.mesh.position.x;
       const row = seat > .8 ? 6 : walking ? AVATAR_ANIMATIONS.indexOf(dx > 0 ? 'walk_right' : 'walk_left') : 0;
@@ -147,7 +155,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
         const childIds = new Set(agent.subagents.map(child => child.agentId));
         for (const [id, child] of entry.children) if (child.signature !== JSON.stringify(agent.avatar)) { removeSprite(child); entry.children.delete(id); }
         for (const [id, child] of entry.children) if (!childIds.has(id)) { removeSprite(child); entry.children.delete(id); }
-        for (const child of agent.subagents) if (!entry.children.has(child.agentId)) entry.children.set(child.agentId, sprite(agent, 0.58));
+        for (const child of agent.subagents) if (!entry.children.has(child.agentId)) entry.children.set(child.agentId, sprite(agent, 0.58, child.agentId));
         entry.label.setDetails(agent.sessionName || agent.username,
           [agent.activity, agent.currentTool].filter(Boolean).join(' · '),
           [agent.taskDescription, agent.cwd.split('/').filter(Boolean).at(-1), `${agent.toolUseCount ?? 0} tool calls`].filter(Boolean).join(' · '));
@@ -164,9 +172,11 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
     update(elapsed: number, camera: THREE.Camera, showFactory: boolean, showPatio: boolean,
       floor: (point: {x: number; z: number}) => number, occluder: THREE.Object3D) {
       view = { camera, factory: showFactory, patio: showPatio, occluder, floor };
+      eyeTime = elapsed;
       if (!snapshot) return;
-      const now = Date.now() + clockOffset, frame = Math.floor(elapsed * 6) % 4;
+      const now = Date.now() + clockOffset;
       const reduced = motionPreference.matches;
+      const frame = reduced ? 0 : Math.floor(elapsed * 6) % 4;
       effectState.flush(now); anchors.clear();
       const vortex = effectState.vortex;
       for (const entry of entries.values()) {
@@ -187,16 +197,19 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
           ? (Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'right' : 'left') : (dz > 0 ? 'down' : 'up')) : agent.world.facing);
         const working = !agent.manualControl && agent.world.zone === 'work' && isWorking(agent.activity) && !moving;
         const lookingAtMini = agent.world.idleVisit === 'garage-mini' && !moving && !agent.manualControl;
-        const style = agentStateStyle(resolveAgentVisualState(agent));
+        const visualState = resolveAgentVisualState(agent), style = agentStateStyle(visualState);
+        entry.eyeMode = effect?.kind === 'sleep' ? 'asleep' : ['input', 'permission', 'ready', 'error'].includes(visualState) ? 'attentive'
+          : ['thinking', 'planning'].includes(visualState) ? 'thinking' : 'relaxed';
+        entry.eyesFrozen = visualState === 'stopped' || style.fps <= 0 || effect?.kind === 'sleep';
         // Walking, user control and physical interactions outrank a desk pose.
-        const stationaryRow = agent.manualControl ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : isWorking(agent.activity) && !working ? 0 : AVATAR_ANIMATIONS.indexOf(style.pose);
-        let row = entry.seatBlend > .6 ? AVATAR_ANIMATIONS.indexOf('sit_up') : moving ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : resting ? AVATAR_ANIMATIONS.indexOf('walk_up') : lookingAtMini ? AVATAR_ANIMATIONS.indexOf('walk_up') : stationaryRow;
+        const stationaryRow = agent.manualControl ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : isWorking(agent.activity) && !working ? 0 : AVATAR_ANIMATIONS.indexOf(stationaryAgentAnimation(visualState, resting));
+        let row = entry.seatBlend > .6 ? AVATAR_ANIMATIONS.indexOf('sit_up') : moving ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : lookingAtMini ? AVATAR_ANIMATIONS.indexOf('walk_up') : stationaryRow;
         if (elevator) row = AVATAR_ANIMATIONS.indexOf(`walk_${elevator.facing}`);
         if (effect && now >= effect.startedAt) row = ['dance', 'merge', 'dizzy', 'shot', 'gun'].includes(effect.kind)
           ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : effect.kind === 'sleep' ? 6 : 0;
         place(entry, point.x, point.z, elevator); entry.lastX = point.x; entry.lastZ = point.z;
         const floorY = elevator?.floor ?? floorAt(point);
-        const stateFrame = reduced ? 0 : Math.floor(elapsed * style.fps) % 4;
+        const stateFrame = stationaryAvatarFrame(AVATAR_ANIMATIONS[row], elapsed + effectSeed(agent.sessionId) % 79 / 7, style.fps, reduced);
         const walkFrame = entry.walk.sample(elevator ?? point, elapsed, moving && !effect && !vortex, reduced);
         setFrame(entry, row, lookingAtMini || agent.manualControl && !moving && !effect ? 0 : effect ? frame : moving ? walkFrame : stateFrame, floorY);
         const pose = effectPose(effect, now, reduced);

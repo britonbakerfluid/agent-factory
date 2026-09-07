@@ -7,7 +7,7 @@ import { createBoardArtwork } from './factory25dBoardArtwork';
 import type { BoardNote } from './factory25dBoardArtwork';
 import type { BoardData } from './factory25dBoardData';
 import { installBoardDragging } from './factory25dBoardDrag';
-import { cameraEase } from './factory25dCameraMotion';
+import { blendCameraPose, cameraPose } from './factory25dCameraMotion';
 
 type View = 'room' | 'board' | 'game';
 interface BoardOptions {
@@ -55,11 +55,7 @@ export function createWhiteboardInteraction({
   const roomFrustum = { left: camera.left, right: camera.right };
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const roomPose = {
-    position: camera.position.clone(),
-    quaternion: camera.quaternion.clone(),
-    zoom: camera.zoom,
-  };
+  const roomPose = cameraPose(camera);
   let view: View = 'room';
   let game: Game = Array(9).fill(null);
   let hoveredCell = -1;
@@ -71,6 +67,7 @@ export function createWhiteboardInteraction({
     duration: number;
     from: typeof roomPose;
     to: typeof roomPose;
+    focus: THREE.Vector3;
   } | null = null;
 
   function inkTexture(size: number) {
@@ -312,11 +309,15 @@ export function createWhiteboardInteraction({
   }
   drawGame();
 
-  function closePose(next: Exclude<View, 'room'>) {
+  function focusPoint(next: View) {
     board.updateWorldMatrix(true, false);
-    const target = board.localToWorld(
+    return board.localToWorld(
       next === 'game' ? gameCenter.clone() : new THREE.Vector3(0, 0.68, 0.05),
     );
+  }
+
+  function closePose(next: Exclude<View, 'room'>) {
+    const target = focusPoint(next);
     const normal = new THREE.Vector3(0, 0, 1).transformDirection(board.matrixWorld);
     // Move in front of the board, past foreground desks; orthographic zoom
     // alone would keep those desks between the eye and the writing surface.
@@ -339,17 +340,14 @@ export function createWhiteboardInteraction({
     // Keep the board above the bottom island, including wrapped phone controls.
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(poseCamera.quaternion);
     position.addScaledVector(up, -((footer / height) * worldHeight) / zoom / 2);
-    return { position, quaternion: poseCamera.quaternion.clone(), zoom };
+    return { position, quaternion: poseCamera.quaternion.clone(), height: worldHeight / zoom };
   }
 
   function updateCamera(now: number) {
     if (!transition) return;
     const t = reducedMotion.matches ? 1 : Math.min(1, (now - transition.start) / transition.duration);
-    // A gentle start and settle; multiplicative zoom keeps the apparent speed even.
-    const eased = cameraEase(t);
-    camera.position.lerpVectors(transition.from.position, transition.to.position, eased);
-    camera.quaternion.slerpQuaternions(transition.from.quaternion, transition.to.quaternion, eased);
-    camera.zoom = Math.exp(THREE.MathUtils.lerp(Math.log(transition.from.zoom), Math.log(transition.to.zoom), eased));
+    const height = blendCameraPose(camera, transition.from, transition.to, t, transition.focus);
+    camera.zoom = (camera.top - camera.bottom) / height;
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
     layoutDirty = true;
@@ -376,6 +374,7 @@ export function createWhiteboardInteraction({
     const now = performance.now();
     updateCamera(now);
     const previousHeight = Math.max(1, canvas.clientHeight);
+    const focus = focusPoint(next === 'room' ? view : next);
     view = next;
     navigation.dataset.instant = String(reducedMotion.matches);
     dismissNote();
@@ -398,8 +397,9 @@ export function createWhiteboardInteraction({
     transition = {
       start: now,
       duration: next === 'game' ? 560 : 720,
-      from: { position: camera.position.clone(), quaternion: camera.quaternion.clone(), zoom: camera.zoom },
+      from: cameraPose(camera),
       to: next === 'room' ? roomPose : closePose(next),
+      focus,
     };
     boardHovered = gameHovered = false;
     hoveredCell = -1;
@@ -512,7 +512,7 @@ export function createWhiteboardInteraction({
     }
     camera.position.copy(pose.position);
     camera.quaternion.copy(pose.quaternion);
-    camera.zoom = pose.zoom;
+    camera.zoom = (camera.top - camera.bottom) / pose.height;
     camera.updateProjectionMatrix();
   });
   resize.observe(canvas);
@@ -527,6 +527,7 @@ export function createWhiteboardInteraction({
     openBoard: () => changeView('board'),
     getData: () => boardData,
     managerTask: artwork.managerTask,
+    boardMotion: boardDragging,
     isRoomView: () => view === 'room',
     update(now: number) {
       if (artwork.update(now, reducedMotion.matches)) layoutDirty = true;

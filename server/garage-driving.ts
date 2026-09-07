@@ -119,7 +119,7 @@ export class GarageDrivingManager {
       if (car.mode === 'driving' && timestamp - peer.usedAt > GARAGE_LEASE_IDLE_MS) this.simulation.release(peer.car);
     }
     this.state.yieldToGarageCars(timestamp);
-    const active = this.simulation.cars.some(car => car.mode !== 'parked');
+    const active = this.simulation.cars.some(car => car.mode !== 'parked' || car.damage > 0);
     this.simulation.step(dt, timestamp, this.pedestrians(timestamp));
     this.advanceExcursion(timestamp);
     this.dirty ||= active || this.simulation.cars.some(car => car.mode !== 'parked');

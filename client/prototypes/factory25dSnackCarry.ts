@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { WorldAgent } from '@shared/types';
 import { AVATAR_ANIMATIONS } from './factory25dAvatar';
+import { avatarBodyFrame } from './factory25dAvatarTexture';
 import type { VendingCanBody } from './factory25dVendingPhysics';
 import { snackKind, snackTexture, VENDING_SNACKS, disposeSnackTextures } from './factory25dVendingSnacks';
 
@@ -23,12 +24,15 @@ type HeldSnack = {
 /** Match the painted hand in the active 32px avatar frame, including its walk stride. */
 export function snackHandPose(texture: THREE.Texture, target = new THREE.Vector3()) {
   const row = Math.round((1 - texture.offset.y) * AVATAR_ANIMATIONS.length) - 1;
-  const frame = Math.round(texture.offset.x * 4) % 4;
+  const frame = avatarBodyFrame(texture);
   const side = row === 1 || row === 2, pixel = .86 / 32;
-  const walking = row === 3 || row === 4;
-  const handY = side ? 23 + (frame % 2 === 0 ? 1 : -2) : 22 + (walking ? (frame % 2 === 0 ? -5 : 3) : 0);
-  return target.set((side ? (row === 2 ? -5.5 : 5.5) : 9.5) * pixel,
-    (16 - handY) * pixel + .05, row === 4 ? -.012 : .012);
+  const walking = row === 3 || row === 4, bounce = [0, 1, 0, 1][frame];
+  const stride = [0, 2, 0, -2][frame], swing = [0, 1, 0, -1][frame];
+  // Palm centers from the current painter: side forearms swing horizontally,
+  // front/back hands move only a pixel, and both working hands remain visible.
+  const handX = side ? (row === 2 ? -1 : 1) * (3.5 - stride) : row === 5 ? 7.5 : 9.5;
+  const handY = side ? 24 + bounce : walking ? 23 + bounce - swing : row === 5 ? 22 - frame % 2 : 22;
+  return target.set(handX * pixel, (16 - handY) * pixel, row === 4 || row === 5 || row === 7 ? -.012 : .012);
 }
 
 /** Browser-local prop ownership. Observes routes; never moves an agent or sends a command. */

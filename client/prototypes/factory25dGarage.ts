@@ -11,10 +11,9 @@ import {FACTORY_ELEVATOR,GARAGE_ELEVATOR,factoryRoomAt,fromFactoryWorld} from '@
 import type { WorldAgent } from '@shared/types';
 import { elevatorApproachOpenness } from './factory25dManualTravel';
 import { createFloorSection, floorTravelCamera, GARAGE_SECTION_X,GARAGE_SECTION_Y,upperFloorLift } from './factory25dFloorTransition';
-import { GARAGE_CAR_BAYS, GARAGE_CAR_SCALE, GARAGE_CAR_YAW, type GarageCarId } from '@shared/factory25d-garage';
+import { GARAGE_CAR_BAYS, GARAGE_CAR_SCALE, GARAGE_CAR_YAW, GARAGE_RAMP, type GarageCarId } from '@shared/factory25d-garage';
 import { createGarageCarAnimation } from './factory25dGarageCarAnimation';
 import { createMiniWorkstation } from './factory25dMiniWork';
-import { onFactoryMessage } from './factory25dBoardData';
 import { createGarageLighting } from './factory25dGarageLighting';
 import type { SceneLightSwitch } from './factory25dLightSwitches';
 import { createGarageWindows } from './factory25dGarageWindows';
@@ -52,7 +51,7 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
  lowerLift.callPoint.y+=LEVEL;
  // A separate vehicle ramp occupies the right wall, away from the passenger lift.
  const rampMaterial=standard('#454958'), rampEdge=standard('#d2b574');
- const rampNear=5.2,rampFar=-4.1,rampRise=1.25,rampLength=rampNear-rampFar;
+ const rampNear=GARAGE_RAMP.near,rampFar=GARAGE_RAMP.far,rampRise=GARAGE_RAMP.rise,rampLength=rampNear-rampFar;
  const rampShape=new THREE.Shape();rampShape.moveTo(rampFar,0);rampShape.lineTo(rampNear,0);rampShape.lineTo(rampFar,rampRise);rampShape.closePath();
  const rampGeo=new THREE.ExtrudeGeometry(rampShape,{depth:2.12,bevelEnabled:false});rampGeo.rotateY(-Math.PI/2);rampGeo.translate(11.9,0,0);
  const ramp=new THREE.Mesh(rampGeo,rampMaterial);ramp.receiveShadow=true;room.add(ramp);
@@ -66,11 +65,11 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
  box([2.52,.18,.34],[10.85,2.91,-4.03],trim);
  box([.73,.035,.15],[10.85,2.64,-3.89],lit,wallFixtures);
  const rampSign=label('EXIT',.95,.23,'#a9cdbd');rampSign.position.set(10.85,3.14,-3.97);room.add(rampSign);
- // A visible barrier matches the driving boundary until the exterior landing exists.
+ // Low barrier for grounded cars; the DeLorean floats over it into the time-jump exit.
  for(const x of [9.86,11.68])box([.12,.8,.13],[x,.4,5.5],trim);
  box([1.94,.15,.09],[10.77,.64,5.5],rampEdge);
  for(const x of [10.12,10.62,11.12,11.62])box([.14,.16,.012],[x,.64,5.555],dark);
- const rampClosed=label('RAMP CLOSED',1.15,.18,'#d9c89b');rampClosed.position.set(10.77,.95,5.52);room.add(rampClosed);
+ const rampNotice=label('HOVER EXIT',1.15,.18,'#a9ddd6');rampNotice.position.set(10.77,.95,5.52);room.add(rampNotice);
  const cars=new Map<string,THREE.Group>();
  const carAnimation=createGarageCarAnimation(cars);
  const miniWork=createMiniWorkstation(room,cars);
@@ -84,19 +83,12 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
  wallFixtures.add(furnishings.wallFixtures);
  const lightSwitches:SceneLightSwitch[]=[...furnishings.lightSwitches,{id:'garage-wall-lights',label:'Garage wall lights',kind:'light',target:wallFixtures.children[1],hitTargets:[wallFixtures],isOn:lighting.isInteriorOn,setOn(on){lighting.setInteriorOn(on);furnishings.setWallLightsOn(on);lit.emissiveIntensity=on?.45:0;lit.color.set(on?'#ffe4b8':'#736c60');}}];
  const down=document.createElement('button');down.className='garage-elevator-call';down.type='button';down.textContent='↓ G';down.setAttribute('aria-label','Take elevator to the garage');document.body.append(down);
- const nav=document.createElement('div');nav.className='garage-nav pixel-island';nav.hidden=true;nav.innerHTML='<button type="button" aria-label="Take elevator to the factory">↑ factory</button><span>the garage</span><button type="button" aria-label="Work in the garage">work here</button><button type="button" aria-label="Show garage cars" aria-expanded="false">cars</button>';document.body.append(nav);
+ const nav=document.createElement('div');nav.className='garage-nav pixel-island';nav.hidden=true;nav.innerHTML='<button type="button" aria-label="Take elevator to the factory">↑ factory</button><span>the garage</span><button type="button" aria-label="Work in the garage">work here</button>';document.body.append(nav);
  const status=document.createElement('p');status.className='garage-status';status.hidden=true;document.body.append(status);
- const collection=document.createElement('div');collection.className='garage-collection pixel-island';collection.hidden=true;document.body.append(collection);
- let selectedCar:GarageCarId='mini',showCars=false,showingVisit=false;
+ // Keyboard and screen-reader equivalents of clicking the actual cars.
+ const collection=document.createElement('div');collection.className='garage-car-access';collection.hidden=true;collection.setAttribute('aria-label','Garage cars');document.body.append(collection);
  let driveAction:((car:GarageCarId)=>void)|undefined;
- let carAction:(car:GarageCarId)=>{message:string;sessionId?:string}=()=>({message:'Choose one of your idle agents in agent controls.'});
- let pendingCar:{id:string;at:number}|undefined;
- function chooseCar(id:GarageCarId){selectedCar=id;status.hidden=false;status.textContent=names[ids.indexOf(id)];collection.querySelectorAll<HTMLButtonElement>('button[data-car]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.car===id)));}
- const carsToggle=nav.querySelector<HTMLButtonElement>('[aria-label="Show garage cars"]')!;carsToggle.onclick=()=>{showCars=!showCars;collection.hidden=!showCars;carsToggle.setAttribute('aria-expanded',String(showCars));if(showCars)chooseCar(selectedCar);else status.hidden=true;};for(const [i,id] of ids.entries()){const button=document.createElement('button');button.textContent=names[i];button.dataset.car=id;button.onclick=()=>chooseCar(id as GarageCarId);collection.append(button);}
- const drive=document.createElement('button');drive.type='button';drive.className='garage-car-drive';drive.textContent='drive car';collection.append(drive);drive.onclick=()=>driveAction?.(selectedCar);
- const rev=document.createElement('button');rev.type='button';rev.className='garage-car-rev';rev.textContent='send agent to rev';collection.append(rev);
- rev.onclick=()=>{if(pendingCar||!available)return;const result=carAction(selectedCar);status.hidden=false;status.textContent=result.message;pendingCar=result.sessionId?{id:result.sessionId,at:performance.now()}:undefined;rev.disabled=!!pendingCar;};
- const stopCarMessages=onFactoryMessage(message=>{if(message.type==='garage_car_result'&&message.sessionId===pendingCar?.id){pendingCar=undefined;rev.disabled=false;status.hidden=false;status.textContent=message.success?'your agent is heading to the car · sound on to hear it':message.error??'That car is unavailable right now.';}});
+ for(const [i,id] of ids.entries()){const button=document.createElement('button');button.type='button';button.textContent=`Drive or park ${names[i]}`;button.onclick=()=>driveAction?.(id as GarageCarId);collection.append(button);}
  const transit=document.createElement('div');transit.className='garage-transit';transit.hidden=true;
  const readout=document.createElement('span');readout.setAttribute('role','status');readout.setAttribute('aria-live','polite');transit.append(readout);document.body.append(transit);
  let open=false,available=true,trip:undefined|{from:boolean;to:boolean;start:number;passenger:boolean};
@@ -125,19 +117,15 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
   if(available&&ray.intersectObject(lift,true).length){e.preventDefault();e.stopImmediatePropagation();visit(!open);return;}
   if(!open)return;
   // Nearest visible vehicle wins, including a flying DeLorean above another car.
-  for(const hit of ray.intersectObjects([...cars.values()],true)){
+  for(const hit of ray.intersectObjects([...cars.values()].filter(car=>car.visible),true)){
    if(hit.object.userData.role==='ground_shadow'||!hit.object.visible)continue;
    const entry=[...cars].find(([,car])=>{let node:THREE.Object3D|null=hit.object;while(node){if(node===car)return true;node=node.parent;}return false;});
-   if(entry){e.preventDefault();e.stopImmediatePropagation();chooseCar(entry[0] as GarageCarId);driveAction?.(entry[0] as GarageCarId);break;}
+   if(entry){e.preventDefault();e.stopImmediatePropagation();driveAction?.(entry[0] as GarageCarId);break;}
   }
  };const pickHost=canvas.parentElement!;pickHost.addEventListener('click',select,true);
- return {scene,room,cars,camera,carAnimation,miniWork,lighting,lightSwitches,travelBackground,setDriveAction(action:(car:GarageCarId)=>void){driveAction=action;},upperFloorOffset:()=>physicalTrip?upperFloorLift(floorProgress):0,setCarAction(action:typeof carAction){carAction=action;},visit:(next:boolean)=>visit(next,true),setWorkAction(action:()=>void){nav.querySelector<HTMLButtonElement>('[aria-label="Work in the garage"]')!.onclick=action;},setStationFeedback(states:Map<string,{active:boolean;color:string;heat:number}>){furnishings.workScreens.forEach((material,i)=>{const state=states.get(`garage-${i}`);material.emissive.set(state?.active?state.color:'#11352f');material.emissiveIntensity=state?.active ? .8+(state.heat??0)*.15 : .2;});},isActive:()=>open,isTransitioning:()=>!!trip||floorPreview!==undefined,isCrossSection:()=>physicalTrip&&floorProgress>0&&floorProgress<1,
+ return {scene,room,cars,camera,carAnimation,miniWork,lighting,lightSwitches,travelBackground,setDriveAction(action:(car:GarageCarId)=>void){driveAction=action;},upperFloorOffset:()=>physicalTrip?upperFloorLift(floorProgress):0,visit:(next:boolean)=>visit(next,true),setWorkAction(action:()=>void){nav.querySelector<HTMLButtonElement>('[aria-label="Work in the garage"]')!.onclick=action;},setStationFeedback(states:Map<string,{active:boolean;color:string;heat:number}>){furnishings.workScreens.forEach((material,i)=>{const state=states.get(`garage-${i}`);material.emissive.set(state?.active?state.color:'#11352f');material.emissiveIntensity=state?.active ? .8+(state.heat??0)*.15 : .2;});},isActive:()=>open,isTransitioning:()=>!!trip||floorPreview!==undefined,isCrossSection:()=>physicalTrip&&floorProgress>0&&floorProgress<1,
  update(now:number,canOpen:boolean,projectionCamera:THREE.Camera=home,controlledAgent?:WorldAgent,serverNow=Date.now(),driving=false,passengers:readonly WorldAgent[]=[]){
   available=canOpen;carPickingAvailable=open&&driving;visibleCamera=projectionCamera;walkingAgent=controlledAgent;walkingNow=serverNow;
-  if(pendingCar&&now-pendingCar.at>8000){pendingCar=undefined;rev.disabled=false;status.textContent='No reply yet. Check the factory connection and try again.';}
-  const carPhase=(selectedCar==='mini'?miniWork.phase():undefined)??carAnimation.visits.get(selectedCar);
-  if(showCars&&carPhase){const message=`${names[ids.indexOf(selectedCar)]} · ${carPhase}`;if(status.textContent!==message)status.textContent=message;status.hidden=!open||!available;showingVisit=true;}
-  else if(showingVisit){status.textContent=`${names[ids.indexOf(selectedCar)]} · ready`;showingVisit=false;}
   let upperDoor=0,lowerDoor=0;
   physicalTrip=false;floorProgress=Number(open);
   if(trip){
@@ -147,7 +135,7 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
    transit.classList.toggle('is-reduced',reduced);
    upperDoor=open?0:state.door;lowerDoor=open?state.door:0;
    document.body.classList.toggle('garage-open',open);
-   if(state.done){trip=undefined;transit.hidden=true;document.body.classList.remove('garage-travelling');nav.hidden=!open;collection.hidden=!open||!showCars;down.hidden=!available;if(walkingAgent?.manualControl)down.blur();else down.focus();}
+   if(state.done){trip=undefined;transit.hidden=true;document.body.classList.remove('garage-travelling');nav.hidden=!open;collection.hidden=!open;down.hidden=!available;if(walkingAgent?.manualControl)down.blur();else down.focus();}
   }else{
    const ride=walkingAgent?.manualControl?.elevatorTrip;
    if(ride){
@@ -168,7 +156,7 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
   travelBackground.copy(factory.background as THREE.Color).lerp(scene.background as THREE.Color,floorProgress);
   floorSection.root.visible=physicalTrip&&floorProgress>0&&floorProgress<1;
   down.hidden=!available||!!trip;
-  nav.hidden=!open||!!trip||!available;collection.hidden=!open||!!trip||!available||!showCars;if(!available)status.hidden=true;
+  nav.hidden=!open||!!trip||!available;collection.hidden=!open||!!trip||(!available&&!carPickingAvailable);if(!available)status.hidden=true;
   if(floorPreview!==undefined)down.hidden=nav.hidden=collection.hidden=true;
   const floorLabel=open?'↑ 01':'↓ G';
   if(down.dataset.label!==floorLabel){down.textContent=floorLabel;down.dataset.label=floorLabel;down.setAttribute('aria-label',open?'Take elevator to the factory':'Take elevator to the garage');}
@@ -177,5 +165,5 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
   const rect=canvas.getBoundingClientRect();const point=(open?lowerLift.callPoint:upperLift.callPoint).clone().project(projectionCamera);
   down.style.left=`${rect.left+Math.max(8,Math.min(canvas.clientWidth-52,(point.x+1)*canvas.clientWidth/2-22))}px`;down.style.top=`${rect.top+Math.max(8,Math.min(canvas.clientHeight-52,(1-point.y)*canvas.clientHeight/2-22))}px`;
  if(open)furnishings.update(now/1000,matchMedia('(prefers-reduced-motion: reduce)').matches);
- },dispose(){furnishings.dispose();lit.dispose();floorSection.dispose();lighting.dispose();windows.dispose();miniWork.dispose();stopCarMessages();document.body.classList.remove('garage-open','garage-travelling');upperLift.root.removeFromParent();transit.remove();down.remove();nav.remove();status.remove();collection.remove();document.removeEventListener('keydown',escape);pickHost.removeEventListener('click',select,true);}};
+ },dispose(){furnishings.dispose();lit.dispose();floorSection.dispose();lighting.dispose();windows.dispose();miniWork.dispose();document.body.classList.remove('garage-open','garage-travelling');upperLift.root.removeFromParent();transit.remove();down.remove();nav.remove();status.remove();collection.remove();document.removeEventListener('keydown',escape);pickHost.removeEventListener('click',select,true);}};
 }

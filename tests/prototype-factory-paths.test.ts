@@ -18,7 +18,8 @@ function agent(move?: WorldMovement): WorldAgent {
 
 describe('visible factory arrivals and safe server paths', () => {
   it('walks around the brand shelf while keeping the front-counter entrance clear', () => {
-    const from = toFactoryWorld({ x:BRAND_SHELF.x, z:BRAND_SHELF.z-.65 });
+    // Start in the service aisle behind the cabinet, clear of the room divider.
+    const from = toFactoryWorld({ x:BRAND_SHELF.x, z:BRAND_SHELF.z-.6 });
     const to = toFactoryWorld({ x:BRAND_SHELF.x, z:BRAND_SHELF.z+.9 });
     expect(clearFactorySegment(fromFactoryWorld(from), fromFactoryWorld(to))).toBe(false);
     const waypoints = factory25dWaypoints(from, to);
