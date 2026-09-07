@@ -62,21 +62,28 @@ describe('shared avatar artwork', () => {
 });
 
 describe('in-room avatar camera', () => {
-  async function setup() {
+  async function setup(downstairs=false) {
     const { createAvatarStage } = await import('../client/prototypes/factory25dAvatarStage');
-    const factory = new THREE.Scene(), patio = new THREE.Scene();
+    const factory = new THREE.Scene(), patio = new THREE.Scene(), garage = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-8, 8, 5.64, -5.64, .1, 50);
     camera.position.set(0, 9, 14.6); camera.lookAt(0, .35, .45);
     const canvas = { clientWidth: 1000, clientHeight: 800 }, renderer = { setSize: vi.fn() };
-    const mesh = new THREE.Object3D(); mesh.position.set(1, .5, .6); factory.add(mesh);
+    const mesh = new THREE.Object3D(); mesh.position.set(1, downstairs ? -11.5 : .5, .6); (downstairs ? garage : factory).add(mesh);
     const entry = { mesh, baseHeight: .48, session: { sessionId: 'mine', ownerId: 'me', avatar: DEFAULT_AVATAR } };
     const agents = { entries: new Map([['mine', entry]]) };
-    const stage = createAvatarStage(factory, patio, agents as unknown as Parameters<typeof createAvatarStage>[2],
+    const stage = createAvatarStage(factory, patio, garage, agents as unknown as Parameters<typeof createAvatarStage>[3],
       canvas as HTMLCanvasElement, renderer as unknown as THREE.WebGLRenderer, () => camera, () => 'mine');
     let now = 1000; vi.spyOn(performance, 'now').mockImplementation(() => now);
     stage.open({ ownerId: 'me' });
-    return { stage, camera, canvas, renderer, mesh, factory, tick(time: number) { now = time; stage.update(now); } };
+    return { stage, camera, canvas, renderer, mesh, factory, garage, tick(time: number) { now = time; stage.update(now); } };
   }
+
+  it('edits a downstairs agent in the garage and restores it on close', async () => {
+    const {stage,garage,mesh,tick}=await setup(true);
+    tick(1900);expect(stage.scene()).toBe(garage);expect(stage.focusPoint().y).toBeLessThan(-11);
+    expect(garage.getObjectByName('avatar-edit-draft')).toBeDefined();expect(mesh.visible).toBe(false);
+    stage.close();tick(3000);expect(mesh.visible).toBe(true);expect(garage.children).toEqual([mesh]);stage.dispose();
+  });
 
   it('stops rebuilding the settled camera, then reframes after a viewport resize', async () => {
     const { stage, renderer, canvas, tick } = await setup();

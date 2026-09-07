@@ -28,6 +28,8 @@
 .agent-status-bubble[data-kind='error'] { color: #ffcabd; border-color: #cc8178; }
 .agent-status-bubble[data-kind='thinking'] { animation: factory-thought 2.4s ease-in-out infinite; }
 .agent-status-bubble[data-kind='working'] { color: #b5dfd0; border-color: #86ada0; }
+.agent-label .agent-status-bubble { color: var(--state-color, #e1eeeb); border-color: color-mix(in srgb, var(--state-color, #b9c9ce) 75%, #3b5054); }
+.agent-status-bubble[data-mode='text'] { width: max-content; max-width: min(150px, 40vw); white-space: normal; font-size: 10px; line-height: 1.3; text-align: left; }
 .agent-event-notice {
   position: absolute;
   left: 50%;
@@ -49,5 +51,5 @@
 .agent-feedback-detail { border-top: 1px solid #65788d50; padding-top: 7px; color: #c7d5d3; }
 .agent-status-bubble[hidden], .agent-event-notice[hidden] { display: none; }
 .factory-activity-announcer { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@keyframes factory-thought { 0%, 100% { color: #a9bbc5; } 50% { color: #e1eeeb; } }
+@keyframes factory-thought { 0%, 100% { opacity: .8; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .agent-status-bubble { animation: none; } }

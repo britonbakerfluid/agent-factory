@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { watchBoardData, sendFactoryChat, forgetFactoryLogin, type BoardData } from '../client/prototypes/factory25dBoardData';
+import { watchBoardData, sendFactoryChat, forgetFactoryLogin, factoryHost, type BoardData } from '../client/prototypes/factory25dBoardData';
 import { StateManager } from '../server/state';
 import { DEFAULT_AVATAR } from '../shared/constants';
 
@@ -156,4 +156,18 @@ it('revokes local send access immediately after logout even if an older login ch
   expect(latest().canChat).toBe(false);
   expect(FactorySocket.instances).toHaveLength(2);
   expect(latest().chat).toEqual([chat]);
+});
+
+
+it('keeps phone previews read-only while retaining same-origin behavior for deployed hosts and explicit local servers', () => {
+  for (const hostname of ['192.168.86.247','10.0.0.4','172.20.1.4']) {
+    vi.stubGlobal('location',{hostname,origin:`http://${hostname}:5174`,search:''});
+    expect(factoryHost()).toBe('https://fluid-factory.onrender.com');
+    vi.stubGlobal('location',{hostname,origin:`http://${hostname}:5174`,search:'?factoryServer=local'});
+    expect(factoryHost()).toBe(`http://${hostname}:5174`);
+  }
+  for (const hostname of ['factory.example','198.51.100.42']) {
+    vi.stubGlobal('location',{hostname,origin:`https://${hostname}`,search:''});
+    expect(factoryHost()).toBe(`https://${hostname}`);
+  }
 });

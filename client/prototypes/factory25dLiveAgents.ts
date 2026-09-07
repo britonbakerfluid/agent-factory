@@ -2,25 +2,32 @@ import * as THREE from 'three';
 import { patioFloorHeight } from '@shared/factory25d-patio';
 import { factoryCompanionPosition } from '@shared/factory25d-layout';
 import type { WorldAgent, WorldSnapshot } from '@shared/types';
+import { factoryRoomAt, factoryScenePoint, factoryWorldPoint, GARAGE_LEVEL, GARAGE_WORLD_Z } from '@shared/factory25d-layout';
 import { DEFAULT_AVATAR } from '@shared/constants';
 import { avatarSheet, AVATAR_ANIMATIONS } from './factory25dAvatar';
 import { avatarTexture } from './factory25dAvatarTexture';
-import { agentPosition } from './factory25dWorld';
+import { agentPosition, garageElevatorPose } from './factory25dWorld';
 import { createNameTag } from './factory25dLabels';
+import { watchContributions } from './factory25dContributions';
 import { contactShadow } from './factory25dContactShadows';
 import { WORKSTATIONS, isWorking } from './factory25dWorkstations';
 import { onFactoryMessage } from './factory25dBoardData';
 import { createFactoryEffects, type EffectAnchor } from './factory25dEffects';
 import { effectPose, effectSeed, FactoryEffectsState, vortexStrength } from './factory25dEffectsState';
 import { createFactoryTombstones } from './factory25dTombstones';
+import { agentStateStyle, resolveAgentVisualState } from './factory25dAgentStates';
 
 type Sprite = { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>; texture: THREE.CanvasTexture;
-  shadow: THREE.Mesh; sheet: ReturnType<typeof avatarSheet>; signature: string };
+  shadow: THREE.Mesh; sheet: ReturnType<typeof avatarSheet>; signature: string; labelFeet: THREE.Vector3 };
 type Entry = Sprite & { session: WorldAgent; label: ReturnType<typeof createNameTag>; children: Map<string, Sprite>;
   lastX: number; lastZ: number; baseHeight: number };
 
 export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canvas: HTMLCanvasElement) {
   const entries = new Map<string, Entry>();
+  const contributions = watchContributions(() => {
+    for (const entry of entries.values()) entry.label.setContribution(contributions.forUser(entry.session.username));
+  });
+  let garage: { scene: THREE.Scene; isVisible: () => boolean } | undefined;
   const effectState = new FactoryEffectsState(), effects = createFactoryEffects(factory, patio);
   const tombstones = createFactoryTombstones(factory, patio, canvas);
   const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -34,7 +41,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.86 * scale, 0.86 * scale), material);
     mesh.castShadow = true; mesh.userData.sessionId = agent.sessionId; factory.add(mesh);
     const shadow = contactShadow(factory, { width: 0.22 * scale, depth: 0.12 * scale, spread: 0.065, opacity: 0.3, round: true });
-    return { mesh, texture, shadow, sheet, signature: JSON.stringify(agent.avatar) };
+    return { mesh, texture, shadow, sheet, signature: JSON.stringify(agent.avatar), labelFeet: new THREE.Vector3() };
   }
   function removeSprite(item: Sprite) {
     item.mesh.removeFromParent(); item.mesh.geometry.dispose(); item.mesh.material.dispose(); item.texture.dispose();
@@ -43,12 +50,24 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
   function setFrame(item: Sprite, row: number, frame: number, floorY: number, scale = 1) {
     item.texture.offset.set(frame / 4, 1 - (row + 1) / AVATAR_ANIMATIONS.length);
     item.mesh.position.y = floorY + (item.sheet.feet[row][frame] / 32 - 0.5) * 0.86 * scale + 0.004;
+    item.labelFeet.set(0, (0.5 - item.sheet.feet[row][frame] / 32) * 0.86 * scale, 0);
   }
-  function place(item: Sprite, x: number, z: number) {
-    const parent = x > 8 ? patio : factory;
+  function floorAt(point: { x: number; z: number }) {
+    const room = factoryRoomAt(point);
+    return room === 'garage' ? GARAGE_LEVEL + .018 : room === 'patio' ? patioFloorHeight(point) + .018 : view?.floor({ x: point.x, z: point.z - 1.95 }) ?? .018;
+  }
+  function visibleAt(point: { x: number; z: number }) {
+    const room = factoryRoomAt(point);
+    return room === 'garage' ? garage?.isVisible() ?? false : room === 'patio' ? view?.patio ?? false : view?.factory ?? false;
+  }
+  function place(item: Sprite, x: number, z: number, elevator?: ReturnType<typeof garageElevatorPose>) {
+    const room = elevator?.room ?? factoryRoomAt({ x, z }), point = elevator ?? factoryScenePoint({ x, z });
+    const parent = room === 'garage' ? garage?.scene ?? factory : room === 'patio' ? patio : factory;
     if (item.mesh.parent !== parent) { parent.add(item.mesh); parent.add(item.shadow); }
-    item.mesh.position.x = x; item.mesh.position.z = z;
-    item.shadow.position.set(x, (x > 8 ? patioFloorHeight({x, z}) : 0) + 0.021, z);
+    item.mesh.userData.room = room;
+    item.mesh.visible = item.shadow.visible = !elevator?.hidden;
+    item.mesh.position.x = point.x; item.mesh.position.z = point.z;
+    item.shadow.position.set(point.x, (elevator?.floor ?? floorAt({ x, z })) + .003, point.z);
   }
   const stopEffects = onFactoryMessage(message => {
     // World deltas and effects can share a socket batch. Reconcile the latest
@@ -57,6 +76,32 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
   });
   return {
     entries,
+    contributionFor: contributions.forUser,
+    serverNow: () => Date.now() + clockOffset,
+    poseGarageWorker(id: string, point: { x: number; z: number }, walking: boolean, working: boolean, elapsed: number, activity: string) {
+      const entry = entries.get(id); if (!entry || !view) return;
+      const dx = point.x - entry.mesh.position.x;
+      const style = agentStateStyle(resolveAgentVisualState(entry.session));
+      const row = walking ? AVATAR_ANIMATIONS.indexOf(dx > 0 ? 'walk_right' : 'walk_left') : working ? AVATAR_ANIMATIONS.indexOf(style.pose) : 0;
+      const floorY = GARAGE_LEVEL + .018;
+      place(entry, point.x, point.z); setFrame(entry, row, Math.floor(elapsed * (walking ? 6 : motionPreference.matches ? 0 : style.fps)) % 4, floorY);
+      entry.mesh.scale.set(1, 1, 1); entry.mesh.rotation.set(0, 0, 0); entry.mesh.material.opacity = 1;
+      entry.label.setActivity(working ? `${activity} · ${entry.session.activity}` : activity);
+      entry.label.update(entry.mesh, floorY, view.camera, canvas, garage?.isVisible() ?? false, undefined, entry.labelFeet);
+    },
+    poseGaragePassenger(id: string, point: { x: number; z: number }, height: number, seat: number, walking: boolean, elapsed: number, activity: string) {
+      const entry = entries.get(id); if (!entry || !view) return;
+      const local = factoryScenePoint(point), dx = local.x - entry.mesh.position.x;
+      const row = seat > .8 ? 6 : walking ? AVATAR_ANIMATIONS.indexOf(dx > 0 ? 'walk_right' : 'walk_left') : 0;
+      const floorY = GARAGE_LEVEL + .018;
+      place(entry, point.x, point.z); setFrame(entry, row, walking ? Math.floor(elapsed * 6) % 4 : 0, floorY);
+      // Driver sockets anchor the torso; standing positions anchor the feet.
+      entry.mesh.position.y += height - (entry.mesh.position.y - floorY) * seat; entry.mesh.scale.set(1,1,1); entry.mesh.rotation.set(0,0,0);
+      entry.mesh.material.opacity = 1; entry.shadow.visible = seat < .8;
+      entry.label.setActivity(activity);
+      entry.label.update(entry.mesh, floorY, view.camera, canvas, garage?.isVisible() ?? false, undefined, entry.labelFeet);
+    },
+    configureGarage(config: { scene: THREE.Scene; isVisible: () => boolean }) { garage = config; effects.configureGarage(config.scene); tombstones.configureGarage(config); },
     get isVortexActive() { return !!effectState.vortex; },
     isPerforming(id: string) { return effectState.effects.has(id) || !!effectState.vortex; },
     placeOverride(id: string, point: { x: number; z: number }, lift = 0.5) {
@@ -64,12 +109,12 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
       // A grab or a local basketball pose must never inherit a previous emote's
       // squash, rotation or partial disappearance.
       entry.mesh.scale.set(1, 1, 1); entry.mesh.rotation.set(0, 0, 0); entry.mesh.material.opacity = 1;
-      const dx = point.x - entry.mesh.position.x, dz = point.z - entry.mesh.position.z;
-      const floorY = point.x > 8 ? patioFloorHeight(point) + .018 : view?.floor({ x: point.x, z: point.z - 1.95 }) ?? .018;
+      const local = factoryScenePoint(point), dx = local.x - entry.mesh.position.x, dz = local.z - entry.mesh.position.z;
+      const floorY = floorAt(point);
       place(entry, point.x, point.z); entry.mesh.position.y = floorY + entry.baseHeight + lift;
-      for (const child of entry.children.values()) { place(child, child.mesh.position.x + dx, child.mesh.position.z + dz); child.mesh.position.y += lift; }
-      effects.follow(id, { x: point.x, y: floorY + lift, z: point.z });
-      if (view) entry.label.update(entry.mesh, 0.02, view.camera, canvas, point.x > 8 ? view.patio : view.factory, point.x > 8 ? undefined : view.occluder);
+      for (const child of entry.children.values()) { place(child, child.mesh.position.x + dx, child.mesh.position.z + dz + (factoryRoomAt(point) === 'garage' ? GARAGE_WORLD_Z : 0)); child.mesh.position.y = floorY + lift + .15; }
+      effects.follow(id, { x: local.x, y: floorY + lift, z: local.z });
+      if (view) entry.label.update(entry.mesh, floorY, view.camera, canvas, visibleAt(point), factoryRoomAt(point) === 'factory' ? view.occluder : undefined, entry.labelFeet);
     },
     sync(next: WorldSnapshot | undefined) {
       if (!next || next === snapshot) return;
@@ -99,6 +144,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
         entry.label.setDetails(agent.sessionName || agent.username,
           [agent.activity, agent.currentTool].filter(Boolean).join(' · '),
           [agent.taskDescription, agent.cwd.split('/').filter(Boolean).at(-1), `${agent.toolUseCount ?? 0} tool calls`].filter(Boolean).join(' · '));
+        entry.label.setContribution(contributions.forUser(agent.username));
       }
       canvas.dataset.liveAgents = String(entries.size);
       canvas.dataset.liveSubagents = String([...entries.values()].reduce((n, e) => n + e.children.size, 0));
@@ -117,53 +163,61 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
       effectState.flush(now); anchors.clear();
       const vortex = effectState.vortex;
       for (const entry of entries.values()) {
-        const agent = entry.session, point = agentPosition(agent, now, snapshot.environment);
+        const agent = entry.session, point = agentPosition(agent, now, snapshot.environment), elevator = garageElevatorPose(agent, now, snapshot.environment);
+        const visible = !elevator?.hidden && (elevator ? (elevator.room === 'garage' ? garage?.isVisible() ?? false : showFactory) : visibleAt(point));
         const dx = point.x - entry.lastX, dz = point.z - entry.lastZ;
         const moving = Math.hypot(dx, dz) > 0.001 || !!agent.manualControl?.moving;
         const effect = effectState.effects.get(agent.sessionId);
         const facing = effect?.kind === 'shot' || effect?.kind === 'gun' ? effect.facing : moving
           ? (Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'right' : 'left') : (dz > 0 ? 'down' : 'up')) : agent.manualControl?.facing ?? agent.world.facing;
         const working = !agent.manualControl && agent.world.zone === 'work' && isWorking(agent.activity) && !moving;
-        let row = moving ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : working ? 5 : agent.activity === 'idle' ? 6 : 0;
+        const lookingAtMini = agent.world.idleVisit === 'garage-mini' && !moving && !agent.manualControl;
+        const style = agentStateStyle(resolveAgentVisualState(agent));
+        // Walking, user control and physical interactions outrank a desk pose.
+        const stationaryRow = agent.manualControl || isWorking(agent.activity) && !working ? 0 : AVATAR_ANIMATIONS.indexOf(style.pose);
+        let row = moving ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : lookingAtMini ? AVATAR_ANIMATIONS.indexOf('walk_up') : stationaryRow;
         if (effect && now >= effect.startedAt) row = ['dance', 'merge', 'dizzy', 'shot', 'gun'].includes(effect.kind)
           ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : effect.kind === 'sleep' ? 6 : 0;
-        place(entry, point.x, point.z); entry.lastX = point.x; entry.lastZ = point.z;
-        const floorY = point.x > 8 ? patioFloorHeight(point) + .018 : floor({x: point.x, z: point.z - 1.95});
-        setFrame(entry, row, frame, floorY);
+        place(entry, point.x, point.z, elevator); entry.lastX = point.x; entry.lastZ = point.z;
+        const floorY = elevator?.floor ?? floorAt(point);
+        const stateFrame = reduced ? 0 : Math.floor(elapsed * style.fps) % 4;
+        setFrame(entry, row, lookingAtMini ? 0 : moving || effect ? frame : stateFrame, floorY);
         const pose = effectPose(effect, now, reduced);
         const baseHeight = entry.mesh.position.y - floorY;
         entry.baseHeight = baseHeight;
         entry.mesh.scale.set(pose.scaleX, pose.scaleY, 1); entry.mesh.rotation.set(0, 0, pose.angle);
         entry.mesh.position.x += pose.x; entry.mesh.position.y = floorY + baseHeight * pose.scaleY + pose.lift;
-        if (vortex && !reduced && !agent.manualControl) {
+        if (vortex && !reduced && !agent.manualControl && !elevator?.hidden) {
           const strength = vortexStrength(vortex, now), seed = effectSeed(agent.sessionId) + vortex.seed;
           const t = (now - vortex.startedAt) / 1000, angle = seed + t * .75, radius = .7 + (seed % 10) * .12;
-          const center = point.x > 8 ? { x: 15, z: 4 } : { x: 0, z: .8 };
+          const center = factoryRoomAt(point) === 'garage' ? { x: 0, z: GARAGE_WORLD_Z + 4 } : point.x > 8 ? { x: 15, z: 4 } : { x: 0, z: .8 };
           place(entry, THREE.MathUtils.lerp(point.x, center.x + Math.cos(angle) * radius, strength),
             THREE.MathUtils.lerp(point.z, center.z + Math.sin(angle) * radius * .6, strength));
           entry.mesh.position.y += strength * (.65 + (seed % 7) * .13);
           entry.mesh.rotation.z += Math.sin(angle) * .3 * strength;
           entry.mesh.scale.multiplyScalar(1 - strength * .18);
         }
-        entry.label.setActivity(effect ? (effect.kind === 'return' ? 'back again' : effect.kind) : [agent.activity, agent.currentTool].filter(Boolean).join(' · '));
+        entry.label.setActivity(effect ? (effect.kind === 'return' ? 'back again' : effect.kind) : lookingAtMini ? 'looking at the Mini' : [agent.activity, agent.currentTool].filter(Boolean).join(' · '));
         entry.label.element.dataset.performing = effect?.kind ?? (vortex ? 'vortex' : '');
         entry.mesh.material.opacity = pose.opacity * (agent.activity === 'stopped' ? .45 : 1);
         entry.mesh.material.transparent = entry.mesh.material.opacity < 1;
-        entry.label.element.classList.toggle('patio-agent', point.x > 8);
-        entry.label.update(entry.mesh, floorY, camera, canvas, point.x > 8 ? showPatio : showFactory, point.x > 8 ? undefined : occluder);
+        entry.label.element.classList.toggle('patio-agent', factoryRoomAt(point) === 'patio');
+        entry.label.element.classList.toggle('garage-agent', factoryRoomAt(point) === 'garage');
+        entry.label.update(entry.mesh, floorY, camera, canvas, visible, factoryRoomAt(point) === 'factory' ? occluder : undefined, entry.labelFeet);
         let index = 0;
         for (const child of entry.children.values()) {
-          const follower = factoryCompanionPosition(entry.mesh.position, index++);
-          place(child, follower.x, follower.z);
-          setFrame(child, working ? 5 : moving ? row : 0, frame, child.mesh.position.x > 8 ? patioFloorHeight(child.mesh.position) + .018 : floorY, 0.58);
+          const parentPoint = factoryWorldPoint(entry.mesh.position, elevator?.room ?? factoryRoomAt(point));
+          const follower = factoryCompanionPosition(parentPoint, index++);
+          place(child, follower.x, follower.z, elevator ? { ...elevator, ...factoryScenePoint(follower) } : undefined);
+          setFrame(child, working ? 5 : moving ? row : 0, frame, elevator?.floor ?? floorAt(follower), 0.58);
         }
-        anchors.set(agent.sessionId, { x: entry.mesh.position.x, y: entry.mesh.position.y - baseHeight * entry.mesh.scale.y, z: entry.mesh.position.z });
+        if (!elevator?.hidden) anchors.set(agent.sessionId, { x: entry.mesh.position.x, y: entry.mesh.position.y - baseHeight * entry.mesh.scale.y, z: entry.mesh.position.z });
       }
       effects.update(effectState, now, anchors, snapshot.environment, reduced);
       tombstones.update(effectState.tombstones, snapshot.environment, now, camera, showFactory, showPatio, floor, occluder, reduced);
       canvas.dataset.liveEffects = String(effectState.effects.size);
       canvas.dataset.liveVortex = effectState.vortex?.id ?? '';
     },
-    dispose() { stopEffects(); effects.dispose(); tombstones.dispose(); effectState.clear(); for (const entry of entries.values()) { removeSprite(entry); entry.label.dispose(); entry.children.forEach(removeSprite); } entries.clear(); },
+    dispose() { contributions.dispose(); stopEffects(); effects.dispose(); tombstones.dispose(); effectState.clear(); for (const entry of entries.values()) { removeSprite(entry); entry.label.dispose(); entry.children.forEach(removeSprite); } entries.clear(); },
   };
 }

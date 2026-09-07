@@ -4,6 +4,7 @@ import { createClient, type Client } from '@libsql/client';
 import type { AvatarConfig, WorldSnapshot } from '../../shared/types.js';
 import { parseAvatarConfig } from '../../shared/avatar-customization.js';
 import type { StoredTeamMember } from '../../shared/team.js';
+import { readContribution, type ContributionRecord } from '../../shared/factory-contributions.js';
 import {
   WORLD_SCHEMA_VERSION,
   parseWorldSnapshot,
@@ -12,6 +13,19 @@ import {
 } from './world-repository.js';
 
 const DEFAULT_LOCAL_URL = 'file:.data/agent-factory.db';
+
+function publicContributionRecords(value: unknown): ContributionRecord[] {
+  if (!Array.isArray(value)) throw new Error('Invalid contribution records');
+  const seen = new Set<string>();
+  return value.map(row => {
+    const record = readContribution(row);
+    if (!record) throw new Error('Invalid contribution records');
+    const githubLogin = record.githubLogin.toLowerCase();
+    if (seen.has(githubLogin)) throw new Error('Invalid contribution records');
+    seen.add(githubLogin);
+    return { ...record, githubLogin };
+  });
+}
 
 export interface LibSqlRepositoryOptions {
   url?: string;
@@ -63,6 +77,11 @@ export class LibSqlWorldRepository implements WorldRepository {
       await this.client.execute(`CREATE TABLE IF NOT EXISTS team_members (
         id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL,
         avatar TEXT NOT NULL, last_seen INTEGER NOT NULL
+      )`);
+      await this.client.execute(`CREATE TABLE IF NOT EXISTS contribution_totals (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        records TEXT NOT NULL,
+        checked_at INTEGER NOT NULL CHECK (checked_at > 0)
       )`);
       this.markHealthy();
     } catch (error) {
@@ -164,6 +183,36 @@ export class LibSqlWorldRepository implements WorldRepository {
         last_seen = MAX(team_members.last_seen, excluded.last_seen)`,
       args: [member.id, member.name, JSON.stringify(member.avatar), member.lastSeen],
     })), 'write');
+  }
+
+  async loadContributionRecords(): Promise<ContributionRecord[]> {
+    const result = await this.requireClient().execute('SELECT records, checked_at FROM contribution_totals WHERE id = 1');
+    const row = result.rows[0];
+    if (!row) return [];
+    try {
+      const records = publicContributionRecords(JSON.parse(String(row.records)));
+      const checkedAt = Number(row.checked_at);
+      if (!records.length || !Number.isSafeInteger(checkedAt)
+        || checkedAt !== Math.max(...records.map(record => record.checkedAt))) {
+        throw new Error('Invalid contribution records');
+      }
+      return records;
+    } catch {
+      throw new Error('Invalid stored contribution records');
+    }
+  }
+
+  async saveContributionRecords(records: ContributionRecord[]): Promise<void> {
+    const publicRecords = publicContributionRecords(records);
+    // A missing response is not a new empty snapshot of everyone's history.
+    if (!publicRecords.length) return;
+    const checkedAt = Math.max(...publicRecords.map(record => record.checkedAt));
+    await this.requireClient().execute({
+      sql: `INSERT INTO contribution_totals (id, records, checked_at) VALUES (1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET records = excluded.records, checked_at = excluded.checked_at
+        WHERE excluded.checked_at >= contribution_totals.checked_at`,
+      args: [JSON.stringify(publicRecords), checkedAt],
+    });
   }
 
   async close(): Promise<void> {

@@ -3,6 +3,7 @@ import { propPart, standard } from "./factory25dProps";
 import { contactShadow } from "./factory25dContactShadows";
 import { stepToward, type FloorPoint } from "./factory25dKeyboardState";
 import { routeToStation, INTERIOR_Z } from './factory25dWorkstations';
+import { createBasketballVisual } from './factory25dBasketballVisual';
 
 const BALL_RADIUS = 0.073;
 
@@ -25,28 +26,7 @@ export function crossedBasket(
 }
 
 export function miniBall(parent: THREE.Object3D) {
-  const group = new THREE.Group();
-  parent.add(group);
-  const sphere = new THREE.Mesh(
-    new THREE.SphereGeometry(BALL_RADIUS, 12, 8),
-    standard("#ff6908", 1, "#371000"),
-  );
-  sphere.castShadow = sphere.receiveShadow = true;
-  group.add(sphere);
-  const seam = standard("#553828", 1);
-  for (const rotation of [
-    [Math.PI / 2, 0, 0],
-    [0, Math.PI / 2, 0],
-    [0, 0, Math.PI / 4],
-  ]) {
-    const line = new THREE.Mesh(
-      new THREE.TorusGeometry(BALL_RADIUS + 0.001, 0.0035, 3, 20),
-      seam,
-    );
-    line.rotation.set(...(rotation as [number, number, number]));
-    group.add(line);
-  }
-  return group;
+  return createBasketballVisual(parent, BALL_RADIUS);
 }
 
 type Player = { id: string; name: string; position: THREE.Vector3; home: FloorPoint };

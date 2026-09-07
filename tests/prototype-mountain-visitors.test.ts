@@ -57,4 +57,31 @@ describe('mountain visitors from saved team history', () => {
     const textureDispose = vi.spyOn(mesh.material.map!, 'dispose'), materialDispose = vi.spyOn(mesh.material, 'dispose');
     climbers.dispose(); expect(textureDispose).toHaveBeenCalledOnce(); expect(materialDispose).toHaveBeenCalledOnce();
   });
+  it('keeps visitors and their rope in the live landscape haze after an appearance change', () => {
+    const scene = new THREE.Scene(), haze = { value: new THREE.Color('#b5ccdf') };
+    const climbers = createMountainClimbers(scene, () => 1, haze), friend = member('friend');
+    climbers.setVisitors([friend]);
+    climbers.setVisitors([{ ...friend, avatar: { ...friend.avatar, shirtColor: '#ff6633' } }]);
+    const person = scene.getObjectByName('mountain-visitor') as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>;
+    const rope = scene.getObjectByName('climbing-rope') as THREE.InstancedMesh<THREE.CylinderGeometry, THREE.MeshStandardMaterial>;
+    for (const material of [person.material, rope.material]) {
+      const shader = { ...THREE.ShaderLib.standard, uniforms: { ...THREE.ShaderLib.standard.uniforms } };
+      material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+      // Updating the weather changes the already-bound uniform without rebuilding
+      // either the saved avatar texture or the instanced rope material.
+      expect(shader.uniforms.landscapeHaze).toBe(haze);
+      haze.value.set('#d29c81');
+      expect(shader.uniforms.landscapeHaze.value.getHexString()).toBe('d29c81');
+      expect(shader.fragmentShader).toContain('mix(outgoingLight, landscapeHaze, aerialDepth)');
+      expect(shader.vertexShader).toContain('instanceMatrix * atmospherePoint');
+      expect(material.fog).toBe(true);
+    }
+    // The painted feet remain at the ground when the smaller sprite changes frame.
+    for (let i = 0; i < 20; i++) {
+      climbers.update(.1, false, false);
+      const feetY = person.position.y - person.geometry.parameters.height / 2;
+      expect(feetY).toBeGreaterThan(1); expect(feetY).toBeLessThan(1.01);
+    }
+    climbers.dispose();
+  });
 });

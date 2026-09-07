@@ -1,7 +1,7 @@
 import { clamp01, lerp, lerpRgb } from './skyPhase';
 import type { Rgb, SkyPalette, SkyState } from './skyPhase';
 
-export type WeatherMode = 'clear' | 'cloudy' | 'fog' | 'rain' | 'snow' | 'post-rain';
+export type WeatherMode = 'clear' | 'cloudy' | 'fog' | 'rain' | 'thunderstorm' | 'snow' | 'post-rain';
 
 export interface WeatherVisualState {
   mode: WeatherMode;
@@ -9,6 +9,8 @@ export interface WeatherVisualState {
   /** 0 = thin/high, 0.5 = puffy, 1 = dense storm deck. */
   cloudForm01: number;
   rain01: number;
+  /** Independent of rain intensity: ordinary heavy rain never invents lightning. */
+  thunder01?: number;
   snow01: number;
   fog01: number;
   wet01: number;
@@ -36,6 +38,7 @@ const WEATHER_PRESETS: Record<string, WeatherVisualState> = {
   fog: { mode: 'fog', cloud01: 0.88, cloudForm01: 0.76, rain01: 0, snow01: 0, fog01: 0.82, wet01: 0.24, wind01: 0.06 },
   rain: { mode: 'rain', cloud01: 0.9, cloudForm01: 0.82, rain01: 0.56, snow01: 0, fog01: 0.18, wet01: 1, wind01: 0.42 },
   'rain-light': { mode: 'rain', cloud01: 0.76, cloudForm01: 0.68, rain01: 0.3, snow01: 0, fog01: 0.1, wet01: 0.72, wind01: 0.24 },
+  thunderstorm: { mode: 'thunderstorm', cloud01: 1, cloudForm01: 1, rain01: 0.88, thunder01: 1, snow01: 0, fog01: 0.3, wet01: 1, wind01: 0.78 },
   'rain-heavy': { mode: 'rain', cloud01: 1, cloudForm01: 1, rain01: 1, snow01: 0, fog01: 0.34, wet01: 1, wind01: 0.7 },
   snow: { mode: 'snow', cloud01: 0.88, cloudForm01: 0.78, rain01: 0, snow01: 0.62, fog01: 0.3, wet01: 0.5, wind01: 0.28 },
   'snow-light': { mode: 'snow', cloud01: 0.72, cloudForm01: 0.66, rain01: 0, snow01: 0.28, fog01: 0.2, wet01: 0.28, wind01: 0.18 },
@@ -64,6 +67,7 @@ export function lerpWeather(a: WeatherVisualState, b: WeatherVisualState, t: num
     cloud01: lerp(a.cloud01, b.cloud01, amount),
     cloudForm01: lerp(a.cloudForm01, b.cloudForm01, amount),
     rain01: lerp(a.rain01, b.rain01, amount),
+    thunder01: lerp(a.thunder01 ?? 0, b.thunder01 ?? 0, amount),
     snow01: lerp(a.snow01, b.snow01, amount),
     fog01: lerp(a.fog01, b.fog01, amount),
     wet01: lerp(a.wet01, b.wet01, amount),
@@ -111,6 +115,7 @@ export function weatherFromOpenMeteo(data: OpenMeteoResponse): WeatherVisualStat
   const fog01 = code === 45 || code === 48
     ? 0.78
     : Number.isFinite(visibility) ? clamp01((10_000 - visibility) / 8_000) : 0;
+  const thunderCode = [95, 96, 99].includes(code);
   const rainCode = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(code);
   const snowCode = [71, 73, 75, 77, 85, 86].includes(code);
   const rain01 = clamp01(Math.max(rain, precipitation) / 1.6 + (rainCode ? 0.18 : 0));
@@ -129,13 +134,16 @@ export function weatherFromOpenMeteo(data: OpenMeteoResponse): WeatherVisualStat
   );
 
   let mode: WeatherMode = 'clear';
-  if (snow01 > 0.08) mode = 'snow';
+  if (thunderCode) mode = 'thunderstorm';
+  else if (snow01 > 0.08) mode = 'snow';
   else if (rain01 > 0.08) mode = 'rain';
   else if (fog01 > 0.35) mode = 'fog';
   else if (wet01 > 0.12) mode = 'post-rain';
   else if (cloud01 > 0.45) mode = 'cloudy';
 
-  return { mode, cloud01, cloudForm01, rain01, snow01, fog01, wet01, wind01 };
+  return { mode, cloud01: thunderCode ? Math.max(0.9, cloud01) : cloud01,
+    cloudForm01: thunderCode ? Math.max(0.92, cloudForm01) : cloudForm01,
+    rain01, thunder01: thunderCode ? (code === 95 ? 0.72 : 1) : 0, snow01, fog01, wet01, wind01 };
 }
 
 export function cloudLayerWeights(weather: WeatherVisualState): readonly [number, number, number] {

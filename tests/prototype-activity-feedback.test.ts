@@ -87,6 +87,8 @@ describe('live activity feedback', () => {
     expect(feedback.stationStates().get(id)?.error).toBeCloseTo(0.5);
     hook('PostToolUse', { tool_name: 'Read' });
     expect(feedback.stationStates().get(id)).toMatchObject({ error: 0, status: 'working', pulse: 1 });
+    expect(feedback.get('ada')?.visibleNotice).toBeUndefined();
+    expect(feedback.get('ada')?.visualState).toBe('thinking');
     advance(1500);
     expect(feedback.stationStates().get(id)?.pulse).toBe(0);
   });

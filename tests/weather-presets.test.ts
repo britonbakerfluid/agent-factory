@@ -12,13 +12,14 @@ import { parseWeatherOverride } from '../client/sky/weather';
 describe('selectable weather presets', () => {
   it('exposes the debug states in a stable display order', () => {
     expect(SELECTABLE_WEATHER_MODES).toEqual([
-      'clear', 'cloudy', 'rain-light', 'rain-heavy', 'post-rain', 'snow-light', 'snow-heavy',
+      'clear', 'cloudy', 'rain-light', 'rain-heavy', 'thunderstorm', 'post-rain', 'snow-light', 'snow-heavy',
     ]);
     expect(WEATHER_PRESETS.map(({ id, label }) => ({ id, label }))).toEqual([
       { id: 'clear', label: 'Clear' },
       { id: 'cloudy', label: 'Cloudy' },
       { id: 'rain-light', label: 'Rain light' },
       { id: 'rain-heavy', label: 'Rain heavy' },
+      { id: 'thunderstorm', label: 'Thunderstorm' },
       { id: 'post-rain', label: 'Post-rain' },
       { id: 'snow-light', label: 'Snow light' },
       { id: 'snow-heavy', label: 'Snow heavy' },

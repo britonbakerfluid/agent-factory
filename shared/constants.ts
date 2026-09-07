@@ -127,11 +127,13 @@ export const DEFAULT_SERVER_CONFIG: import('./types.js').ServerConfig = {
 // Map tool names to agent activities
 export function toolToActivity(toolName: string): import('./types.js').AgentActivity {
   const readTools = ['Read', 'Glob', 'Grep', 'LSP'];
-  const writeTools = ['Write', 'Edit', 'NotebookEdit'];
+  // Codex hooks report canonical apply_patch, while shell/exec_command is Bash.
+  const writeTools = ['Write', 'Edit', 'NotebookEdit', 'apply_patch'];
   const searchTools = ['WebSearch', 'WebFetch'];
   const agentTools = ['Agent'];
   const planTools = ['EnterPlanMode'];
-  const waitingTools = ['AskUserQuestion', 'ExitPlanMode'];
+  // The synchronous Codex tool awaits its answer; async MCP questions do not.
+  const waitingTools = ['AskUserQuestion', 'ExitPlanMode', 'request_user_input'];
 
   if (readTools.includes(toolName)) return 'reading';
   if (writeTools.includes(toolName)) return 'writing';

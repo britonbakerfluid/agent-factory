@@ -6,6 +6,7 @@ import { propPart, standard } from "./factory25dProps";
 import { createPatioTerraces } from "./factory25dPatioTerraces";
 import { createPatioWater } from './factory25dPatioWater';
 import { patioFloorHeight } from "@shared/factory25d-patio";
+import type { SceneLightSwitch } from './factory25dLightSwitches';
 
 export const SIDE_DOOR = { x: 7.94, near: -3.25, far: -1.75, height: 1.8 };
 
@@ -77,11 +78,18 @@ export function createSideRoom(scene: THREE.Scene) {
   const terraces = createPatioTerraces(room, timber);
   const iron = standard("#344848", 1, "#0b1217");
 
-  const bulbs: THREE.PointLight[] = [];
-  for (const [z, height, count] of [
+  const lightSwitches: SceneLightSwitch[] = [...terraces.lightSwitches];
+  const bulbs: Array<{ light: THREE.PointLight; isOn: () => boolean }> = [];
+  const bulbMaterials = new Set<THREE.MeshBasicMaterial>();
+  let bulbBrightness = 1.4;
+  for (const [runIndex, [z, height, count]] of [
     [-3.6, 3.65, 15],
     [9.8, 1.7, 12],
-  ]) {
+  ].entries()) {
+    let on = true;
+    const isOn = () => on;
+    const runBulbs: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>[] = [];
+    const runLights: THREE.PointLight[] = [];
     for (const x of [8.5, 23.5])
       propPart(room, [0.07, height, 0.07], [x, height / 2, z], iron);
     const points = Array.from(
@@ -111,14 +119,23 @@ export function createSideRoom(scene: THREE.Scene) {
       );
       bulb.position.set(x, y - 0.105, z);
       room.add(bulb);
+      runBulbs.push(bulb);
+      bulbMaterials.add(bulb.material);
       // Four pooled lights, instead of a costly light for every bulb.
       if (i === 3 || i === count - 4) {
         const light = new THREE.PointLight("#ffbd79", 1.4, 7, 2);
         light.position.copy(bulb.position);
         room.add(light);
-        bulbs.push(light);
+        bulbs.push({ light, isOn }); runLights.push(light);
       }
     }
+    lightSwitches.push({ id: `patio-string-lights-${runIndex + 1}`, label: `Patio string lights ${runIndex + 1}`, kind: 'light',
+      target: runBulbs[Math.floor(runBulbs.length / 2)], hitTargets: runBulbs, isOn,
+      setOn(enabled) {
+        on = enabled;
+        runBulbs.forEach((bulb, index) => bulb.material.color.set(on ? (index % 4 === 0 ? '#ffc296' : '#ffe5b0') : '#423d33'));
+        for (const light of runLights) light.intensity = on ? bulbBrightness : 0;
+      } });
   }
   const stations = createPatioStations(room);
   const water = createPatioWater(room, timber);
@@ -171,7 +188,8 @@ export function createSideRoom(scene: THREE.Scene) {
   room.add(rain, snowflakes);
   return {
     stations,
-    dispose: () => water.dispose(),
+    lightSwitches,
+    dispose() { water.dispose(); terraces.dispose(); bulbMaterials.forEach(material => material.dispose()); },
     update(
       source: THREE.DirectionalLight,
       snow: number,
@@ -211,8 +229,9 @@ export function createSideRoom(scene: THREE.Scene) {
       sun.intensity = source.intensity;
       sun.castShadow = source.castShadow;
       timber.color.set("#94714e").multiplyScalar(1 - wetAmount * .22).lerp(new THREE.Color("#c8d5dd"), snow * 0.65);
-      bulbs.forEach((light) => {
-        light.intensity = night ? 4.4 : 1.4;
+      bulbBrightness = night ? 4.4 : 1.4;
+      bulbs.forEach(({ light, isOn }) => {
+        light.intensity = isOn() ? bulbBrightness : 0;
       });
     },
   };

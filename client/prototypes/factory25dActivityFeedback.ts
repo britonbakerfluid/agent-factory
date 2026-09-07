@@ -1,6 +1,7 @@
 import type { AgentActivity, WorldAgent, WorldSnapshot, WSMessageToClient } from '@shared/types';
 import { WORKSTATIONS } from '@shared/factory25d-layout';
 import { onFactoryMessage } from './factory25dBoardData';
+import { AgentPresentationMachine, agentStateDescription, agentStateStyle, resolveAgentVisualState } from './factory25dAgentStates';
 import './factory25dActivityFeedback.css';
 
 type EffectMessage = Extract<WSMessageToClient, { type: 'effect' }>;
@@ -22,6 +23,7 @@ export interface StationFeedback {
 }
 type AgentFeedback = {
   agent: WorldAgent;
+  presentation: AgentPresentationMachine;
   lastStation?: { id: string; at: number };
   notice?: ActivityNotice;
   waitingFor?: 'permission' | 'input';
@@ -31,22 +33,16 @@ const boundedText = (value: unknown) => typeof value === 'string' ? value.trim()
 const clamp = (value: number) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 const decay = (at: number | undefined, now: number, duration: number) => at === undefined ? 0 : clamp(1 - (now - at) / duration);
 
-export function activityStatus(activity: AgentActivity, tool?: string | null, waitingFor?: 'permission' | 'input') {
-  switch (activity) {
-    case 'thinking': return { kind: activity, glyph: '···', label: 'Thinking' };
-    case 'waiting': return { kind: activity, glyph: '?', label: waitingFor === 'permission' ? 'Waiting for permission' : waitingFor === 'input' ? 'Waiting for your input' : 'Waiting for permission or input' };
-    case 'planning': return { kind: activity, glyph: '≡', label: 'Planning' };
-    case 'compacting': return { kind: activity, glyph: '↻', label: 'Compacting context' };
-    case 'reading': case 'writing': case 'running': case 'searching': case 'chatting':
-      return { kind: 'working', glyph: '▤', label: [activity[0].toUpperCase() + activity.slice(1), tool].filter(Boolean).join(' · ') };
-    case 'stopped': return { kind: activity, glyph: '', label: 'Session ended' };
-    default: return { kind: 'idle', glyph: '', label: 'Taking a break' };
-  }
+export function activityStatus(activity: AgentActivity, tool?: string | null, waitingFor?: 'permission' | 'input', attention?: WorldAgent['attention']) {
+  const visualState = resolveAgentVisualState({ activity, currentTool: tool ?? null, attention }, waitingFor);
+  const kind = ['input', 'permission'].includes(visualState) ? 'waiting'
+    : ['reading', 'writing', 'running', 'searching', 'chatting'].includes(visualState) ? 'working' : visualState;
+  return { kind, glyph: agentStateStyle(visualState).glyph, label: agentStateDescription(visualState, tool) };
 }
 
-function heatColor(heat: number) {
+function heatColor(heat: number, base = '#66b9be') {
   // Warm amber means sustained work. Reserve red for a real failure event.
-  const cool = [102, 185, 190], warm = [219, 173, 104];
+  const cool = [1, 3, 5].map(offset => Number.parseInt(base.slice(offset, offset + 2), 16)), warm = [219, 173, 104];
   return `#${cool.map((channel, i) => Math.round(channel + (warm[i] - channel) * heat).toString(16).padStart(2, '0')).join('')}`;
 }
 
@@ -62,9 +58,13 @@ export class ActivityFeedbackModel {
     for (const id of this.agents.keys()) if (!ids.has(id)) this.agents.delete(id);
     for (const [id, event] of this.stationEvents) if (!ids.has(event.sessionId)) this.stationEvents.delete(id);
     for (const agent of snapshot.agents) {
-      const entry = this.agents.get(agent.sessionId) ?? { agent };
-      if (agent.activity !== 'waiting') entry.waitingFor = undefined;
+      const entry = this.agents.get(agent.sessionId) ?? { agent, presentation: new AgentPresentationMachine() };
+      if (agent.activity !== 'waiting') {
+        entry.waitingFor = undefined;
+        if (entry.notice?.kind === 'permission') entry.notice = undefined;
+      }
       entry.agent = agent;
+      entry.presentation.transition(agent, now, entry.waitingFor);
       if (agent.world.zone === 'work' && !agent.manualControl && agent.activity !== 'stopped') {
         const station = WORKSTATIONS[agent.world.slotIndex ?? -1];
         if (station) {
@@ -91,6 +91,11 @@ export class ActivityFeedbackModel {
       return;
     }
     const { effect, data } = message;
+    if (['tool_start', 'tool_complete', 'prompt_received'].includes(effect)
+      && entry.notice && ['error', 'permission'].includes(entry.notice.kind)) {
+      // Keep the historical detail, but let resumed work replace its transient warning.
+      entry.notice.until = Math.min(entry.notice.until, at);
+    }
     if (effect === 'elicitation') entry.waitingFor = data?.type === 'permission' ? 'permission' : 'input';
     const station = entry.lastStation;
     if (station && at - station.at < 10_000 && ['tool_start', 'tool_complete', 'error'].includes(effect)) {
@@ -124,8 +129,12 @@ export class ActivityFeedbackModel {
 
   get(id: string) {
     const entry = this.agents.get(id); if (!entry) return;
+    const visualState = entry.presentation.transition(entry.agent, this.now(), entry.waitingFor);
     return {
-      status: activityStatus(entry.agent.activity, entry.agent.currentTool, entry.waitingFor),
+      visualState,
+      style: agentStateStyle(visualState),
+      enteredAt: entry.presentation.enteredAt,
+      status: activityStatus(entry.agent.activity, entry.agent.currentTool, entry.waitingFor, entry.agent.attention),
       notice: entry.notice,
       visibleNotice: entry.notice && this.now() < entry.notice.until ? entry.notice : undefined,
       tools: Math.max(0, entry.agent.toolUseCount ?? 0),
@@ -140,7 +149,10 @@ export class ActivityFeedbackModel {
     for (const { agent } of this.agents.values()) {
       if (agent.world.zone !== 'work' || agent.manualControl || agent.activity === 'stopped') continue;
       const station = WORKSTATIONS[agent.world.slotIndex ?? -1], state = station && result.get(station.id);
-      if (state) { state.active = true; state.heat = clamp((agent.toolUseCount ?? 0) / 20); state.status = 'working'; state.color = heatColor(state.heat); }
+      if (state) {
+        state.active = true; state.heat = clamp((agent.toolUseCount ?? 0) / 20); state.status = 'working';
+        state.color = heatColor(state.heat, agentStateStyle(resolveAgentVisualState(agent)).color);
+      }
     }
     for (const [id, event] of this.stationEvents) {
       const state = result.get(id); if (!state) continue;
@@ -211,15 +223,20 @@ export function createActivityFeedback(parent: HTMLElement) {
       }
       for (const [id, element] of elements) {
         const state = model.get(id); if (!state) continue;
-        const { status, visibleNotice, notice } = state;
-        const glyph = visibleNotice?.kind === 'error' ? '!' : visibleNotice?.kind === 'notification' ? 'i' : status.glyph;
-        element.badge.hidden = !glyph;
+        const { status, visibleNotice, notice, style, visualState } = state;
+        const eventError = visibleNotice?.kind === 'error';
+        const glyph = style.bubble === 'text' ? style.text : eventError ? '!' : visibleNotice?.kind === 'notification' ? 'i' : style.glyph;
+        element.badge.hidden = style.bubble === 'hidden' || !glyph;
+        element.badge.dataset.mode = style.bubble;
+        element.badge.dataset.state = visualState;
+        element.badge.style.setProperty('--state-color', eventError ? '#ffcabd' : style.color);
         const kind = visibleNotice?.kind === 'error' ? 'error' : status.kind;
         if (element.badge.dataset.kind !== kind) element.badge.dataset.kind = kind;
         if (element.badge.textContent !== glyph) element.badge.textContent = glyph;
         const description = visibleNotice ? `${status.label}. ${visibleNotice.text}` : status.label;
         if (element.badge.getAttribute('aria-label') !== description) { element.badge.setAttribute('aria-label', description); element.badge.title = description; }
-        element.notice.hidden = !visibleNotice;
+        // The persistent request bubble already conveys these attention events.
+        element.notice.hidden = !visibleNotice || visibleNotice.kind === 'permission' && ['input', 'permission'].includes(visualState);
         if (visibleNotice && element.notice.textContent !== visibleNotice.text) { element.notice.textContent = visibleNotice.text; element.notice.dataset.kind = visibleNotice.kind; }
         const detailText = [status.label, `${state.tools} tool calls`, notice ? `Latest ${notice.kind}: ${notice.text}` : ''].filter(Boolean).join(' · ');
         if (element.detailText !== detailText) { element.details.textContent = detailText; element.detailText = detailText; }

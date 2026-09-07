@@ -13,6 +13,7 @@
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite dev",
     "test": "vitest run --config vitest.config.ts",
+    "sync:contributions": "tsx scripts/sync-contributions.ts",
     "build": "tsc --noEmit -p tsconfig.client.json && vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/server/index.js",
     "install-hooks": "bash hooks/install.sh"

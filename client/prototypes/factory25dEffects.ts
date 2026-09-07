@@ -23,6 +23,7 @@ const colors = ['#e8b35f', '#dba8c3', '#92c3bd', '#9ba6d0', '#f1d690'];
 
 /** Small pixel props and instanced particles share resources and expire with their clock state. */
 export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
+  let garage: THREE.Scene | undefined;
   const geometry = new THREE.BoxGeometry(1, 1, 1), plane = new THREE.PlaneGeometry(1, 1);
   const materials = new Map<string, THREE.MeshBasicMaterial>();
   const textures = new Map<string, THREE.Texture>();
@@ -114,9 +115,9 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
     group.traverse(object => { if (object instanceof THREE.InstancedMesh) object.dispose(); });
     group.removeFromParent();
   }
-  function sceneAt(x: number) { return x > 8 ? patio : factory; }
+  function sceneAt(x: number, y = 0) { return y < -6 && garage ? garage : x > 8 ? patio : factory; }
   function attach(group: THREE.Group, point: EffectAnchor) {
-    const scene = sceneAt(point.x); if (group.parent !== scene) scene.add(group);
+    const scene = sceneAt(point.x, point.y); if (group.parent !== scene) scene.add(group);
     group.position.set(point.x, point.y, point.z);
   }
   function updateParticles(item: Decoration, effect: AgentEffect, now: number, reduced: boolean) {
@@ -149,6 +150,7 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
     return group;
   }
   return {
+    configureGarage(scene: THREE.Scene) { garage = scene; },
     follow(sessionId: string, point: EffectAnchor) {
       for (const item of decorations.values()) if (item.sessionId === sessionId) attach(item.group, point);
     },
@@ -157,7 +159,8 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
       const activeIds = new Set([...state.effects.values()].map(effect => effect.id));
       for (const [id, item] of decorations) if (!activeIds.has(id)) { remove(item.group); decorations.delete(id); }
       for (const effect of state.effects.values()) {
-        const anchor = anchors.get(effect.sessionId); if (!anchor) continue;
+        const anchor = anchors.get(effect.sessionId);
+        if (!anchor) { const item = decorations.get(effect.id); if (item) item.group.visible = false; continue; }
         let item = decorations.get(effect.id);
         if (!item) { item = { ...build(effect), sessionId: effect.sessionId }; decorations.set(effect.id, item); }
         attach(item.group, anchor); item.group.visible = now >= effect.startedAt;
@@ -178,12 +181,12 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
           const direction = shot.facing === 'left' ? [-1, 0] : shot.facing === 'right' ? [1, 0] : shot.facing === 'up' ? [0, -1] : [0, 1];
           const to = shot.targetSessionIds.map(id => anchors.get(id)).filter((point): point is EffectAnchor => !!point).map(point => ({ ...point, y: point.y + .35 }));
           if (!to.length) to.push({ x: from.x + direction[0] * 2.8, y: from.y, z: from.z + direction[1] * 2.8 });
-          const group = new THREE.Group(); sceneAt(from.x).add(group);
+          const group = new THREE.Group(); sceneAt(from.x, from.y).add(group);
           for (const point of to) { const pellet = box(group, [.09, .07, .09], [from.x, from.y, from.z], '#f4c879'); pellet.userData.target = point; }
           item = { group, from, to }; shots.set(shot.id, item);
         }
         const p = effectProgress(shot, now);
-        item.group.visible = p < 1 && !reduced;
+        item.group.visible = p < 1 && !reduced && anchors.has(shot.sessionId);
         item.group.children.forEach((pellet, i) => pellet.position.set(
           THREE.MathUtils.lerp(item.from.x, item.to[i].x, p), THREE.MathUtils.lerp(item.from.y, item.to[i].y, p), THREE.MathUtils.lerp(item.from.z, item.to[i].z, p)));
       }
@@ -191,14 +194,14 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
       for (const [id, groups] of vortexGroups) if (id !== activeVortex?.id) { groups.forEach(remove); vortexGroups.delete(id); }
       for (const event of activeVortex ? [activeVortex] : []) {
         let groups = vortexGroups.get(event.id);
-        if (!groups) { groups = [buildVortex(), buildVortex()]; vortexGroups.set(event.id, groups); factory.add(groups[0]); patio.add(groups[1]); }
+        if (!groups) { groups = [buildVortex(), buildVortex(), ...(garage ? [buildVortex()] : [])]; vortexGroups.set(event.id, groups); factory.add(groups[0]); patio.add(groups[1]); if (garage && groups[2]) garage.add(groups[2]); }
         const configured = event.data?.center;
         const customCenter = configured && typeof configured === 'object' && 'x' in configured && 'y' in configured && typeof configured.x === 'number' && typeof configured.y === 'number'
           ? projectPosition({ x: configured.x, y: configured.y }, environment) : null;
         const strength = vortexStrength(event, now), t = (now - event.startedAt) / 1000;
         groups.forEach((group, side) => {
-          group.position.set(customCenter?.x ?? (side ? 15 : 0), .025, customCenter?.z ?? (side ? 4 : .8));
-          if (side) group.position.y += patioFloorHeight(group.position);
+          group.position.set(customCenter?.x ?? (side === 1 ? 15 : 0), side === 2 ? -11.975 : .025, customCenter?.z ?? (side ? 4 : .8));
+          if (side === 1) group.position.y += patioFloorHeight(group.position);
           group.visible = now >= event.startedAt; group.scale.setScalar(reduced ? 1 : Math.max(.02, strength));
           group.children.forEach((ring, i) => { if (ring instanceof THREE.Group) ring.rotation.y = event.seed * .01 + i * .2 + (reduced ? 0 : t * (.2 + i * .035)); });
         });

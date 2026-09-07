@@ -1,9 +1,11 @@
 import * as THREE from "three";
+import type { SceneLightSwitch } from "./factory25dLightSwitches";
 import { propPart, standard } from "./factory25dProps";
 import { signTexture } from "./factory25dLabels";
 import type { BoardData } from "./factory25dBoardData";
 import { createLoungeChat } from "./factory25dLoungeChat";
 import { contactShadow } from "./factory25dContactShadows";
+import type { TeamMember } from '@shared/team';
 
 /** Small matte props and two local light sources keep the lounge warm after dark. */
 export function createLoungeDetails(
@@ -11,6 +13,7 @@ export function createLoungeDetails(
   canvas: HTMLCanvasElement,
   camera: THREE.OrthographicCamera,
   renderer: THREE.WebGLRenderer,
+  getMembers: () => readonly TeamMember[],
 ) {
   const wood = standard("#775441", 1);
   const leg = standard("#42362f", 1);
@@ -270,9 +273,26 @@ export function createLoungeDetails(
     spread: 0.09,
     opacity: 0.25,
   });
-  const activity = createLoungeChat(parent, canvas, camera, renderer);
+  let candleOn = true;
+  const lightSwitches: SceneLightSwitch[] = [{ id: 'lounge-candle', label: 'Lounge candle', kind: 'candle', target: candle,
+    isOn: () => candleOn, setOn(on) { candleOn = on; flame.visible = on; candleLight.visible = on; candleLight.intensity = on ? .8 : 0; } }];
+  function lampSwitch(id: string, label: string, target: THREE.Object3D, light: THREE.Light,
+    material: THREE.MeshStandardMaterial, glow?: THREE.Object3D): SceneLightSwitch {
+    let on = true; const emission = material.emissiveIntensity;
+    return { id, label, kind: 'lamp', target, isOn: () => on, setOn(next) {
+      on = next; light.visible = on; material.emissiveIntensity = on ? emission : 0;
+      if (glow) glow.visible = on;
+    } };
+  }
+  lightSwitches.push(lampSwitch('front-desk-lamp', 'Front desk lamp', shade, lampLight, shade.material, bulb),
+    lampSwitch('lounge-floor-lamp', 'Lounge floor lamp', floorShade, pool, floorShade.material));
+  let neonOn = true;
+  lightSwitches.push({ id: 'lounge-sign', label: 'Lounge neon sign', kind: 'light', target: neonFace,
+    isOn: () => neonOn, setOn(on) { neonOn = on; neonWash.visible = on; neonFace.material.color.set(on ? '#ffffff' : '#312338'); } });
+  const activity = createLoungeChat(table, canvas, camera, renderer, getMembers);
   return {
     chat: activity,
+    lightSwitches,
     update(
       time: number,
       reduced: boolean,
@@ -284,7 +304,7 @@ export function createLoungeDetails(
       const flicker = reduced
         ? 0
         : Math.sin(time * 4.1) * 0.025 + Math.sin(time * 6.7) * 0.016;
-      candleLight.intensity = 0.8 + flicker;
+      candleLight.intensity = candleOn ? 0.8 + flicker : 0;
       flame.scale.y = 1.5 + flicker * 2;
     },
   };

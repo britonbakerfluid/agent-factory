@@ -7,7 +7,7 @@ import { blendCamera, cameraPose } from './factory25dCameraMotion';
 import type { createLiveAgents } from './factory25dLiveAgents';
 
 /** A local draft on the selected agent's spot, lit and rendered by the room itself. */
-export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene,
+export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, garage: THREE.Scene,
   agents: ReturnType<typeof createLiveAgents>, canvas: HTMLCanvasElement, renderer: THREE.WebGLRenderer,
   currentCamera: () => THREE.OrthographicCamera, selected: () => string | undefined) {
   const camera = currentCamera().clone(), targetCamera = camera.clone();
@@ -42,7 +42,7 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene,
       const mine = [...agents.entries.values()].filter(entry => entry.session.ownerId === context.ownerId);
       const entry = mine.find(entry => entry.session.sessionId === selected()) ?? mine[0];
       targetId = entry?.session.sessionId;
-      targetScene = entry?.mesh.parent === patio ? patio : factory;
+      targetScene = entry?.mesh.parent === garage ? garage : entry?.mesh.parent === patio ? patio : factory;
       anchor.copy(entry?.mesh.position ?? new THREE.Vector3(1.65, .45, 7.8));
       floor = entry ? anchor.y - entry.baseHeight : .018;
       if (entry) { hiddenMesh = entry.mesh; originalVisible = hiddenMesh.visible; hiddenMesh.visible = false; }

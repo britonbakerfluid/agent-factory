@@ -1,5 +1,6 @@
 import { clamp01 } from '../sky/skyPhase';
 import type { WeatherVisualState } from '../sky/weather';
+import { createPropAudio } from './factory25dPropAudio';
 
 export interface SoundEnvironment {
   weather: WeatherVisualState;
@@ -27,6 +28,7 @@ export function soundscapeMix({ weather, patio01, window01, night, reading }: So
     birds: fair && !night ? (0.012 + outside * 0.21 + glass * 0.04) * focus : 0,
     crickets: fair && night ? (0.003 + outside * 0.082 + glass * 0.012) * focus : 0,
     effects: 0.32 * (1 - outside) * (1 - glass * 0.65) * focus,
+    thunder: (0.2 + outside * 0.28 + glass * 0.06) * focus,
   };
 }
 
@@ -89,6 +91,52 @@ export function createSoundscape(context: BaseAudioContext, samples: SoundSample
   const crickets = bed('crickets', 5200);
   const birds = bus();
   const effects = bus();
+  const props = createPropAudio(context, effects);
+  const thunderBus = bus();
+  let thunderBuffer: AudioBuffer | undefined;
+  let lastThunder = -Infinity;
+  let activeThunder: AudioBufferSourceNode | undefined;
+
+  function stopThunder() {
+    activeThunder?.stop(); activeThunder = undefined;
+  }
+
+  function thunder(energy: number, pan: number) {
+    if (disposed || context.currentTime - lastThunder < 4) return;
+    const gain = clamp01(Number.isFinite(energy) ? energy : 0);
+    if (!gain) return;
+    lastThunder = context.currentTime;
+    // Generate one reusable low rumble after the first audible strike. It has
+    // its own rolling envelope, with no new asset requests or autoplay path.
+    if (!thunderBuffer) {
+      thunderBuffer = context.createBuffer(1, Math.ceil(context.sampleRate * 3.8), context.sampleRate);
+      const data = thunderBuffer.getChannelData(0);
+      let brown = 0, seed = 1281;
+      for (let i = 0; i < data.length; i++) {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        const white = seed / 2147483648 - 1;
+        brown = (brown + white * .055) / 1.055;
+        const roll = .65 + Math.sin(i / context.sampleRate * 7.3) * .22;
+        data[i] = (brown * 2.8 + white * .12) * roll;
+      }
+    }
+    const source = context.createBufferSource(); source.buffer = thunderBuffer;
+    const filter = context.createBiquadFilter(); filter.type = 'lowpass'; filter.Q.value = .6;
+    const envelope = context.createGain(), panner = context.createStereoPanner();
+    panner.pan.value = Math.max(-.7, Math.min(.7, Number.isFinite(pan) ? pan : 0));
+    const start = context.currentTime;
+    filter.frequency.setValueAtTime(900, start); filter.frequency.setTargetAtTime(110, start + .12, .7);
+    envelope.gain.setValueAtTime(0, start);
+    envelope.gain.linearRampToValueAtTime(gain * .8, start + .08);
+    envelope.gain.linearRampToValueAtTime(gain * .4, start + .55);
+    envelope.gain.linearRampToValueAtTime(gain * .16, start + 1.9);
+    envelope.gain.linearRampToValueAtTime(0, start + 3.8);
+    source.connect(filter).connect(envelope).connect(panner).connect(thunderBus);
+    release(source, [filter, envelope, panner]);
+    const releaseThunder = source.onended;
+    source.onended = event => { if (activeThunder === source) activeThunder = undefined; releaseThunder?.call(source, event); };
+    activeThunder = source; source.start(start); source.stop(start + 3.8);
+  }
 
   function pump() {
     for (const loop of loops) {
@@ -125,6 +173,7 @@ export function createSoundscape(context: BaseAudioContext, samples: SoundSample
   }
 
   return {
+    input: master,
     setVolume(value: number, seconds = 0.25) {
       if (!disposed) glide(master.gain, soundVolume(value), context.currentTime, seconds);
     },
@@ -140,16 +189,26 @@ export function createSoundscape(context: BaseAudioContext, samples: SoundSample
       glide(crickets.level.gain, mix.crickets, t);
       glide(birds.gain, mix.birds, t, 0.25);
       glide(effects.gain, mix.effects, t);
+      glide(thunderBus.gain, mix.thunder, t);
       return mix;
     },
     ballTap(energy = 1) { oneShot('bounce', effects, 0.22 * clamp01(energy), 1.08); },
     ballBounce(energy = 1) { oneShot('bounce', effects, 0.38 * clamp01(energy), 0.94 + Math.random() * 0.06); },
     ballSwish() { oneShot(Math.random() < 0.5 ? 'swish-a' : 'swish-b', effects, 0.5, 0.96 + Math.random() * 0.06); },
     bird() { oneShot(Math.random() < 0.5 ? 'bird-a' : 'bird-b', birds, 0.85, 1, Math.random() * 1.2 - 0.6); },
-    get activeSourceCount() { return sources.size; },
+    thunder(energy = 1, pan = 0) { thunder(energy, pan); },
+    stopThunder,
+    vendingSelect() { props.play('vending-select'); },
+    vendingDispense() { props.play('vending-dispense'); },
+    vendingLand(energy = 1) { props.play('vending-land', energy); },
+    lampSwitch(_on = true) { props.play('lamp-switch'); },
+    candle(on: boolean) { props.play(on ? 'candle-on' : 'candle-off'); },
+    stopPropSounds: props.stop,
+    get activeSourceCount() { return sources.size + props.activeVoiceCount; },
     dispose() {
       if (disposed) return;
       disposed = true;
+      props.dispose();
       for (const source of sources) source.stop();
       nodes.forEach(node => node.disconnect());
     },
