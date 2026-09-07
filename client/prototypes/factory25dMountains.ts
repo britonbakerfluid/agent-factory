@@ -25,7 +25,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   let depthOfField = false;
   scene.add(landscape.group);
   const bear = createRidgeBear(scene, originalLandscape.hazeColor, (x, z) => landscape.heightAt(x, z));
-  const climbers = createMountainClimbers(scene, (x, z) => landscape.heightAt(x, z));
+  const climbers = createMountainClimbers(scene, (x, z) => landscape.heightAt(x, z), originalLandscape.hazeColor);
   const birds = createValleyBirds(scene, landscape.hazeColor);
   const fill = new THREE.HemisphereLight('#c8d5e5', '#7b8998', 1.35);
   const sunlight = new THREE.DirectionalLight('#fff1d9', 2.2);
@@ -35,6 +35,9 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   Object.assign(sunlight.shadow.camera, { left: -12, right: 12, top: 10, bottom: -8, near: 0.1, far: 35 });
   sunlight.shadow.bias = -0.0005;
   scene.add(fill, sunlight, sunlight.target);
+  const lightningLight=new THREE.DirectionalLight('#bdd6ff',0);
+  lightningLight.position.set(-2,8,3);lightningLight.target.position.set(0,0,-1);
+  scene.add(lightningLight,lightningLight.target);
   const target = new THREE.WebGLRenderTarget(800, Math.round(800 * viewHeight / 15.84), {
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     generateMipmaps: false, depthBuffer: true,
@@ -82,6 +85,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   const previousClearColor = new THREE.Color();
   return {
     texture: target.texture,
+    setLightning(pulse:number){const intensity=THREE.MathUtils.clamp(pulse,0,1)*2.4;if(Math.abs(intensity-lightningLight.intensity)>.002){lightningLight.intensity=intensity;dirty=true;}},
     setVisitors(members: readonly TeamMember[]) { climbers.setVisitors(members); dirty = true; },
     async setLandscape(style: 'current' | 'blender') {
       requestedLandscape = style;

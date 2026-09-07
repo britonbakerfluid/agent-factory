@@ -1,5 +1,6 @@
 import type { WebSocket } from '@fastify/websocket';
-import type { ControlInputState, FacingDirection, ManualControlState } from '../shared/types.js';
+import type { ControlInputState, FacingDirection, ManualControlState, ManualElevatorTrip } from '../shared/types.js';
+import { MANUAL_ELEVATOR_DURATION_MS, manualElevatorLanding } from '../shared/factory25d-manual-travel.js';
 import {
   CONTROL_INPUT_TIMEOUT_MS,
   CONTROL_MOVE_SPEED,
@@ -19,6 +20,8 @@ interface ControlLease {
   y: number;
   facing: FacingDirection;
   moving: boolean;
+  elevatorTrip?: ManualElevatorTrip;
+  awaitingNeutralInput: boolean;
   lastInputAt: number;
   lastTickAt: number;
   lastBroadcastAt: number;
@@ -107,6 +110,7 @@ export class ControlManager {
       y: safeCoordinate(canonicalPosition.y, 240, this.state.worldBounds.minY, this.state.worldBounds.maxY),
       facing: 'down',
       moving: false,
+      awaitingNeutralInput: false,
       lastInputAt: timestamp,
       lastTickAt: timestamp,
       lastBroadcastAt: timestamp,
@@ -115,7 +119,9 @@ export class ControlManager {
 
     this.bySocket.set(socket, lease);
     this.bySession.set(sessionId, lease);
-    this.state.setManualControl(sessionId, this.toState(lease));
+    const controlled = this.state.setManualControl(sessionId, this.toState(lease))?.manualControl;
+    // Taking over an automatic lift passenger can move the claim to a safe door.
+    if (controlled) { lease.x = controlled.x; lease.y = controlled.y; }
     this.broadcast.sendTo(socket, { type: 'control_result', success: true, action: 'claim', sessionId });
     return true;
   }
@@ -129,16 +135,22 @@ export class ControlManager {
     const lease = this.authorizedLease(socket, ownerId, sessionId);
     if (!lease) return false;
 
-    lease.input = {
+    const nextInput = {
       up: input?.up === true,
       down: input?.down === true,
       left: input?.left === true,
       right: input?.right === true,
     };
+    lease.lastInputAt = this.now();
+    if (lease.elevatorTrip) return true;
+    if (lease.awaitingNeutralInput) {
+      if (!Object.values(nextInput).some(Boolean)) lease.awaitingNeutralInput = false;
+      return true;
+    }
+    lease.input = nextInput;
     const dx = Number(lease.input.right) - Number(lease.input.left);
     const dy = Number(lease.input.down) - Number(lease.input.up);
     lease.facing = this.resolveFacing(lease.facing, dx, dy);
-    lease.lastInputAt = this.now();
     return true;
   }
 
@@ -167,6 +179,8 @@ export class ControlManager {
     const lease = this.authorizedLease(socket, ownerId, sessionId);
     if (!lease) return false;
 
+    if (lease.elevatorTrip) return false;
+
     const timestamp = this.now();
     if (timestamp - lease.lastShotAt < CONTROL_SHOOT_COOLDOWN_MS) return false;
     lease.lastShotAt = timestamp;
@@ -186,6 +200,21 @@ export class ControlManager {
       }
       if (session.ownerId !== lease.ownerId) {
         this.releaseSession(lease.sessionId, 'Agent ownership changed');
+        continue;
+      }
+
+      if (lease.elevatorTrip) {
+        lease.lastTickAt = timestamp;
+        if (timestamp >= lease.elevatorTrip.arrivesAt) {
+          const arrival = lease.elevatorTrip.arrival;
+          lease.x = arrival.x; lease.y = arrival.y;
+          delete lease.elevatorTrip;
+          lease.input = { ...STOPPED_INPUT };
+          lease.awaitingNeutralInput = true;
+          lease.facing = 'down'; lease.moving = false;
+          lease.lastBroadcastAt = timestamp;
+          this.state.updateManualControl(lease.sessionId, this.toState(lease));
+        }
         continue;
       }
 
@@ -216,6 +245,16 @@ export class ControlManager {
           this.state.worldBounds.maxY,
         );
         const constrained = this.state.constrainStep(before, { x: lease.x, y: lease.y });
+        const entry = this.state.manualElevatorEntry(before, constrained);
+        if (entry && !lease.awaitingNeutralInput) {
+          lease.x = entry.departure.x; lease.y = entry.departure.y;
+          lease.elevatorTrip = { ...entry, startedAt: timestamp, arrivesAt: timestamp + MANUAL_ELEVATOR_DURATION_MS };
+          lease.input = { ...STOPPED_INPUT };
+          lease.facing = 'up'; lease.moving = false;
+          lease.lastBroadcastAt = timestamp;
+          this.state.updateManualControl(lease.sessionId, this.toState(lease));
+          continue;
+        }
         lease.x = constrained.x; lease.y = constrained.y;
         lease.facing = this.resolveFacing(lease.facing, dx, dy);
       }
@@ -254,6 +293,13 @@ export class ControlManager {
     notifySocket: boolean,
     preserveControlState = false,
   ): void {
+    if (lease.elevatorTrip) {
+      const landing = manualElevatorLanding(lease.elevatorTrip, this.now());
+      lease.x = landing.x; lease.y = landing.y;
+      delete lease.elevatorTrip;
+      lease.moving = false; lease.facing = 'down';
+      this.state.updateManualControl(lease.sessionId, this.toState(lease));
+    }
     this.bySocket.delete(lease.socket);
     this.bySession.delete(lease.sessionId);
     if (!preserveControlState) this.state.clearManualControl(lease.sessionId);
@@ -283,6 +329,7 @@ export class ControlManager {
       y: lease.y,
       facing: lease.facing,
       moving: lease.moving,
+      ...(lease.elevatorTrip ? { elevatorTrip: { ...lease.elevatorTrip } } : {}),
     };
   }
 

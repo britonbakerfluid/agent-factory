@@ -1,0 +1,47 @@
+{
+  "productionContainer": true,
+  "environment": "factory25d",
+  "workstationCount": 25,
+  "generalGarageStations": 6,
+  "miniLaptop": true,
+  "visitorSeesAgents": 7,
+  "assets": 4,
+  "contributionRefresh": "unconfigured",
+  "results": [
+    {
+      "slot": 18,
+      "activity": "reading",
+      "miniLaptop": false
+    },
+    {
+      "slot": 19,
+      "activity": "reading",
+      "miniLaptop": false
+    },
+    {
+      "slot": 20,
+      "activity": "reading",
+      "miniLaptop": false
+    },
+    {
+      "slot": 21,
+      "activity": "reading",
+      "miniLaptop": false
+    },
+    {
+      "slot": 22,
+      "activity": "reading",
+      "miniLaptop": false
+    },
+    {
+      "slot": 23,
+      "activity": "reading",
+      "miniLaptop": false
+    },
+    {
+      "slot": 24,
+      "activity": "reading",
+      "miniLaptop": true
+    }
+  ]
+}

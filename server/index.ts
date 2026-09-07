@@ -1,6 +1,7 @@
 import { TeamRoster } from './team-roster.js';
 import { VisitorBasketball } from './visitor-basketball.js';
 import { registerTeamRoutes } from './routes/team.js';
+import { ContributionService, createContributionFilePersistence, registerContributionRoutes } from './contributions.js';
 import { watchPresenceConnection } from './ws/presence-heartbeat.js';
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
@@ -125,10 +126,17 @@ async function main() {
     const profile = avatarProfiles.get(ownerId); return profile.saved ? profile.avatar : undefined;
   });
   await team.initialize();
+  const contributions = new ContributionService({
+    token: process.env.AF_CONTRIBUTIONS_GITHUB_TOKEN,
+    persistence: process.env.AF_CONTRIBUTIONS_CACHE_PATH
+      ? createContributionFilePersistence(process.env.AF_CONTRIBUTIONS_CACHE_PATH)
+      : { load: () => repository.loadContributionRecords(), save: records => repository.saveContributionRecords(records) },
+  });
   const persistence = new WorldPersistence(repository);
   const broadcast = new BroadcastManager();
   const controls = new ControlManager(state, broadcast);
   const grabs = new GrabManager(state, broadcast);
+  state.setGrabbedSessionCheck(sessionId => grabs.activeGrabs().some(grab => grab.sessionId === sessionId));
   const visitorBalls = new VisitorBasketball(broadcast);
 
   // HTTP routes
@@ -136,6 +144,8 @@ async function main() {
   registerAuthRoutes(app, auth, authHandoffs);
   registerAvatarRoutes(app, auth, avatarProfiles);
   registerTeamRoutes(app, team);
+  registerContributionRoutes(app, contributions);
+  contributions.start();
 
   // WebSocket endpoint
   app.get('/ws', { websocket: true }, (socket, request) => {
@@ -197,6 +207,18 @@ async function main() {
             );
             break;
 
+          case 'garage_car': {
+            const ownerId = broadcast.getSocketPrincipal(socket)?.ownerId;
+            const sessionId = typeof msg.sessionId === 'string' ? msg.sessionId : '';
+            const session = state.get(sessionId);
+            const result = !ownerId ? { success: false, error: 'Connect this browser to visit a car with your agent.' }
+              : !session || session.ownerId !== ownerId ? { success: false, error: 'Choose one of your own agents.' }
+              : grabs.activeGrabs().some(grab => grab.sessionId === sessionId) ? { success: false, error: 'Put your agent down before visiting a car.' }
+              : state.requestGarageCarVisit(ownerId, sessionId, msg.car);
+            broadcast.sendTo(socket, { type: 'garage_car_result', sessionId, ...result });
+            break;
+          }
+
           case 'control_input':
             controls.updateInput(
               socket,
@@ -222,9 +244,11 @@ async function main() {
             );
             break;
 
-          case 'grab_start':
-            grabs.begin(socket, broadcast.getSocketPrincipal(socket)?.username, parseGrabTarget(msg), Number(msg.x), Number(msg.y));
+          case 'grab_start': {
+            const target = parseGrabTarget(msg);
+            if (grabs.begin(socket, broadcast.getSocketPrincipal(socket)?.username, target, Number(msg.x), Number(msg.y))) state.cancelGarageCarVisit(target.sessionId);
             break;
+          }
 
           case 'grab_move':
             grabs.move(socket, broadcast.getSocketPrincipal(socket)?.username, parseGrabTarget(msg), Number(msg.x), Number(msg.y));
@@ -337,6 +361,7 @@ async function main() {
     clearInterval(staleTimer);
     clearInterval(worldTimer);
     clearInterval(teamTimer);
+    contributions.dispose();
     registry.stop();
     controls.stop();
     grabs.stop();

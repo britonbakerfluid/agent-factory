@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { lastSeenLabel, type TeamMember, type TeamSnapshot } from '@shared/team';
 import { parseAvatarConfig } from '@shared/avatar-customization';
-import { avatarSheet } from './factory25dAvatar';
+import { contributionLevel, type ContributionRecord } from '@shared/factory-contributions';
+import { avatarPortrait, createProfilePortrait } from './factory25dPortrait';
 import { factoryHost, onFactoryConnection } from './factory25dBoardData';
 import { blendCamera, cameraPose, type CameraPose } from './factory25dCameraMotion';
 import { propPart, standard } from './factory25dProps';
 import './factory25dTeamDesk.css';
+import './factory25dContributions.css';
 
 // One physical display size drives the model, camera framing and live UI projection.
 const DISPLAY = { width: .686, height: .486, frameWidth: .74, frameHeight: .54, faceZ: .024 };
@@ -13,7 +15,8 @@ const ZOOM_DURATION = 900;
 
 export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   roomCamera: THREE.OrthographicCamera, renderer: THREE.WebGLRenderer, onOpen: () => void,
-  onVisitors?: (members: readonly TeamMember[]) => void) {
+  onVisitors?: (members: readonly TeamMember[]) => void,
+  contributionFor: (username: string) => ContributionRecord | undefined = () => undefined) {
   const abort = new AbortController(), events = { signal: abort.signal };
   const terminal = new THREE.Group(); terminal.position.set(-3.2, .53, 4.66); parent.add(terminal);
   const casing = standard('#364344', .7), edge = standard('#566363', .6);
@@ -49,15 +52,10 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   let from = cameraPose(roomCamera), room = cameraPose(roomCamera);
   let width = 0, height = 0, lastPoll = -Infinity, previousTime = 0;
   let data: TeamSnapshot | undefined, unavailable = false, signature = '';
+  const emptyMembers: readonly TeamMember[] = [];
   let request: AbortController | undefined;
-  const portraits = new Map<string, { signature: string; canvas: HTMLCanvasElement }>();
   function portrait(member: TeamMember) {
-    const signature = JSON.stringify(member.avatar), previous = portraits.get(member.id);
-    if (previous?.signature === signature) return previous.canvas;
-    const image = document.createElement('canvas'); image.width = image.height = 48;
-    const context = image.getContext('2d')!; context.imageSmoothingEnabled = false;
-    context.drawImage(avatarSheet(member.avatar, ['idle']).canvas, 0, 0, 32, 32, 0, 0, 48, 48);
-    portraits.set(member.id, { signature, canvas: image }); return image;
+    return avatarPortrait(member.avatar);
   }
   function paint() {
     const members = data?.members ?? [], now = Date.now() + (data ? data.serverTime - previousTime : 0);
@@ -66,23 +64,29 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
     status.textContent = unavailable ? 'reconnecting · showing the last update'
       : data?.historyAvailable === false ? 'live now · visit history is waiting to save'
       : 'people join this list when they connect';
-    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now)])) + unavailable;
+    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now), contributionFor(member.name)])) + unavailable;
     if (signature !== next) {
       signature = next; const scroll = list.scrollTop; list.replaceChildren();
       for (const member of members) {
         const row = document.createElement('div'); row.className = 'team-person'; row.setAttribute('role', 'listitem');
         row.dataset.online = String(member.online && !unavailable);
-        const image = document.createElement('span'); image.className = 'team-person-portrait'; image.setAttribute('aria-hidden', 'true');
-        image.append(portrait(member).cloneNode());
-        const imageCanvas = image.firstChild as HTMLCanvasElement;
-        imageCanvas.getContext('2d')!.drawImage(portrait(member), 0, 0);
+        const image = createProfilePortrait(member.avatar); image.classList.add('team-person-portrait');
         const details = document.createElement('div'), name = document.createElement('strong'), seen = document.createElement('span');
         name.textContent = member.name;
+        const heading = document.createElement('div'); heading.className = 'team-person-heading'; heading.append(name);
+        const contribution = contributionFor(member.name);
+        if (contribution) {
+          const level = contributionLevel(contribution.mergedPullRequests).level;
+          const badge = document.createElement('span'); badge.className = 'agent-level';
+          badge.textContent = `LV ${level}`; badge.setAttribute('aria-label', `level ${level}`);
+          badge.title = `${contribution.mergedPullRequests} PRs merged into fluid/main · @${contribution.githubLogin}`;
+          heading.append(badge);
+        }
         seen.textContent = unavailable ? 'connection unavailable' : member.online
           ? member.agents ? `here · ${member.agents} ${member.agents === 1 ? 'agent' : 'agents'}` : 'here · in the room'
           : lastSeenLabel(member.lastSeen, now);
         const dot = document.createElement('span'); dot.className = 'team-person-dot'; dot.setAttribute('aria-hidden', 'true');
-        details.append(name, seen); row.append(image, details, dot); list.append(row);
+        details.append(heading, seen); row.append(image, details, dot); list.append(row);
       }
       if (!members.length) { const empty = document.createElement('p'); empty.className = 'team-desk-empty'; empty.textContent = unavailable ? 'the team list is temporarily unavailable' : data ? 'the first person to connect will appear here' : 'checking who’s here…'; list.append(empty); }
       list.scrollTop = scroll;
@@ -92,8 +96,15 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
       members.slice(0, 3).forEach((member, index) => {
         const y = 53 + index * 48;
         ink.globalAlpha = member.online && !unavailable ? 1 : .4; ink.drawImage(portrait(member), 18, y, 42, 42); ink.globalAlpha = 1;
+        const contribution = contributionFor(member.name);
         ink.fillStyle = member.online && !unavailable ? '#d8e6df' : '#91a09e'; ink.font = '15px "Geist Pixel", monospace';
-        ink.fillText(member.name, 72, y + 18, 235);
+        ink.fillText(member.name, 72, y + 18, contribution ? 186 : 235);
+        if (contribution) {
+          ink.fillStyle = '#172c29'; ink.fillRect(272, y + 4, 59, 19);
+          ink.strokeStyle = '#769180'; ink.strokeRect(272.5, y + 4.5, 58, 18);
+          ink.font = '11px "Geist Pixel", monospace'; ink.fillStyle = '#d9ecc9';
+          ink.fillText(`LV ${contributionLevel(contribution.mergedPullRequests).level}`, 278, y + 18);
+        }
         ink.font = '10px "Geist Pixel", monospace'; ink.fillStyle = '#889f9a';
         ink.fillText(unavailable ? 'reconnecting' : member.online ? 'here now' : lastSeenLabel(member.lastSeen, now), 72, y + 34, 240);
       });
@@ -163,6 +174,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   };
   paint(); void refresh();
   return {
+    members: (): readonly TeamMember[] => data?.members ?? emptyMembers,
     camera, isActive: () => active, focusPoint: () => desk.localToWorld(focus.set(0, 0, DISPLAY.faceZ)),
     update(now: number, visible: boolean) {
       canOpen = visible && !document.body.classList.contains('inspect-open'); trigger.hidden = active || !canOpen;

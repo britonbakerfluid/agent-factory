@@ -3,13 +3,30 @@ import { PATIO, patioFloorHeight } from '@shared/factory25d-patio';
 import { propPart, standard } from './factory25dProps';
 import { contactShadow } from './factory25dContactShadows';
 import { createPatioGarden } from './factory25dPatioGarden';
+import type { SceneLightSwitch } from './factory25dLightSwitches';
 
 /** The patio's furnishings live here so the garage can be integrated independently. */
 export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandardMaterial) {
   const iron = standard('#344742', 1), wood = standard('#806d50', 1), wall = standard('#818579', 1);
   const cushion = standard('#d5d3ba', 1), teal = standard('#486965', 1);
   const glow = new THREE.MeshBasicMaterial({ color: '#ffcf89' });
-  const warmLights: THREE.PointLight[] = [];
+  const stairGlow = glow.clone();
+  const switchMaterials = new Set<THREE.MeshBasicMaterial>([stairGlow]);
+  const stairEmitters: THREE.Mesh[] = [];
+  const lightSwitches: SceneLightSwitch[] = [];
+  const warmLights: Array<{ light: THREE.PointLight; isOn: () => boolean }> = [];
+  let warmBrightness = 1.25;
+  function switchFixture(id: string, label: string, target: THREE.Object3D, bulbs: THREE.MeshBasicMaterial[], lights: THREE.PointLight[], hitTargets?: THREE.Object3D[]) {
+    let on = true;
+    const isOn = () => on;
+    bulbs.forEach(material => switchMaterials.add(material));
+    for (const light of lights) warmLights.push({ light, isOn });
+    lightSwitches.push({ id, label, kind: 'lamp', target, hitTargets, isOn, setOn(enabled) {
+      on = enabled;
+      for (const bulb of bulbs) bulb.color.set(on ? '#ffcf89' : '#423d33');
+      for (const light of lights) light.intensity = on ? warmBrightness : 0;
+    } });
+  }
   const garden = createPatioGarden(room);
   function deck(left: number, right: number, back: number, front: number, y: number) {
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(right - left, front - back), timber);
@@ -32,18 +49,21 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
     propPart(room, [stairs.right - stairs.left, .032, .046], [(stairs.left + stairs.right) / 2, y + .014, z + tread / 2 - .025], timber);
     propPart(room, [stairs.right - stairs.left, rise, .025], [(stairs.left + stairs.right) / 2, y + rise / 2, z - tread / 2], timber);
     for (const x of [stairs.left + .16, stairs.right - .16]) {
-      propPart(room, [.10, .045, .008], [x, y + rise / 2, z - tread / 2 + .018], glow);
+      stairEmitters.push(propPart(room, [.10, .045, .008], [x, y + rise / 2, z - tread / 2 + .018], stairGlow));
     }
   }
   for (const x of [17.21, 19.99]) propPart(room, [.27, 1.42, 2.4], [x, -.41, 1.45], wall);
 
-  function lantern(x: number, z: number, y: number, pooled = false) {
+  function lantern(x: number, z: number, y: number, index: number, pooled = false) {
+    const lampGlow = glow.clone();
     propPart(room, [.18, .28, .18], [x, y + .14, z], iron);
-    propPart(room, [.116, .18, .116], [x, y + .145, z], glow);
+    const bulb = propPart(room, [.116, .18, .116], [x, y + .145, z], lampGlow);
     propPart(room, [.23, .044, .23], [x, y + .295, z], iron);
+    const lights: THREE.PointLight[] = [];
     if (pooled) {
-      const light = new THREE.PointLight('#ffd197', 1, 4, 2); light.position.set(x, y + .38, z); room.add(light); warmLights.push(light);
+      const light = new THREE.PointLight('#ffd197', 1, 4, 2); light.position.set(x, y + .38, z); room.add(light); lights.push(light);
     }
+    switchFixture(`patio-lantern-${index}`, `Patio lantern ${index}`, bulb, index === 1 ? [lampGlow, stairGlow] : [lampGlow], lights, index === 1 ? [bulb, ...stairEmitters] : undefined);
   }
   function railing(left: number, right: number, z: number, y: number, height = .72) {
     for (let x = left; x <= right + .01; x += (right - left) / Math.ceil((right - left) / 2.6)) propPart(room, [.065, height, .065], [x, y + height / 2, z], iron);
@@ -61,11 +81,14 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
   for (const x of [9.56, 17.14]) propPart(room, [.18, .18, 3.94], [x, 2.8, -2.22], iron);
   for (let z = -3.92; z <= -.40; z += .72) propPart(room, [7.8, .09, .10], [13.35, 2.89, z], wood);
   for (const x of [11, 16]) {
+    const lampGlow = glow.clone();
     propPart(room, [.016, 1.04, .016], [x, 2.17, -.85], iron);
     const shade = new THREE.Mesh(new THREE.ConeGeometry(.19, .16, 8, 1, true), iron);
     shade.position.set(x, 1.65, -.85); room.add(shade);
-    propPart(room, [.20, .025, .20], [x, 1.58, -.85], glow);
-    const light = new THREE.PointLight('#ffd5a1', 1, 4, 2); light.position.set(x, 1.50, -.85); room.add(light); warmLights.push(light);
+    propPart(room, [.20, .025, .20], [x, 1.58, -.85], lampGlow);
+    const light = new THREE.PointLight('#ffd5a1', 1, 4, 2); light.position.set(x, 1.50, -.85); room.add(light);
+    const index = x === 11 ? 1 : 2;
+    switchFixture(`patio-canopy-lamp-${index}`, `Patio canopy lamp ${index}`, shade, [lampGlow], [light]);
   }
   // A mountain-facing bench sits behind the third desk, clear of the entry route.
   propPart(room, [4.55, .38, .8], [19.775, .19, -3.55], wood);
@@ -98,13 +121,21 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
   propPart(lounge, [1.4, .45, 1.05], [11.5, low + .235, 9.725], wood);
   propPart(lounge, [1.47, .08, 1.12], [11.5, low + .49, 9.725], iron);
   // A recessed ember bed gives the lounge a quiet focal point, with no audio loop.
-  propPart(lounge, [.88, .028, .54], [11.5, low + .54, 9.725], standard('#342d28', 1));
+  const fireBed = propPart(lounge, [.88, .028, .54], [11.5, low + .54, 9.725], standard('#342d28', 1));
   const flames: THREE.Mesh[] = [];
   for (let i = 0; i < 8; i++) {
     const flame = new THREE.Mesh(new THREE.ConeGeometry(.05, .20 + (i % 3) * .045, 4), new THREE.MeshBasicMaterial({ color: i % 2 ? '#ffd488' : '#d98b48' }));
     flame.position.set(11.18 + i * .09, low + .64, 9.725 + Math.sin(i * 2) * .14); lounge.add(flame); flames.push(flame);
   }
-  const fire = new THREE.PointLight('#efae65', .8, 3.8, 2); fire.position.set(11.5, low + 1, 9.7); lounge.add(fire); warmLights.push(fire);
+  const fire = new THREE.PointLight('#efae65', .8, 3.8, 2); fire.position.set(11.5, low + 1, 9.7); lounge.add(fire);
+  let fireOn = true, fireWeatherAllows = true, fireBrightness = .4;
+  function updateFire() {
+    for (const flame of flames) flame.visible = fireOn && fireWeatherAllows;
+    fire.intensity = fireOn && fireWeatherAllows ? fireBrightness : 0;
+  }
+  lightSwitches.push({ id: 'patio-fire-bowl', label: 'Patio fire bowl', kind: 'candle', target: fireBed,
+    hitTargets: [fireBed, ...flames],
+    isOn: () => fireOn, setOn(on) { fireOn = on; updateFire(); } });
 
   garden.tree(8.85, -3.35, 0, .9); garden.tree(23.15, -3.35, 0, 1.12, 'pine');
   garden.tree(8.82, 2.475, low, .95); garden.tree(23.15, 2.475, low, 1.05, 'pine');
@@ -123,11 +154,12 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
   // Vines drape from the canopy without filling the mountain view with a wall.
   garden.border(17.03, -2.17, 2.89, .25, 3.15, true);
   garden.finish();
-  for (const [x, z, y] of [[17.21, 2.36, .3], [19.99, 2.36, .3], [9.65, .18, .54], [22.9, .18, .54], [8.4, 11.6, low], [15.4, 11.6, low], [22.7, 11.6, low]]) lantern(x, z, y, x === 17.21 || x === 22.7);
-  return { update(snow: number, rain: number, night: boolean, time: number, reducedMotion = false) {
+  for (const [index, [x, z, y]] of [[17.21, 2.36, .3], [19.99, 2.36, .3], [9.65, .18, .54], [22.9, .18, .54], [8.4, 11.6, low], [15.4, 11.6, low], [22.7, 11.6, low]].entries()) lantern(x, z, y, index + 1, x === 17.21 || x === 22.7);
+  return { lightSwitches, dispose() { switchMaterials.forEach(material => material.dispose()); glow.dispose(); }, update(snow: number, rain: number, night: boolean, time: number, reducedMotion = false) {
     garden.update(snow, rain, time, reducedMotion);
-    for (const light of warmLights) light.intensity = night ? 2.8 : 1.25;
-    flames.forEach((flame, i) => { flame.scale.y = 1 + Math.sin(time * 3.5 + i * 2) * .12; flame.visible = rain < .65 && snow < .5; });
-    fire.intensity = (rain < .65 && snow < .5) ? (night ? 1.2 : .4) : 0;
+    warmBrightness = night ? 2.8 : 1.25;
+    for (const { light, isOn } of warmLights) light.intensity = isOn() ? warmBrightness : 0;
+    flames.forEach((flame, i) => { flame.scale.y = reducedMotion ? 1 : 1 + Math.sin(time * 3.5 + i * 2) * .12; });
+    fireWeatherAllows = rain < .65 && snow < .5; fireBrightness = night ? 1.2 : .4; updateFire();
   }, floorHeight: patioFloorHeight };
 }

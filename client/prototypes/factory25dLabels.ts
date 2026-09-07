@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { contributionLevel, type ContributionRecord } from '@shared/factory-contributions';
+import './factory25dContributions.css';
 
 // Seven-pixel lettering survives the room's low-resolution render without
 // resampling a tiny system font inside a mostly empty large texture.
@@ -69,26 +71,45 @@ export function signTexture(text: string, ink: string, background: string, paddi
   return texture;
 }
 
+let nameTagId = 0;
+/** Follow the painted sprite through lifts, turns and scaling, including before render. */
+export function projectNameTagAnchor(object: THREE.Object3D, floorY: number, camera: THREE.Camera,
+  target: THREE.Vector3, localFeet?: THREE.Vector3) {
+  if (localFeet) object.localToWorld(target.copy(localFeet));
+  else { object.getWorldPosition(target); target.y = floorY; }
+  return target.project(camera);
+}
+
 export function createNameTag(name: string, working: boolean, parent: HTMLElement) {
   const element = document.createElement('div');
   element.className = 'agent-label';
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'agent-name';
-  button.textContent = name;
+  const nameText = document.createElement('span'); nameText.className = 'agent-name-text'; nameText.textContent = name;
+  const badge = document.createElement('span'); badge.className = 'agent-level'; badge.hidden = true;
+  button.append(nameText);
   const details = document.createElement('div');
   details.className = 'agent-details';
-  details.id = `agent-details-${parent.querySelectorAll('.agent-label').length}`;
+  details.id = `agent-details-${++nameTagId}`;
   details.setAttribute('role', 'tooltip');
   button.setAttribute('aria-describedby', details.id);
   const title = document.createElement('strong');
   title.textContent = name;
+  const heading = document.createElement('div'); heading.className = 'agent-detail-heading';
+  heading.append(title, badge);
   const activity = document.createElement('span');
   activity.className = 'agent-activity';
   activity.textContent = working ? 'working at the station' : 'relaxing in the lounge';
   const source = document.createElement('small');
   source.textContent = 'task details are not available';
-  details.append(title, activity, source);
+  const contributions = document.createElement('div'); contributions.className = 'agent-contributions'; contributions.hidden = true;
+  const total = document.createElement('span');
+  const progress = document.createElement('progress');
+  const nextLevel = document.createElement('span'); nextLevel.className = 'agent-next-level';
+  const provenance = document.createElement('small');
+  contributions.append(total, progress, nextLevel, provenance);
+  details.append(heading, activity, source, contributions);
   details.hidden = true;
   element.append(button, details);
   parent.append(element);
@@ -130,8 +151,20 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
     element,
     dispose() { events.abort(); element.remove(); },
     setDetails(name: string, activityText: string, sourceText: string) {
-      button.textContent = title.textContent = name;
+      nameText.textContent = title.textContent = name;
       activity.textContent = activityText; source.textContent = sourceText;
+    },
+    setContribution(record: ContributionRecord | undefined) {
+      badge.hidden = contributions.hidden = !record;
+      if (!record) { badge.textContent = ''; return; }
+      const rank = contributionLevel(record.mergedPullRequests);
+      badge.textContent = `LV ${rank.level}`;
+      badge.setAttribute('aria-label', `level ${rank.level}`);
+      total.textContent = `${record.mergedPullRequests.toLocaleString('en-US')} ${record.mergedPullRequests === 1 ? 'PR' : 'PRs'} merged into fluid/main`;
+      progress.max = rank.required; progress.value = rank.earned;
+      progress.setAttribute('aria-label', `Level ${rank.level} progress: ${rank.earned} of ${rank.required} PRs`);
+      nextLevel.textContent = `${rank.remaining} ${rank.remaining === 1 ? 'PR' : 'PRs'} to level ${rank.level + 1}`;
+      provenance.textContent = `@${record.githubLogin} · checked ${new Date(record.checkedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
     },
     setActivity(text: string) {
       if (activity.textContent !== text) activity.textContent = text;
@@ -143,15 +176,14 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
       canvas: HTMLCanvasElement,
       visible: boolean,
       occluder?: THREE.Object3D,
+      localFeet?: THREE.Vector3,
     ) {
       element.hidden = !visible;
       if (!visible) {
         close();
         return;
       }
-      object.getWorldPosition(point);
-      point.y = floorY;
-      point.project(camera);
+      projectNameTagAnchor(object, floorY, camera, point, localFeet);
       const x = ((point.x + 1) * canvas.clientWidth) / 2;
       const y = ((1 - point.y) * canvas.clientHeight) / 2;
       if (occluder) {
@@ -169,14 +201,25 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
           }
         }
       }
-      // Anchor to the actual floor/boot position. DOM lettering stays sharp
+      // Anchor to the actual painted boots, including an airborne pose. Lettering stays sharp
       // independently of the intentionally low-resolution room canvas.
-      element.style.transform = `translate(${Math.round(x)}px, ${Math.round(y + 3)}px) translateX(-50%)`;
+      const halfWidth = element.offsetWidth / 2;
+      const labelX = Math.max(halfWidth + 4, Math.min(canvas.clientWidth - halfWidth - 4, x));
+      element.style.transform = `translate(${Math.round(labelX)}px, ${Math.round(y + 2)}px) translateX(-50%)`;
       details.style.setProperty(
         '--detail-shift',
-        `${Math.max(0, 122 - x) - Math.max(0, x + 122 - canvas.clientWidth)}px`,
+        `${Math.max(0, 122 - labelX) - Math.max(0, labelX + 122 - canvas.clientWidth)}px`,
       );
-      details.dataset.above = String(y + 150 > canvas.clientHeight);
+      details.dataset.above = String(y + (contributions.hidden ? 150 : 265) > canvas.clientHeight);
+      // Phone rooms can be shorter than a full contribution card. Keep the
+      // existing popup inside the clipped scene, scrolling only if necessary.
+      if (!details.hidden) {
+        details.style.maxHeight = `${Math.max(90, canvas.clientHeight - 8)}px`;
+        details.style.setProperty('--detail-y', '0px');
+        const panel = details.getBoundingClientRect(), frame = canvas.getBoundingClientRect();
+        const shift = Math.max(frame.top + 4 - panel.top, Math.min(0, frame.bottom - 4 - panel.bottom));
+        details.style.setProperty('--detail-y', `${Math.round(shift)}px`);
+      }
     },
   };
 }

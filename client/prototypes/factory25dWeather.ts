@@ -89,17 +89,19 @@ export function createWindowWeather(scene: THREE.Scene, renderer: THREE.WebGLRen
   let motionTime = 0;
   let blank = true;
   return {
+    cloudMaterial: style === 'volume' ? volumeMesh.material : undefined,
+    dispose() { volume.dispose(); },
     mirrorOutside(parent: THREE.Scene, x: number) {
       // Share sky/cloud textures, but never copy the glass droplet surface outdoors.
       for (const source of [...clouds.map(cloud => cloud.mesh), volumeMesh, outside.mesh]) {
         const copy = source.clone(); copy.position.x += x; parent.add(copy); mirrors.push({source, copy});
       }
     },
-    update(dt: number, weather: WeatherVisualState, palette: SkyPalette, arc = -3, night = false, visible = true) {
+    update(dt: number, weather: WeatherVisualState, palette: SkyPalette, arc = -3, night = false, visible = true, lightning = 0) {
       mirrors.forEach(({source, copy}) => { copy.visible = source.visible; });
       const step = Math.min(Math.max(dt, 0), 0.1);
       const motionScale = reducedMotion.matches ? 0.2 : 1;
-      volume.update(step * motionScale, weather, palette, arc, night, style === 'volume' && visible && !document.hidden);
+      volume.update(step * motionScale, weather, palette, arc, night, style === 'volume' && visible && !document.hidden,lightning);
       motionTime += step * motionScale;
       if (!visible || document.hidden) { accumulated = 1 / 30; return; }
       const weights = cloudLayerWeights(weather);

@@ -13,10 +13,12 @@
 .team-desk-members { overflow:auto; min-height:0; flex:1; padding:8px 18px; scrollbar-width:thin; scrollbar-color:#526e60 transparent; overscroll-behavior:contain; }
 .team-desk-members:focus-visible { outline:1px solid #89b39e; outline-offset:-2px; }
 .team-person { display:flex; align-items:center; gap:13px; padding:9px 4px; min-height:68px; }
-.team-person-portrait { display:block; flex-shrink:0; width:48px; height:48px; border-radius:12px; background:#263536; filter:grayscale(.9); opacity:.55; }
+.team-person-portrait { display:block; flex-shrink:0; width:48px; height:48px; filter:grayscale(.9); opacity:.55; }
 .team-person-portrait canvas { display:block; width:48px; height:48px; image-rendering:pixelated; }
-.team-person[data-online="true"] .team-person-portrait { filter:none; opacity:1; background:#3a5849; box-shadow:0 0 16px #72aa7917; }
+.team-person[data-online="true"] .team-person-portrait { filter:drop-shadow(0 0 8px #72aa7917); opacity:1; }
 .team-person>div { min-width:0; flex:1; }
+.team-person-heading { display:flex; align-items:center; flex-wrap:wrap; gap:5px 8px; }
+.team-person-heading .agent-level { font-size:10px; }
 .team-person strong { display:block; font-size:14px; font-weight:400; overflow-wrap:anywhere; color:#adbab5; }
 .team-person[data-online="true"] strong { color:#eef0df; }
 .team-person>div>span { display:block; font:11px/1.5 'Geist Pixel',monospace; color:#90a29a; margin-top:4px; }

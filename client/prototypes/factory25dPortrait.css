@@ -1,0 +1,2 @@
+.factory-portrait { display:block; flex:none; width:var(--portrait-size,48px); height:var(--portrait-size,48px); }
+.factory-portrait canvas { display:block; width:100%; height:100%; image-rendering:pixelated; }

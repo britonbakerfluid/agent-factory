@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyLandscapeHaze } from './factory25dAtmosphere';
 
 const mix = THREE.MathUtils.lerp;
 const hash = (x: number, z: number) => {
@@ -186,20 +187,13 @@ export function createUtahLandscape(asset?: { geometry: THREE.BufferGeometry; he
         landscapeSnow: snow,
         landscapeWindTime: windTime,
         landscapeWindStrength: windStrength,
-        landscapeHaze: hazeColor,
-        landscapeDistance: { value: distance },
       });
       shader.vertexShader =
-        `varying float landscapeDepth;\nvarying vec3 landscapePoint;\nvarying float landscapeUp;\nuniform float landscapeWindTime;\nuniform float landscapeWindStrength;\n${shader.vertexShader}`.replace(
+        `varying vec3 landscapePoint;\nvarying float landscapeUp;\nuniform float landscapeWindTime;\nuniform float landscapeWindStrength;\n${shader.vertexShader}`.replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
           landscapeUp = max(0.0, normal.y);
           landscapePoint = position;
-          vec4 atmospherePoint = vec4(position, 1.0);
-          #ifdef USE_INSTANCING
-            atmospherePoint = instanceMatrix * atmospherePoint;
-          #endif
-          landscapeDepth = -(modelMatrix * atmospherePoint).z;
           ${
             wind
               ? `float phase = 0.0;
@@ -212,7 +206,7 @@ export function createUtahLandscape(asset?: { geometry: THREE.BufferGeometry; he
         `,
         );
       shader.fragmentShader =
-        `varying float landscapeDepth;\nvarying vec3 landscapePoint;\nvarying float landscapeUp;\nuniform float landscapeSnow;\nuniform vec3 landscapeHaze;\nuniform float landscapeDistance;\n${shader.fragmentShader}`
+        `varying vec3 landscapePoint;\nvarying float landscapeUp;\nuniform float landscapeSnow;\n${shader.fragmentShader}`
           .replace(
             '#include <color_fragment>',
             `#include <color_fragment>
@@ -225,15 +219,10 @@ export function createUtahLandscape(asset?: { geometry: THREE.BufferGeometry; he
           }
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.68, 0.75, 0.84), landscapeSnow * ${wind ? "smoothstep(0.02, 0.28, landscapeUp) * 0.96" : "smoothstep(0.15, 0.8, landscapeUp) * 0.88"});
         `,
-          )
-          .replace(
-            '#include <opaque_fragment>',
-            `float aerialDepth = max(landscapeDistance, smoothstep(-1.0, 18.0, landscapeDepth) * 0.58);
-          outgoingLight = mix(outgoingLight, landscapeHaze, aerialDepth);
-          #include <opaque_fragment>`,
           );
     };
     result.customProgramCacheKey = () => `utah-layered-${distance}-${vertexColors}-${wind}-${ground}`;
+    applyLandscapeHaze(result, hazeColor, distance);
     materials.push(result);
     return result;
   }
@@ -439,7 +428,7 @@ export function createUtahLandscape(asset?: { geometry: THREE.BufferGeometry; he
     terrainGeometry.setIndex(terrainIndices);
   }
   const terrainMaterial = material('#ffffff', 0, true, false, true);
-  terrainMaterial.customProgramCacheKey = () => asset ? 'utah-blender-terrain-v1' : 'utah-procedural-terrain-v1';
+  terrainMaterial.customProgramCacheKey = () => asset ? 'utah-blender-terrain-v1' : 'utah-procedural-terrain-v2';
   const shadeEnvironment = terrainMaterial.onBeforeCompile;
   terrainMaterial.onBeforeCompile = (shader, renderer) => {
     shadeEnvironment.call(terrainMaterial, shader, renderer);
@@ -469,7 +458,21 @@ export function createUtahLandscape(asset?: { geometry: THREE.BufferGeometry; he
       float faultX = floor(cell.x + sin(cell.y * 0.043) * 1.3);
       float fracture = step(0.93, fract(sin(faultX * 43.7) * 173.13));
       float slab = step(0.62, fract(sin(floor((cell.x + cell.y * 0.18) / 6.0) * 17.3) * 79.1));
-      diffuseColor.rgb *= 1.0 + variation - exposed * (seam * 0.13 + joint * 0.035 + fracture * 0.16 + slab * 0.035);
+      float westMarks = seam * 0.13 + joint * 0.035 + fracture * 0.16 + slab * 0.035;
+      // Keep the western limestone's blocky courses. On the eastern summit,
+      // x/y-only fractures cut straight across receding ribs like graph paper.
+      // Its relief already supplies the deep cracks; quieter, broken bedding
+      // bends in depth and leaves those modeled gullies readable.
+      float eastBlend = smoothstep(0.0, 1.8, landscapePoint.x);
+      float eastBed = (landscapePoint.y + landscapePoint.x * 0.018 - landscapePoint.z * 0.025
+        + sin(landscapePoint.x * 0.45 + landscapePoint.z * 0.3) * 0.035) * 22.0;
+      vec2 eastCell = floor(vec2(landscapePoint.x * 8.0 + landscapePoint.z * 3.0,
+        eastBed / 4.0 + landscapePoint.z * 0.7));
+      float eastPatch = fract(sin(dot(eastCell, vec2(127.1, 311.7))) * 43758.5453);
+      float eastSeam = (1.0 - step(1.0, mod(floor(eastBed), 9.0))) * step(0.6, eastPatch);
+      float eastVariation = floor(eastPatch * 3.0) * 0.012;
+      diffuseColor.rgb *= 1.0 + mix(variation, eastVariation, eastBlend)
+        - exposed * mix(westMarks, eastSeam * 0.075, eastBlend);
     `);
   };
   const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);

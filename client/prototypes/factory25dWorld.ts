@@ -1,10 +1,30 @@
-import { fromFactoryWorld } from '@shared/factory25d-layout';
+import { fromFactoryWorld, toFactoryWorld, factoryScenePoint, factoryRoomAt, factoryElevatorTripAt, factory25dWaypoints, factoryMovementIsClear, recoverFactoryPosition, FACTORY_ENTRANCE, GARAGE_LEVEL, type FactoryRoom } from '@shared/factory25d-layout';
 import { positionAt } from '@shared/world-layouts';
 import type { EnvironmentType, Position, WorldAgent, WorldMovement } from '@shared/types';
 import { slotPosition } from '@shared/world-layouts';
 import { WORKSTATIONS, routeToStation } from './factory25dWorkstations';
+import { manualElevatorPresentation } from './factory25dManualTravel';
 
 export type RoomPoint = { x: number; z: number };
+const oldEntrance = toFactoryWorld({ x: 6.7, z: 12.8 });
+const isOldEntrance = (point: Position) => Math.hypot(point.x - oldEntrance.x, point.y - oldEntrance.y) < .001;
+const sceneMovements = new WeakMap<WorldMovement, WorldMovement>();
+
+/** Keep valid server routes intact; older servers may still use the hidden front entrance or an older floor plan. */
+export function factoryMovementForScene(movement: WorldMovement): WorldMovement {
+  const cached = sceneMovements.get(movement);
+  if (cached) return cached;
+  let result = movement;
+  if (isOldEntrance(movement.from) || !factoryMovementIsClear(movement)) {
+    const from = recoverFactoryPosition(isOldEntrance(movement.from) ? toFactoryWorld(FACTORY_ENTRANCE) : movement.from);
+    const to = recoverFactoryPosition(movement.to);
+    result = { ...movement, from, to, waypoints: factory25dWaypoints(from, to) };
+    // A failed visibility route is a stationary pose, never a direct walk through its obstacle.
+    if (!factoryMovementIsClear(result)) result = { ...movement, from, to: from, waypoints: undefined };
+  }
+  sceneMovements.set(movement, result);
+  return result;
+}
 export function projectPosition(point: Position, environment: EnvironmentType = 'arcade'): RoomPoint {
   if (environment === 'factory25d') return fromFactoryWorld(point);
   // Preserve server slot IDs across both views, including automatic overflow slots.
@@ -33,6 +53,7 @@ export function pointAlong(path: RoomPoint[], progress: number): RoomPoint {
 }
 
 export function projectMovement(movement: WorldMovement, now: number, environment: EnvironmentType): RoomPoint {
+  if (environment === 'factory25d') return fromFactoryWorld(positionAt(factoryMovementForScene(movement), now));
   const from = projectPosition(movement.from, environment), to = projectPosition(movement.to, environment);
   const duration = movement.arrivesAt - movement.startedAt;
   return pointAlong([from, ...routeToStation(from, to)], duration <= 0 ? 1 : (now - movement.startedAt) / duration);
@@ -40,11 +61,28 @@ export function projectMovement(movement: WorldMovement, now: number, environmen
 
 export function agentPosition(agent: WorldAgent, now: number, environment: EnvironmentType): RoomPoint {
   const world = agent.world;
-  if (environment === 'factory25d') return fromFactoryWorld(agent.manualControl ?? (world.movement ? positionAt(world.movement, now) : world.position));
+  if (environment === 'factory25d') {
+    if (agent.manualControl) return manualElevatorPresentation(agent.manualControl, now)?.point ?? fromFactoryWorld(agent.manualControl);
+    if (world.movement) return projectMovement(world.movement, now, environment);
+    return fromFactoryWorld(recoverFactoryPosition(world.zone === 'entrance' && isOldEntrance(world.position) ? toFactoryWorld(FACTORY_ENTRANCE) : world.position));
+  }
   if (agent.manualControl) {
     const anchor = projectPosition(world.position, environment);
     return { x: anchor.x + (agent.manualControl.x - world.position.x) / 48,
       z: anchor.z + (agent.manualControl.y - world.position.y) / 32 };
   }
   return world.movement ? projectMovement(world.movement, now, environment) : projectPosition(world.position, environment);
+}
+
+/** Elevator passengers stay behind the doors while the server crosses between floor strips. */
+export function garageElevatorPose(agent: WorldAgent, now: number, environment: EnvironmentType): { x: number; z: number; floor: number; room: FactoryRoom; hidden: boolean } | undefined {
+  if(environment!=='factory25d') return;
+  if(agent.manualControl) {
+    const pose=manualElevatorPresentation(agent.manualControl,now);if(!pose)return;
+    return {...factoryScenePoint(pose.point),floor:pose.room==='garage'?GARAGE_LEVEL+.018:.018,room:pose.room,hidden:pose.hidden};
+  }
+  if(!agent.world.movement)return;
+  const trip=factoryElevatorTripAt(factoryMovementForScene(agent.world.movement),now); if(!trip) return;
+  const landing=trip.progress>=1?trip.arrival:trip.departure,room=factoryRoomAt(landing);
+  return {...factoryScenePoint(landing),floor:room==='garage'?GARAGE_LEVEL+.018:.018,room,hidden:trip.progress>0&&trip.progress<1};
 }

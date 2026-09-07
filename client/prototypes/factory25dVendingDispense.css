@@ -1,0 +1,3 @@
+.vending-dispense[hidden] { display: none; }
+.vending-dispense:focus { outline: none; }
+.vending-dispense:focus-visible { outline: 2px solid #9bf2dd; outline-offset: 3px; }

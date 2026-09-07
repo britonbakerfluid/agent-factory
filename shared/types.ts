@@ -61,6 +61,12 @@ export interface WorldMovement {
 }
 
 export interface AgentWorldState {
+  /** A server-authored idle excursion, cleared as soon as work or manual control resumes. */
+  idleVisit?: 'garage-mini';
+  /** The car is reserved while approaching; the short parked-car animation starts on arrival. */
+  carVisit?: { car: import('./factory25d-garage.js').GarageCarId; startedAt: number };
+  /** Real work at Jonathan's portable Mini laptop; animation begins when its route arrives. */
+  miniWork?: { startedAt: number; packingAt?: number };
   zone: WorldZone;
   slotIndex?: number;
   position: Position;
@@ -69,11 +75,20 @@ export interface AgentWorldState {
 }
 
 // === Manual Avatar Control ===
+export interface ManualElevatorTrip {
+  departure: Position;
+  arrival: Position;
+  startedAt: number;
+  arrivesAt: number;
+}
+
 export interface ManualControlState {
   x: number;
   y: number;
   facing: FacingDirection;
   moving: boolean;
+  /** Server-authored lift ride; its endpoints remain on the two walkable floors. */
+  elevatorTrip?: ManualElevatorTrip;
 }
 
 export interface ControlInputState {
@@ -98,6 +113,13 @@ export interface GrabState extends GrabTarget {
 }
 
 // === Agent Session (Server State) ===
+/** Evidence from an agent hook, independent of movement or an idle timeout. */
+export interface AgentAttention {
+  kind: 'input' | 'permission' | 'ready' | 'error';
+  /** Server timestamp when this uninterrupted attention state began. */
+  since: number;
+}
+
 export interface AgentSession {
   sessionId: string;
   username: string;
@@ -106,6 +128,8 @@ export interface AgentSession {
   avatar: AvatarConfig;
   cwd: string;
   activity: AgentActivity;
+  /** Absent on older hosts and when no hook has established an attention state. */
+  attention?: AgentAttention;
   currentTool: string | null;
   subagents: SubagentInfo[];
   startedAt: number;
@@ -139,6 +163,10 @@ export interface TimedWorldEvent {
 }
 
 export interface WorldSnapshot {
+  /** Optional for compatibility with older factory hosts. */
+  workstationCount?: number;
+  /** Advertised only by hosts that support authenticated parked-car visits. */
+  garageCars?: true;
   schemaVersion: number;
   revision: number;
   serverTime: number;
@@ -210,6 +238,7 @@ export type WSMessageToClient =
   | { type: 'auth_result'; success: boolean; username?: string; ownerId?: string; error?: string }
   | { type: 'control_result'; success: boolean; sessionId?: string; action: 'claim' | 'release'; error?: string }
   | { type: 'control_revoked'; sessionId: string; reason: string }
+  | { type: 'garage_car_result'; sessionId: string; success: boolean; error?: string }
   | { type: 'grab_result'; success: boolean; action: 'start' | 'end'; sessionId: string; error?: string }
   | { type: 'grab_update'; grab: GrabState }
   | { type: 'grab_release'; sessionId: string; x: number; y: number; reason: string }
@@ -228,6 +257,7 @@ export type WSMessageToServer =
   | { type: 'control_input'; sessionId: string; input: ControlInputState }
   | { type: 'control_release'; sessionId: string }
   | { type: 'shoot'; sessionId: string }
+  | { type: 'garage_car'; sessionId: string; car: import('./factory25d-garage.js').GarageCarId }
   | { type: 'grab_start'; sessionId: string; x: number; y: number }
   | { type: 'grab_move'; sessionId: string; x: number; y: number }
   | { type: 'grab_end'; sessionId: string; x: number; y: number; workstationSlot?: number }

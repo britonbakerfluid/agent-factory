@@ -5,7 +5,7 @@ import { BroadcastManager } from '../server/ws/broadcast';
 import { ControlManager } from '../server/control-manager';
 import { GrabManager } from '../server/grab-manager';
 import { DEFAULT_AVATAR } from '../shared/constants';
-import { WORKSTATIONS, toFactoryWorld, fromFactoryWorld, clearFactorySegment, routeToStation, constrainFactoryStep } from '../shared/factory25d-layout';
+import { WORKSTATIONS, MINI_WORKSTATION_ID, MINI_WORKSTATION_SLOT, toFactoryWorld, fromFactoryWorld, clearFactorySegment, routeToStation, constrainFactoryStep } from '../shared/factory25d-layout';
 import { slotPosition, WORLD_LAYOUTS } from '../shared/world-layouts';
 import { agentPosition } from '../client/prototypes/factory25dWorld';
 
@@ -40,13 +40,23 @@ describe('the shared 2.5D factory', () => {
     }
   });
 
+  it('walks around the preserved plant shelf beside the downstairs elevator', () => {
+    const from={x:-9.1,z:20.15}, to={x:-7.2,z:20.15};
+    expect(clearFactorySegment(from,to)).toBe(false);
+    const path=[from,...routeToStation(from,to)];
+    expect(path.at(-1)).toEqual(to);
+    for(let i=1;i<path.length;i++) expect(clearFactorySegment(path[i-1],path[i])).toBe(true);
+  });
+
   it('queues excess workers and fills an indoor or patio vacancy when it opens', () => {
     const state = new StateManager('factory25d', () => 1000);
-    for (let i = 0; i < 19; i++) start(state, `worker-${i}`);
-    expect(state.get('worker-18')!.world.zone).toBe('waiting');
+    const ordinaryCapacity = WORKSTATIONS.filter(station => station.id !== MINI_WORKSTATION_ID).length;
+    for (let i = 0; i <= ordinaryCapacity; i++) start(state, `worker-${i}`);
+    expect(state.get(`worker-${ordinaryCapacity}`)!.world.zone).toBe('waiting');
+    expect(state.getAll().some(agent => agent.world.zone === 'work' && agent.world.slotIndex === MINI_WORKSTATION_SLOT)).toBe(false);
     state.setManualControl('worker-2', {x:760,y:310,facing:'down',moving:false});
     state.advanceWorld(2000);
-    expect(state.get('worker-18')!.world).toMatchObject({zone:'work',slotIndex:2});
+    expect(state.get(`worker-${ordinaryCapacity}`)!.world).toMatchObject({zone:'work',slotIndex:2});
     expect(WORKSTATIONS[2].room).toBe('patio');
   });
 

@@ -1,0 +1,8 @@
+.scene-light-switch {
+  position: absolute; z-index: 8; width: 44px; height: 44px; padding: 0;
+  background: transparent; border: 0; border-radius: 6px; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.scene-light-switch[hidden] { display: none; }
+.scene-light-switch:focus { outline: none; }
+.scene-light-switch:focus-visible { outline: 2px solid #9bf2dd; outline-offset: 2px; background: #9bf2dd14; }

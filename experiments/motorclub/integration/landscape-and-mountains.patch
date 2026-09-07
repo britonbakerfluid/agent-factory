@@ -1,0 +1,109 @@
+--- a/client/prototypes/factory25dLandscape.ts
++++ b/client/prototypes/factory25dLandscape.ts
+@@ -1,4 +1,5 @@
+ import * as THREE from 'three';
++import {createRoadGround} from './factory25dRoadGround';
+ 
+ const mix = THREE.MathUtils.lerp;
+ const hash = (x: number, z: number) => {
+@@ -165,7 +166,8 @@
+ }
+ 
+ export function createUtahLandscape(asset?: { geometry: THREE.BufferGeometry; heightAt: typeof meadowHeight }) {
+-  const heightAt = asset?.heightAt ?? meadowHeight;
++  const roadGround = createRoadGround(asset?.heightAt ?? meadowHeight);
++  const heightAt = roadGround.heightAt;
+   const group = new THREE.Group();
+   const snow = { value: 0 };
+   const windTime = { value: 0 };
+@@ -381,7 +383,17 @@
+   );
+   // Limestone escarpments, summit ribs, meadow and shoreline form one mesh,
+   // so all vegetation can sample the same surface instead of floating cards.
+-  let terrainGeometry = asset?.geometry;
++  let terrainGeometry = asset?.geometry.clone();
++  if (terrainGeometry) {
++    const positions=terrainGeometry.getAttribute('position');
++    for(let i=0;i<positions.count;i++) {
++      const x=positions.getX(i),z=positions.getZ(i);
++      if(roadGround.distanceAt(x,z)<1.25) positions.setY(i,heightAt(x,z));
++    }
++    positions.needsUpdate=true;
++    terrainGeometry.computeVertexNormals();
++    terrainGeometry.computeBoundingSphere();
++  }
+   if (!terrainGeometry) {
+     const terrainPositions: number[] = [];
+     const terrainColors: number[] = [];
+@@ -542,7 +554,7 @@
+     for (let attempt = 0; attempt < count * 18 && placed < count; attempt += 1) {
+       const x = -9.6 + hash(attempt, distant ? 31 : 13) * 19.2;
+       const z = distant ? -6.8 + hash(attempt, 52) * 5.4 : -0.4 + hash(attempt, 23) * 5.8;
+-      if (polygonDistance(x, z, lakeOutline) < 0.18) continue;
++      if (polygonDistance(x, z, lakeOutline) < 0.18 || roadGround.distanceAt(x,z)<.4) continue;
+       const clearing = Math.abs(x + 1.1) < 0.75 && z > 0;
+       if (
+         (clearing && (!distant || hash(attempt, 73) > 0.18)) ||
+@@ -634,5 +646,5 @@
+   grassMaterial.side = THREE.DoubleSide;
+   group.add(new THREE.Mesh(grassGeometry, grassMaterial));
+ 
+-  return { group, materials, snow, windTime, windStrength, hazeColor, heightAt };
++  return { group, materials, snow, windTime, windStrength, hazeColor, heightAt, motorTrack: roadGround.track };
+ }
+--- a/client/prototypes/factory25dMountains.ts
++++ b/client/prototypes/factory25dMountains.ts
+@@ -1,3 +1,4 @@
++import { createMotorLoop } from './factory25dMotorLoop';
+ import { createMountainClimbers } from './factory25dClimbers';
+ import * as THREE from 'three';
+ import { CLEAR_WEATHER } from '../sky/weather';
+@@ -9,7 +10,6 @@
+ import { createRidgeBear } from './factory25dBear';
+ import { createValleyBirds } from './factory25dBirds';
+ import { createLandscapeFocus } from './factory25dFocus';
+-import type { TeamMember } from '@shared/team';
+ 
+ /** A solid, separately lit landscape viewed through the factory glass. */
+ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: number) {
+@@ -27,6 +27,7 @@
+   const bear = createRidgeBear(scene, originalLandscape.hazeColor, (x, z) => landscape.heightAt(x, z));
+   const climbers = createMountainClimbers(scene, (x, z) => landscape.heightAt(x, z));
+   const birds = createValleyBirds(scene, landscape.hazeColor);
++  const motorLoop = createMotorLoop(scene, (x, z) => landscape.heightAt(x, z), landscape.motorTrack);
+   const fill = new THREE.HemisphereLight('#c8d5e5', '#7b8998', 1.35);
+   const sunlight = new THREE.DirectionalLight('#fff1d9', 2.2);
+   sunlight.target.position.set(0, 0.5, 0);
+@@ -82,7 +83,6 @@
+   const previousClearColor = new THREE.Color();
+   return {
+     texture: target.texture,
+-    setVisitors(members: readonly TeamMember[]) { climbers.setVisitors(members); dirty = true; },
+     async setLandscape(style: 'current' | 'blender') {
+       requestedLandscape = style;
+       let next = originalLandscape;
+@@ -96,6 +96,7 @@
+       landscape = next;
+       scene.add(landscape.group);
+       bear.resetGround();
++      motorLoop.setGround((x, z) => landscape.heightAt(x, z), landscape.motorTrack);
+       applyEnvironment();
+     },
+     setDepthOfField(enabled: boolean) {
+@@ -113,12 +114,11 @@
+       applyEnvironment();
+     },
+     render(elapsed = 0, visible = true) {
+-      const dt = elapsed - previousElapsed;
++      bear.update(elapsed - previousElapsed, !visible || reducedMotion.matches || document.hidden);
++      birds.update(elapsed - previousElapsed, currentWeather, isNight, !visible || reducedMotion.matches || document.hidden);
++      climbers.update(elapsed - previousElapsed, !visible || reducedMotion.matches || document.hidden);
++      if (motorLoop.update(elapsed - previousElapsed, currentWeather, isNight, !visible || reducedMotion.matches || document.hidden)) dirty = true;
+       previousElapsed = elapsed;
+-      if (!visible || document.hidden) return;
+-      bear.update(dt, reducedMotion.matches);
+-      birds.update(dt, currentWeather, isNight, reducedMotion.matches);
+-      climbers.update(dt, isNight, reducedMotion.matches);
+       const windFrame = Math.floor(elapsed * 12);
+       if (!reducedMotion.matches && windFrame !== lastWindFrame) {
+         landscape.windTime.value = elapsed;

@@ -154,6 +154,10 @@ describe('2.5D shared effects', () => {
     state.receive({ type: 'effect', sessionId: 'a', effect: 'pr_merge' }, 1000);
     renderer.update(state, 1700, new Map([['a', { x: 15, y: 0, z: 4 }]]), 'factory25d');
     expect(factory.children.length).toBe(0); expect(patio.children.length).toBe(1);
+    renderer.update(state, 1800, new Map(), 'factory25d');
+    expect(patio.children[0].visible).toBe(false); // A hidden elevator passenger leaves no floating celebration behind.
+    renderer.update(state, 1900, new Map([['a', { x: 15, y: 0, z: 4 }]]), 'factory25d');
+    expect(patio.children[0].visible).toBe(true);
     let instanceDisposed = false;
     patio.traverse(object => { if (object instanceof THREE.InstancedMesh) object.addEventListener('dispose', () => { instanceDisposed = true; }); });
     renderer.update(state, 5000, new Map(), 'factory25d');

@@ -1,4 +1,4 @@
-.factory-preview-tools.pixel-island { display:block; position:fixed; top:76px; right:18px; left:auto; bottom:auto; transform:none; animation:none; pointer-events:auto; z-index:25; width:235px; padding:16px; color:#d2e0de; background:#101821f5; font:12px 'Geist Pixel',monospace; }
+.factory-preview-tools.pixel-island { display:block; position:fixed; top:76px; right:18px; left:auto; bottom:auto; transform:none; animation:none; pointer-events:auto; z-index:40; width:235px; padding:16px; color:#d2e0de; background:#101821f5; font:12px 'Geist Pixel',monospace; }
 .factory-preview-tools p { color:#9ab2b0; line-height:1.5; }
 .factory-preview-tools summary { cursor:pointer; list-style:none; }
 .factory-preview-tools summary::-webkit-details-marker { display:none; }
@@ -9,4 +9,9 @@
 .factory-preview-tools .preview-actions { display:flex; gap:8px; margin:12px 0; }
 .factory-preview-tools a { color:#b1d4c8; }
 .factory-preview-tools [hidden] { display:none; }
+.factory-preview-tools.pixel-island { max-height:calc(100dvh - 160px); overflow-y:auto; overscroll-behavior:contain; }
 @media(max-width:600px) { .factory-preview-tools.pixel-island { top:74px; right:12px; width:calc(100vw - 24px); box-sizing:border-box; } .factory-preview-tools p { margin:6px 0; } }
+@media(max-width:600px) {
+  .factory-preview-tools.pixel-island:has(.preview-activity:not([hidden])) { top:auto; bottom:12px; max-height:38dvh; }
+  .factory-preview-tools:has(.preview-activity:not([hidden])) > summary { position:sticky; top:-16px; margin:-16px -16px 12px; padding:16px; background:#101821; z-index:1; }
+}

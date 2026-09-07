@@ -1,6 +1,7 @@
 import { requireElement } from './dom';
 import { CLEAR_WEATHER } from '../sky/weather';
 import { createSoundscape, loadSoundscapeSamples, type SoundEnvironment } from './factory25dSoundscape';
+import { createGarageAudio, type GarageEngineState } from './factory25dGarageAudio';
 
 /** One opt-in mixer owns every sound, including the arcade effects. */
 export function createFactoryAudio() {
@@ -11,6 +12,7 @@ export function createFactoryAudio() {
   const status = requireElement<HTMLElement>('#scene-sound-status');
   let context: AudioContext | undefined;
   let graph: ReturnType<typeof createSoundscape> | undefined;
+  let garage: ReturnType<typeof createGarageAudio> | undefined;
   let samples: ReturnType<typeof loadSoundscapeSamples> | undefined;
   let assetAbort: AbortController | undefined;
   let request = 0;
@@ -44,6 +46,9 @@ export function createFactoryAudio() {
     nextBirdAt = Infinity;
     wasFair = false;
     if (!enabled || document.hidden || disposed) {
+      garage?.update(undefined);
+      graph?.stopThunder();
+      graph?.stopPropSounds();
       graph?.setVolume(0, 0.025);
       pauseTimer = window.setTimeout(() => {
         if ((!enabled || document.hidden) && context?.state === 'running') void context.suspend().catch(() => {});
@@ -71,6 +76,8 @@ export function createFactoryAudio() {
     } catch {
       if (disposed || currentRequest !== request) return;
       enabled = false;
+      garage?.update(undefined);
+      graph?.stopPropSounds();
       graph?.setVolume(0);
       void context?.suspend().catch(() => {});
       status.textContent = 'Sound could not start. Tap sound to try again.';
@@ -85,6 +92,7 @@ export function createFactoryAudio() {
   };
   const onVolume = () => {
     volume = Number(slider.value);
+    if (volume <= 0) { garage?.update(undefined); graph?.stopThunder(); graph?.stopPropSounds(); }
     if (enabled && !document.hidden) graph?.setVolume(volume);
     try { localStorage.setItem('factory-ambient-volume-v1', String(volume)); } catch { /* Optional. */ }
     paint();
@@ -94,8 +102,25 @@ export function createFactoryAudio() {
   slider.addEventListener('input', onVolume);
   document.addEventListener('visibilitychange', onVisibility);
   paint();
+  const propsAudible = () => !disposed && enabled && volume > 0 && !document.hidden && context?.state === 'running' && !!graph;
 
   return {
+    vendingSelect() { if (propsAudible()) graph!.vendingSelect(); },
+    vendingDispense() { if (propsAudible()) graph!.vendingDispense(); },
+    vendingLand(energy = 1) { if (propsAudible()) graph!.vendingLand(energy); },
+    lampSwitch(on = true) { if (propsAudible()) graph!.lampSwitch(on); },
+    candle(on: boolean) { if (propsAudible()) graph!.candle(on); },
+    stopPropSounds() { graph?.stopPropSounds(); },
+    thunder(energy = 1, pan = 0) {
+      if (!disposed && enabled && volume > 0 && !document.hidden && context?.state === 'running') graph?.thunder(energy, pan);
+    },
+    garageEngine(next: GarageEngineState | undefined) {
+      if (!next || disposed || !enabled || volume <= 0 || document.hidden || context?.state !== 'running' || !graph) {
+        garage?.update(undefined); return;
+      }
+      garage ??= createGarageAudio(context, graph.input);
+      garage.update(next);
+    },
     update(next: SoundEnvironment) {
       environment = next;
       if (!enabled || document.hidden || context?.state !== 'running' || !graph) return;
@@ -128,6 +153,7 @@ export function createFactoryAudio() {
       toggle.removeEventListener('click', onToggle);
       slider.removeEventListener('input', onVolume);
       document.removeEventListener('visibilitychange', onVisibility);
+      garage?.dispose();
       graph?.dispose();
       void context?.close().catch(() => {});
     },

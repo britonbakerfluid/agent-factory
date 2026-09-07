@@ -1,4 +1,4 @@
-import { WORKSTATIONS, toFactoryWorld, factory25dWaypoints } from './factory25d-layout.js';
+import { WORKSTATIONS, toFactoryWorld, factory25dWaypoints, FACTORY_ENTRANCE } from './factory25d-layout.js';
 import type { AgentActivity, EnvironmentType, Position, WorldMovement, WorldZone } from './types.js';
 
 export interface WorldLayoutSpec {
@@ -80,7 +80,7 @@ function cloneLayout(layout: WorldLayoutSpec): WorldLayoutSpec {
 
 export const WORLD_LAYOUTS: Record<EnvironmentType, WorldLayoutSpec> = {
   factory25d: {
-    entrance: toFactoryWorld({ x: 6.7, z: 12.8 }),
+    entrance: toFactoryWorld(FACTORY_ENTRANCE),
     workSlots: WORKSTATIONS.map(station => { const p = toFactoryWorld({ x: station.x, z: station.z + 0.55 }); return { x: p.x, y: p.y - 24 }; }),
     waitingSlots: [-6.4, -5.1, -3.8, -2.5].map(x => toFactoryWorld({ x, z: 7.5 })),
     idleSlots: [1.4, 2.7, 4, 5.3, 6.6].flatMap(x => [7.3, 10.7].map(z => toFactoryWorld({ x, z }))),

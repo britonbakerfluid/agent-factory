@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import type { TeamMember } from '@shared/team';
 import { avatarTexture } from './factory25dAvatarTexture';
 import { mountainVisitors } from './factory25dVisitors';
+import { applyLandscapeHaze } from './factory25dAtmosphere';
 
 /** Familiar visitors on a daytime outing, using the room's actual avatar painter. */
-export function createMountainClimbers(scene: THREE.Scene, heightAt: (x: number, z: number) => number) {
+export function createMountainClimbers(scene: THREE.Scene, heightAt: (x: number, z: number) => number, haze = { value: new THREE.Color('#bdcbd9') }) {
   const group = new THREE.Group(); group.name = 'mountain-climbers'; group.visible = false; scene.add(group);
-  const size = .19, geometry = new THREE.PlaneGeometry(size, size);
+  const size = .09, bodyScale = size / .19, geometry = new THREE.PlaneGeometry(size, size);
   type Visitor = { id: string; signature: string; mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>;
     texture: THREE.CanvasTexture; feet: number[] };
   let people: Visitor[] = [];
@@ -18,7 +19,8 @@ export function createMountainClimbers(scene: THREE.Scene, heightAt: (x: number,
   // Real matte cord can dim with the mountain and become subpixel at a distance.
   // WebGL lines stay at least a pixel wide and ignore the lighting entirely.
   const ropeMaterial = new THREE.MeshStandardMaterial({ color: '#626456', roughness: 1 });
-  const rope = new THREE.InstancedMesh(new THREE.CylinderGeometry(.0012, .0012, 1, 4), ropeMaterial, 24);
+  applyLandscapeHaze(ropeMaterial, haze, .12);
+  const rope = new THREE.InstancedMesh(new THREE.CylinderGeometry(.0012 * bodyScale, .0012 * bodyScale, 1, 4), ropeMaterial, 24);
   rope.name = 'climbing-rope'; rope.frustumCulled = false; group.add(rope);
   const matrix = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), direction = new THREE.Vector3();
   const anchors = [new THREE.Vector3(), new THREE.Vector3()];
@@ -35,6 +37,7 @@ export function createMountainClimbers(scene: THREE.Scene, heightAt: (x: number,
         if (!person) {
           const looks = appearance(member);
           const material = new THREE.MeshStandardMaterial({ map: looks.texture, alphaTest: .08, roughness: 1, side: THREE.DoubleSide });
+          applyLandscapeHaze(material, haze, .12);
           const mesh = new THREE.Mesh(geometry, material); mesh.name = 'mountain-visitor'; group.add(mesh);
           person = { id: member.id, mesh, ...looks };
         } else if (person.signature !== JSON.stringify(member.avatar)) {
@@ -55,12 +58,12 @@ export function createMountainClimbers(scene: THREE.Scene, heightAt: (x: number,
       people.forEach((person, index) => {
         const x = 3.22 + progress * .36 - index * .11;
         const z = -3.48 - progress * .7 + index * .28;
-        const floor = heightAt(x, z) + .014;
+        const floor = heightAt(x, z) + .014 * bodyScale;
         const frame = progress === 0 || progress === 1 ? 1 : Math.floor(time * 1.5 + index * 2) % 4;
         person.texture.offset.x = frame / 4;
         person.mesh.position.set(x, floor + (person.feet[frame] / 32 - .5) * size, z);
         person.mesh.rotation.set(0, 0, -.08);
-        anchors[index].set(x, floor + .056, z + .016);
+        anchors[index].set(x, floor + .056 * bodyScale, z + .016 * bodyScale);
       });
       const a = anchors[0], b = anchors[people.length - 1];
       curve.points[0].set(3.7, heightAt(3.7, -4.5) + .015, -4.5);

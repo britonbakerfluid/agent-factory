@@ -1,0 +1,535 @@
+{
+  "archiveVersion": 1,
+  "createdAt": "2026-09-06T05:05:12.037920+00:00",
+  "status": "dormant; excluded from the room update and production assets",
+  "baseCommit": "c61eb7168e0490dc655e8437326551666d81bffd",
+  "standaloneSource": "/Users/britonbaker/Code/agent-factory-garage-study",
+  "cleanIntegrationSource": "/Users/britonbaker/Code/agent-factory-25d-preview-push",
+  "files": [
+    {
+      "path": "integration/pre-removal-current.patch",
+      "source": "git diff before archival",
+      "action": "captured",
+      "bytes": 5105,
+      "sha256": "a509fb18f42051400be99caab06b2198315f4569abdd2e447764fd19a0cb99db"
+    },
+    {
+      "path": "integration/pre-removal/client/prototypes/factory25dLandscape.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/prototypes/factory25dLandscape.ts",
+      "action": "pre-removal snapshot; may contain merge conflict markers",
+      "bytes": 27241,
+      "sha256": "c8d3425761fe599fb2c6f0e5f15ee7ae2379ec8ad22a496574ed02fcc6d881cb"
+    },
+    {
+      "path": "factory-source/client/prototypes/factory25dLandscape.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-25d-preview-push/client/prototypes/factory25dLandscape.ts",
+      "action": "clean integration snapshot from original garage worktree",
+      "bytes": 27241,
+      "sha256": "c8d3425761fe599fb2c6f0e5f15ee7ae2379ec8ad22a496574ed02fcc6d881cb"
+    },
+    {
+      "path": "integration/base-main/client/prototypes/factory25dLandscape.ts",
+      "source": "HEAD:client/prototypes/factory25dLandscape.ts",
+      "action": "main baseline snapshot",
+      "bytes": 26666,
+      "sha256": "6c1495d7ea484f1788e9932bf86e0266c62078c71db39965b651722d14305ee6"
+    },
+    {
+      "path": "integration/pre-removal/client/prototypes/factory25dMountains.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/prototypes/factory25dMountains.ts",
+      "action": "pre-removal snapshot; may contain merge conflict markers",
+      "bytes": 7557,
+      "sha256": "9c4130e6569522215893e666c3b7c7f08449e3af320596b0592f083fc6d3826d"
+    },
+    {
+      "path": "factory-source/client/prototypes/factory25dMountains.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-25d-preview-push/client/prototypes/factory25dMountains.ts",
+      "action": "clean integration snapshot from original garage worktree",
+      "bytes": 7100,
+      "sha256": "1ea749ea530f1975bdab5575773e485914cab7a700cb05594b7c0aead4984820"
+    },
+    {
+      "path": "integration/base-main/client/prototypes/factory25dMountains.ts",
+      "source": "HEAD:client/prototypes/factory25dMountains.ts",
+      "action": "main baseline snapshot",
+      "bytes": 6792,
+      "sha256": "01c6d4c1ca816544086b3b7ddd67a1a1f03392c77fa92dee8da68b100ae42976"
+    },
+    {
+      "path": "integration/landscape-and-mountains.patch",
+      "source": "clean old integration compared with current main",
+      "action": "restore reference diff; review before applying",
+      "bytes": 5278,
+      "sha256": "70861503341febc5d4d2ccecfd5ac540e0f99334fd92769211555d3ea540ce2d"
+    },
+    {
+      "path": "factory-source/client/prototypes/factory25dMotorLoop.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/prototypes/factory25dMotorLoop.ts",
+      "action": "moved from active project",
+      "bytes": 5227,
+      "sha256": "2f13f080ceaca59b5a35949caeacae0b3f1fbee0a04ad6122409a8c74cd3e017"
+    },
+    {
+      "path": "factory-source/client/prototypes/factory25dMotorTrack.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/prototypes/factory25dMotorTrack.ts",
+      "action": "moved from active project",
+      "bytes": 2562,
+      "sha256": "eb8b0dc67a20d2949570b62960081d35d71d5ede0c65e8c6ad3549925c379d73"
+    },
+    {
+      "path": "factory-source/client/prototypes/factory25dRoadGround.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/prototypes/factory25dRoadGround.ts",
+      "action": "moved from active project",
+      "bytes": 1715,
+      "sha256": "c54e3e79f67396c736d2a422fccceafdb04bb1f43e3163ea04da3d2f877fc9e7"
+    },
+    {
+      "path": "factory-source/client/prototypes/factory25dRoadPaint.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/prototypes/factory25dRoadPaint.ts",
+      "action": "moved from active project",
+      "bytes": 2728,
+      "sha256": "3ed7b9003bca83b9291e110f5c3677d5c86df2f07450be068359ee20e5e3e1a3"
+    },
+    {
+      "path": "factory-source/tests/factory25dMotorLoop.test.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/tests/factory25dMotorLoop.test.ts",
+      "action": "moved from active project",
+      "bytes": 2565,
+      "sha256": "62ea90f85c8d91e29477ae569faea4737459becd6c3a94f57daf1c3757ec4646"
+    },
+    {
+      "path": "factory-source/tests/factory25dRoadGround.test.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/tests/factory25dRoadGround.test.ts",
+      "action": "moved from active project",
+      "bytes": 2324,
+      "sha256": "b9fe87ff5e7c687fd2626dc60e1dd5d138df68b9ec9a65a25200d9e046d6c692"
+    },
+    {
+      "path": "factory-source/client/assets/prototype25d/garage-distant-cars.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/garage-distant-cars.glb",
+      "action": "moved from active project",
+      "bytes": 658180,
+      "sha256": "70407aead16e87851db6a6ab6411d9150646ea82ad0b5abf84dda68f19f4b27f"
+    },
+    {
+      "path": "embedded-build/GeistPixel-Square.woff2",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/GeistPixel-Square.woff2",
+      "action": "moved from active project",
+      "bytes": 28540,
+      "sha256": "80887afede26bc861e92dbfbb17a775d769e46e7c84f336b1c9f17959f60606d"
+    },
+    {
+      "path": "embedded-build/assets/drive-check-CxUWkOJ_.js",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/assets/drive-check-CxUWkOJ_.js",
+      "action": "moved from active project",
+      "bytes": 521,
+      "sha256": "e8a75887d0d6d89571fe01baea08870e1f8e00b7c6f5b06d7b68a033313f0ab4"
+    },
+    {
+      "path": "embedded-build/assets/index-DPfU5ogF.css",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/assets/index-DPfU5ogF.css",
+      "action": "moved from active project",
+      "bytes": 12239,
+      "sha256": "6f90e66e40599170f1ab2f46cf677e66a3f4b834eb57bf521a2036fbb8d3b7e9"
+    },
+    {
+      "path": "embedded-build/assets/index-DYXAClgr.js",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/assets/index-DYXAClgr.js",
+      "action": "moved from active project",
+      "bytes": 1216415,
+      "sha256": "67d22d7ea71dea62897311cd8720c88048f0f645f5d414ebdab93b3c1fae8ea1"
+    },
+    {
+      "path": "embedded-build/index.html",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/index.html",
+      "action": "moved from active project",
+      "bytes": 1704,
+      "sha256": "ab47ce3809073594156e6fa71f39c730fd30219ca45d2731d93b3cb02bef8362"
+    },
+    {
+      "path": "embedded-build/models/delorean.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/models/delorean.glb",
+      "action": "moved from active project",
+      "bytes": 804876,
+      "sha256": "37933a51f5a1aca94f25499c379ca324dc10e6003d20b9f64277237dff2ae6fe"
+    },
+    {
+      "path": "embedded-build/models/distant-cars.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/models/distant-cars.glb",
+      "action": "moved from active project",
+      "bytes": 658180,
+      "sha256": "70407aead16e87851db6a6ab6411d9150646ea82ad0b5abf84dda68f19f4b27f"
+    },
+    {
+      "path": "embedded-build/models/f1.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/models/f1.glb",
+      "action": "moved from active project",
+      "bytes": 545656,
+      "sha256": "76cc5143b644e78fbc5309bb99a73d59573b66079596252bb7e83ce63da5af5c"
+    },
+    {
+      "path": "embedded-build/models/mini.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/models/mini.glb",
+      "action": "moved from active project",
+      "bytes": 826000,
+      "sha256": "611664ab1232bf3fecd4aaca2213b58e65c4c12a41fc267c0efa52633638523a"
+    },
+    {
+      "path": "embedded-build/models/porsche.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/models/porsche.glb",
+      "action": "moved from active project",
+      "bytes": 815596,
+      "sha256": "af148b0fe2e7c0250388b78843c6dec799305afc5c02236ad01eb6876183be19"
+    },
+    {
+      "path": "embedded-build/models/utah-mountains.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-update/client/assets/prototype25d/motorclub/models/utah-mountains.glb",
+      "action": "moved from active project",
+      "bytes": 464588,
+      "sha256": "740fe59542f67ca419fd9778e47d385811ba3b6ba815c2cc0e3cc640e9f936ab"
+    },
+    {
+      "path": "standalone/src/main.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/main.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 19511,
+      "sha256": "275563a654031432d358464a8cbffef26e0cff11090e75f100ee5670e64bf3ae"
+    },
+    {
+      "path": "standalone/src/racing/audio.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/audio.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 2839,
+      "sha256": "ebd6b9e513b3e9d05d8697739fa92f25c34ba98649af5addc0df8f9987db7385"
+    },
+    {
+      "path": "standalone/src/racing/camera-ground.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/camera-ground.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 1010,
+      "sha256": "810430641808a7586330d5ce0cc4410404aa310ed669c6415cda5b7c0f3ead9b"
+    },
+    {
+      "path": "standalone/src/racing/core.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/core.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 13752,
+      "sha256": "166f500eb6b40c1c007f78cbeb0f8251bbcd36a0423185817eb53f0d6e9ff4d3"
+    },
+    {
+      "path": "standalone/src/racing/departure.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/departure.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 3596,
+      "sha256": "11aac5249c0069bd0c551cdeca967d8b307ce40d298f4660173bd137eea61565"
+    },
+    {
+      "path": "standalone/src/racing/drive-check.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/drive-check.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 1718,
+      "sha256": "e59b1cfdcc1208ce2cabacfec33930b07a521b8737b7b19b1e93daa143617251"
+    },
+    {
+      "path": "standalone/src/racing/factory-dock.css",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/factory-dock.css",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 4581,
+      "sha256": "bbeaff1f1631cb899c7e883e594f704bf5bc91d6eb9971c246a8a2c3bff8fd7b"
+    },
+    {
+      "path": "standalone/src/racing/game.css",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/game.css",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 7111,
+      "sha256": "6ed660741d9482f57469af0f8588569cc568b319603193268d88601309d4c5f3"
+    },
+    {
+      "path": "standalone/src/racing/game.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/game.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 23660,
+      "sha256": "5154b9ee8a23c6d02fab52d928d1468e58e6969f75d97a0424220bb3e26203f2"
+    },
+    {
+      "path": "standalone/src/racing/hud.tsx",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/hud.tsx",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 11646,
+      "sha256": "8ede4197ff99ebf67a0e2e06476e74054eca761fca4d2b342d32f7dbcad82713"
+    },
+    {
+      "path": "standalone/src/racing/input.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/input.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 2560,
+      "sha256": "16b925fe1b47dd8369d545a8379420ba32d364eb9385c3f738d185c690f970f0"
+    },
+    {
+      "path": "standalone/src/racing/road-ground.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/road-ground.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 1870,
+      "sha256": "05efefb9b76f2efdf43f90e0938d87cc0b3444faa3779e50d9aa3a795aeb8dc5"
+    },
+    {
+      "path": "standalone/src/racing/road-paint.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/road-paint.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 2728,
+      "sha256": "3ed7b9003bca83b9291e110f5c3677d5c86df2f07450be068359ee20e5e3e1a3"
+    },
+    {
+      "path": "standalone/src/racing/scenery-horizon.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/scenery-horizon.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 1705,
+      "sha256": "00a3c26000990878b34d9c20df6be821eb73ce2d0709e269e50b62ce856e6620"
+    },
+    {
+      "path": "standalone/src/racing/sculpt-road-bed.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/sculpt-road-bed.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 4244,
+      "sha256": "3af1bdb46582727b9a77ca23e529e4b3c4832cd4ee371e780f99572fcae2b8e4"
+    },
+    {
+      "path": "standalone/src/racing/sphere-lab.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/sphere-lab.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 4812,
+      "sha256": "c5b8196ef6adba422f6d7003ff5103b8e05d382617e675996819689517f64c34"
+    },
+    {
+      "path": "standalone/src/racing/tire-marks.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/tire-marks.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 4895,
+      "sha256": "7d8dd73d0003c6c5b956ac7681d8fa616a37589ffabcdc090c0cba8db38d49e5"
+    },
+    {
+      "path": "standalone/src/racing/window-traffic.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/window-traffic.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 1309,
+      "sha256": "8803b7b8b0c1e9c62815bcad4a051aef7703ee06527e886883f89e2d3956af5d"
+    },
+    {
+      "path": "standalone/src/racing/world.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/racing/world.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 10988,
+      "sha256": "d3fb633cc067e7d702ef2e7f7cea7ee35acfee21a313d70ca32c1999db4f924d"
+    },
+    {
+      "path": "standalone/src/reference/factory25dContactShadows.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/reference/factory25dContactShadows.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 2557,
+      "sha256": "3d8726c9f0b756e8a6fe80098fc22094e9011a1e48739246d1a718cfc9ba5945"
+    },
+    {
+      "path": "standalone/src/reference/factory25dPlants.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/reference/factory25dPlants.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 11545,
+      "sha256": "163aad42bf76f9023bfde35a6d48ccd8d3d3bc30e33aee7c2d4db2c57d6a1d2e"
+    },
+    {
+      "path": "standalone/src/reference/factory25dProps.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/reference/factory25dProps.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 601,
+      "sha256": "09a1055db1febc040d9fa2eeb659716e571b60c1de0d486a3e7d629c6a173f89"
+    },
+    {
+      "path": "standalone/src/reference/factory25dTerrainSampler.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/reference/factory25dTerrainSampler.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 1945,
+      "sha256": "4a511087930b60ca28657b65c9f842c91eda46124707ad69704dfda513e1bfc8"
+    },
+    {
+      "path": "standalone/src/style.css",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/src/style.css",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 2739,
+      "sha256": "f9992d548a52624ff965c71801358839e09cbeea181009bf18b54a5887574af9"
+    },
+    {
+      "path": "standalone/public/GeistPixel-Square.woff2",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/public/GeistPixel-Square.woff2",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 28540,
+      "sha256": "80887afede26bc861e92dbfbb17a775d769e46e7c84f336b1c9f17959f60606d"
+    },
+    {
+      "path": "standalone/public/models/delorean.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/public/models/delorean.glb",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 804876,
+      "sha256": "37933a51f5a1aca94f25499c379ca324dc10e6003d20b9f64277237dff2ae6fe"
+    },
+    {
+      "path": "standalone/public/models/distant-cars.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/public/models/distant-cars.glb",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 658180,
+      "sha256": "70407aead16e87851db6a6ab6411d9150646ea82ad0b5abf84dda68f19f4b27f"
+    },
+    {
+      "path": "standalone/public/models/f1.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/public/models/f1.glb",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 545656,
+      "sha256": "76cc5143b644e78fbc5309bb99a73d59573b66079596252bb7e83ce63da5af5c"
+    },
+    {
+      "path": "standalone/public/models/mini.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/public/models/mini.glb",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 826000,
+      "sha256": "611664ab1232bf3fecd4aaca2213b58e65c4c12a41fc267c0efa52633638523a"
+    },
+    {
+      "path": "standalone/public/models/porsche.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/public/models/porsche.glb",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 815596,
+      "sha256": "af148b0fe2e7c0250388b78843c6dec799305afc5c02236ad01eb6876183be19"
+    },
+    {
+      "path": "standalone/public/models/utah-mountains.glb",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/public/models/utah-mountains.glb",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 464588,
+      "sha256": "740fe59542f67ca419fd9778e47d385811ba3b6ba815c2cc0e3cc640e9f936ab"
+    },
+    {
+      "path": "standalone/tests/camera.test.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/tests/camera.test.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 1016,
+      "sha256": "2a844b2e4b1bdbd250b0bc822f50dd6af94e8d5dbbe057b06ae1a8c40c343a19"
+    },
+    {
+      "path": "standalone/tests/drive-check.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/tests/drive-check.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 3270,
+      "sha256": "774681c5673cd7efb3ec719fac41cfbc625108257b614d2df300c676742017c3"
+    },
+    {
+      "path": "standalone/tests/input-ui.test.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/tests/input-ui.test.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 5593,
+      "sha256": "3e5a53e9ec024020b8ec5382d999aaadfb757a78cd4e4503490af0f35bc9608c"
+    },
+    {
+      "path": "standalone/tests/racing.test.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/tests/racing.test.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 6862,
+      "sha256": "60b102ebf417b036513e42550fa7a569f14b8d5a4d5fede26b2d01c99ace8198"
+    },
+    {
+      "path": "standalone/tests/road-surface.test.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/tests/road-surface.test.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 2874,
+      "sha256": "f75b4b6367c416b464076b22320208897e3e7eb49494eb5dc1c48d22826fae83"
+    },
+    {
+      "path": "standalone/tests/terrain.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/tests/terrain.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 1759,
+      "sha256": "6b8945387d20ed2558c4f3cf77b658164a086ec35795b2b5093ac1bbad2e7d4f"
+    },
+    {
+      "path": "standalone/scripts/build-distant-cars.py",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/scripts/build-distant-cars.py",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 2438,
+      "sha256": "9ed65a6bf7f0c5ee063ce63d92622575459c46276193a93b60761c1e88b04482"
+    },
+    {
+      "path": "standalone/scripts/build-garage.py",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/scripts/build-garage.py",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 18852,
+      "sha256": "0abcb80730d0f6be31e62b116cbcb8ab2a1c92a2404388512c4df744944d1e44"
+    },
+    {
+      "path": "standalone/docs/racing-reference-notes.md",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/docs/racing-reference-notes.md",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 4345,
+      "sha256": "ce1e7eab8ab2a52595739d7c0edf1506cc72a951820f6e41992dc55a142268c1"
+    },
+    {
+      "path": "standalone/package.json",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/package.json",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 728,
+      "sha256": "5307668bdab04626f3ce6a9925f75485ee1843e04ba9ea3d70d89ed9799f8990"
+    },
+    {
+      "path": "standalone/package-lock.json",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/package-lock.json",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 82026,
+      "sha256": "28ca086f9e97bfb3a314420b51d5d8d303fb03d41b462319f629533c6dda64da"
+    },
+    {
+      "path": "standalone/index.html",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/index.html",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 1561,
+      "sha256": "fe93aebea719fdc4b7a00b082e981a4224e361ac879d733ee540636802dfc166"
+    },
+    {
+      "path": "standalone/tsconfig.json",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/tsconfig.json",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 323,
+      "sha256": "6f136b38b4f545f898caf6d3447bbce142050e8cd5ffa35a5e3724f886943bee"
+    },
+    {
+      "path": "standalone/vite.config.ts",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/vite.config.ts",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 171,
+      "sha256": "072857fbd55d7cebf2c126808c55f9676000d037e21eafe05f20ba92f5ec9570"
+    },
+    {
+      "path": "standalone/README.md",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/README.md",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 4695,
+      "sha256": "6848c5050be807becc6cb459f875cdfb021dca6ea9af01643ad4645e5ae6b27e"
+    },
+    {
+      "path": "standalone/IMPLEMENTATION.md",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/IMPLEMENTATION.md",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 9526,
+      "sha256": "63e3e2aa49c12c23c013062281c33fe924df68e419332c13cf0f7cb83808638a"
+    },
+    {
+      "path": "standalone/RACING-RESEARCH.md",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/RACING-RESEARCH.md",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 7110,
+      "sha256": "86102b1f51266738531b5fcfb0848e6e1c0613da984b0f043c3802b05a1e256b"
+    },
+    {
+      "path": "standalone/fluid-factory-cars.blend",
+      "source": "/Users/britonbaker/Code/agent-factory-garage-study/fluid-factory-cars.blend",
+      "action": "standalone source preserved; original unchanged",
+      "bytes": 287827,
+      "sha256": "31f9fdb54c0c2e6c0261435b0bdf560f0fc21ecf9aa45a0db74fc90eefa00f75"
+    }
+  ]
+}

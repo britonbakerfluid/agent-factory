@@ -16,11 +16,13 @@ it('keeps rain behind glass, then opens its level and frequency range on the pat
   expect(window.rainCutoff).toBeLessThan(outside.rainCutoff);
   expect(outside.windowRain).toBe(0);
   expect(outside.effects).toBe(0);
+  expect(inside.thunder).toBeLessThan(window.thunder);
+  expect(window.thunder).toBeLessThan(outside.thunder);
 });
 
 it('only allows bird calls in fair daytime weather, including while precipitation fades away', () => {
   expect(soundscapeMix({ ...room, patio01: 1 }).birds).toBeGreaterThan(soundscapeMix(room).birds);
-  for (const preset of ['rain-light', 'rain-heavy', 'snow-light', 'snow-heavy', 'cloudy', 'fog']) {
+  for (const preset of ['rain-light', 'rain-heavy', 'thunderstorm', 'snow-light', 'snow-heavy', 'cloudy', 'fog']) {
     expect(soundscapeMix({ ...room, patio01: 1, weather: parseWeatherOverride(`?skyWeather=${preset}`)! }).birds).toBe(0);
   }
   expect(soundscapeMix({ ...room, patio01: 1, night: true }).birds).toBe(0);

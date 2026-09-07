@@ -1,0 +1,9 @@
+.factory-state-editor { margin:14px 0; padding-top:10px; border-top:1px solid #425560; }
+.factory-state-editor label { margin:10px 0; }
+.factory-state-editor .state-editor-pair { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.factory-state-editor .state-editor-pair label { min-width:0; }
+.factory-state-editor input { min-width:0; max-width:100%; box-sizing:border-box; font:inherit; color:inherit; background:#24323c; border:1px solid #657e80; border-radius:0; padding:9px; }
+.factory-state-editor input[type=range] { width:100%; padding:0; accent-color:#b1d4c8; }
+.factory-state-editor input[type=color] { width:100%; height:36px; padding:4px; }
+.factory-state-editor .preview-actions button { flex:1; }
+.factory-state-editor .state-demo-status { min-height:32px; }
