@@ -198,3 +198,37 @@ it('keeps vending and light actions in the opt-in mixer and cancels them on zero
   context.currentTime += 1; audio.vendingSelect(); expect(context.sources).toHaveLength(lastCount);
   expect(fetch).toHaveBeenCalledTimes(9); // Reuses the same local ambient sample load, adds no asset request.
 });
+
+it('plays one opt-in phone buzz and can stop it without cancelling another room effect', async () => {
+  vi.useFakeTimers();
+  const controls = new Map(['scene-sound-toggle', 'scene-volume', 'scene-sound-level', 'scene-volume-value', 'scene-sound-status'].map(id => [`#${id}`, new Control()]));
+  const document = Object.assign(new EventTarget(), { hidden: false, querySelector: (selector: string) => controls.get(selector) });
+  const contexts: Context[] = [];
+  vi.stubGlobal('document', document); vi.stubGlobal('window', { setTimeout });
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem() {} });
+  vi.stubGlobal('AudioContext', class extends Context { constructor() { super(); contexts.push(this); } });
+  const fetch = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })); vi.stubGlobal('fetch', fetch);
+  const audio = createFactoryAudio(), toggle = controls.get('#scene-sound-toggle')!;
+  const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+  audio.phoneBuzz(); expect(contexts).toHaveLength(0); expect(fetch).not.toHaveBeenCalled();
+  toggle.dispatchEvent(new Event('click')); await flush();
+  const context = contexts[0]; audio.vendingDispense(); const motor = context.sources.at(-1)!;
+  const before = context.sources.length;
+  for (let message = 0; message < 20; message++) audio.phoneBuzz();
+  expect(context.sources).toHaveLength(before + 1);
+  const phone = context.sources.at(-1)!;
+  expect(phone.stop).toHaveBeenCalledWith(context.currentTime + .24);
+  audio.stopPhoneBuzz(); expect(phone.stop).toHaveBeenLastCalledWith();
+  expect(motor.stop).toHaveBeenLastCalledWith(context.currentTime + .32);
+  context.currentTime += 2; audio.phoneBuzz(); const muted = context.sources.at(-1)!;
+  const volume = controls.get('#scene-volume')!; volume.value = '0'; volume.dispatchEvent(new Event('input'));
+  expect(muted.stop).toHaveBeenLastCalledWith();
+  const count = context.sources.length; audio.phoneBuzz(); expect(context.sources).toHaveLength(count);
+  volume.value = '40'; volume.dispatchEvent(new Event('input')); expect(context.sources).toHaveLength(count);
+  context.currentTime += 2; audio.phoneBuzz(); const hidden = context.sources.at(-1)!;
+  document.hidden = true; document.dispatchEvent(new Event('visibilitychange')); await flush();
+  expect(hidden.stop).toHaveBeenLastCalledWith();
+  const hiddenCount = context.sources.length; audio.phoneBuzz(); expect(context.sources).toHaveLength(hiddenCount);
+  audio.dispose(); audio.phoneBuzz(); expect(context.sources).toHaveLength(hiddenCount);
+  expect(fetch).toHaveBeenCalledTimes(9);
+});

@@ -1,0 +1,64 @@
+import * as THREE from 'three';
+import { afterEach, expect, it, vi } from 'vitest';
+import { BRAND_FLAG, brandFlagVertex, createBrandFlag, createPersonalFlagGeometry } from '../client/prototypes/factory25dBrandFlag';
+
+afterEach(() => vi.unstubAllGlobals());
+
+it('cuts the original swallowtail into geometry and leaves its opening unclickable', () => {
+  const geometry = createPersonalFlagGeometry(), uv = geometry.getAttribute('uv');
+  const middleRow = Array.from({length: uv.count}, (_, i) => i).filter(i => Math.abs(uv.getY(i) - .5) < .001);
+  expect(Math.max(...middleRow.map(i => uv.getX(i)))).toBeCloseTo(1 - 14 / 113);
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+  const ray = new THREE.Raycaster(new THREE.Vector3(BRAND_FLAG.width * .49, 0, 1), new THREE.Vector3(0, 0, -1));
+  expect(ray.intersectObject(mesh)).toHaveLength(0);
+  ray.ray.origin.x = 0;
+  expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);
+  geometry.dispose(); mesh.material.dispose();
+});
+
+it('pins the hoist to its pole and keeps wind motion clear of the string lights', () => {
+  for (const wind of [0, .5, 1, 100, NaN]) for (const time of [0, .5, 2, 13]) for (const v of [0, .5, 1]) {
+    const pinned = brandFlagVertex(0, v, time, wind, false);
+    expect(pinned.x).toBe(-BRAND_FLAG.width / 2); expect(pinned.y).toBe((v - .5) * BRAND_FLAG.height); expect(pinned.z).toBeCloseTo(0);
+    const free = brandFlagVertex(1, v, time, wind, false);
+    expect(Math.abs(free.z)).toBeLessThan(.21);
+    expect(BRAND_FLAG.z + free.z).toBeLessThan(-3.6 - .2);
+  }
+  expect(brandFlagVertex(1, .5, .5, 1, false)).not.toEqual(brandFlagVertex(1, .5, 2, 1, false));
+});
+
+it('keeps reduced motion in one soft drape regardless of time or changing weather', () => {
+  const calm = brandFlagVertex(.25, .5, 0, 0, true);
+  expect(brandFlagVertex(.25, .5, 88, 1, true)).toEqual(calm);
+  expect(Math.abs(calm.z)).toBeLessThan(.06);
+  expect(calm.y).toBeLessThan(0);
+});
+
+it('uses the original logo without distortion on a lit, reusable fabric mesh', () => {
+  const drawImage = vi.fn();
+  const context = {fillRect: vi.fn(), setLineDash: vi.fn(), strokeRect: vi.fn(), drawImage};
+  const canvas = {width: 0, height: 0, getContext: () => context};
+  const image = {src: '', naturalWidth: 1024, naturalHeight: 1024, onload: null as null | (() => void), removeAttribute: vi.fn()};
+  vi.stubGlobal('document', {createElement: (type: string) => type === 'canvas' ? canvas : image});
+  const parent = new THREE.Scene(), flag = createBrandFlag(parent);
+  expect(image.src).toBe('/brand/we-commerce-logomark-white.svg'); image.onload?.();
+  expect(drawImage).toHaveBeenCalledOnce();
+  const [, , , width, height] = drawImage.mock.calls[0];
+  expect(width / height).toBeCloseTo(1);
+  expect(canvas.width / canvas.height).toBeCloseTo(BRAND_FLAG.width / BRAND_FLAG.height);
+  expect(flag.root.position.toArray()).toEqual([20.7, 0, -4.06]);
+  const cloth = flag.target as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+  expect(cloth.material).toBeInstanceOf(THREE.MeshStandardMaterial);
+  expect(cloth.material.emissive.getHex()).toBe(0); expect(cloth.castShadow).toBe(true);
+  const geometry = cloth.geometry, positions = geometry.getAttribute('position');
+  const before = Array.from(positions.array);
+  flag.update(1, .8, false);
+  expect(cloth.geometry).toBe(geometry); expect(Array.from(positions.array)).not.toEqual(before);
+  flag.update(1, .8, true); const reduced = Array.from(positions.array);
+  flag.update(100, 1, true); expect(Array.from(positions.array)).toEqual(reduced);
+  const textureDispose = vi.spyOn(cloth.material.map!, 'dispose'), geometryDispose = vi.spyOn(geometry, 'dispose');
+  flag.dispose(); flag.dispose();
+  expect(parent.children).toHaveLength(0); expect(image.onload).toBeNull();
+  expect(image.removeAttribute).toHaveBeenCalledWith('src');
+  expect(textureDispose).toHaveBeenCalledOnce(); expect(geometryDispose).toHaveBeenCalledOnce();
+});

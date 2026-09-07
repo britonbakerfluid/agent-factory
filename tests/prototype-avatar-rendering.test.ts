@@ -85,6 +85,17 @@ describe('in-room avatar camera', () => {
     stage.close();tick(3000);expect(mesh.visible).toBe(true);expect(garage.children).toEqual([mesh]);stage.dispose();
   });
 
+  it('starts the walk preview on its own contact frame and holds that frame when stopped', async () => {
+    const { stage, factory, tick } = await setup();
+    tick(15_000); stage.pose(1, true); tick(15_000);
+    const model = factory.getObjectByName('avatar-edit-draft') as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>;
+    expect(model.material.map!.offset.x).toBe(0);
+    tick(15_160); expect(model.material.map!.offset.x).toBe(.25);
+    stage.pose(2, true); tick(15_310); expect(model.material.map!.offset.x).toBe(.75);
+    stage.pose(2, false); tick(15_500); expect(model.material.map!.offset.x).toBe(0);
+    stage.dispose();
+  });
+
   it('stops rebuilding the settled camera, then reframes after a viewport resize', async () => {
     const { stage, renderer, canvas, tick } = await setup();
     const clones = vi.spyOn(THREE.OrthographicCamera.prototype, 'clone');

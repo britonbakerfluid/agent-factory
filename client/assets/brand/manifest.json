@@ -1,0 +1,45 @@
+{
+  "collection": "Fluid + We Commerce original logos",
+  "assets": [
+    {
+      "file": "fluid-logomark.svg",
+      "sha256": "cb79a2863a7fb66319a7b7f74d1cdc1458094edd1de01e15a0307d42bbf3d876",
+      "source": "Fluid design system / brand assets"
+    },
+    {
+      "file": "fluid-lockup.svg",
+      "sha256": "b8ac50566f8df84ecec744c22358add58135266cded1c7f550611052de31ce04",
+      "source": "Fluid design system / brand assets"
+    },
+    {
+      "file": "we-commerce-logomark-black.svg",
+      "sha256": "54776115050954c1c3a1be641564d66b1d097cd5a9aa6798ce01c0f6a0514274",
+      "source": "Fluid design system / brand assets"
+    },
+    {
+      "file": "we-commerce-logomark-white.svg",
+      "sha256": "66bdac78e9a259a0e6a3283204a4ca515cd6ed68342534e40935aadc0166742d",
+      "source": "Fluid design system / brand assets"
+    },
+    {
+      "file": "we-commerce-wordmark-black.svg",
+      "sha256": "c164bc32a001e370c709991e49304c65ef247068a04910a85506ad9c63879f5c",
+      "source": "Fluid design system / brand assets"
+    },
+    {
+      "file": "we-commerce-wordmark-white.svg",
+      "sha256": "899df54bd75d4dd2e6b1208303bb88b17139fe0e03d08948b1a51799020b2e58",
+      "source": "Fluid design system / brand assets"
+    },
+    {
+      "file": "we-commerce-logotype-black.svg",
+      "sha256": "375fb2661eaaac91d141409242e85d35f4310f4b905a255a306dff0e634a11f3",
+      "source": "Fluid design system / brand assets"
+    },
+    {
+      "file": "we-commerce-logotype-white.svg",
+      "sha256": "a3f127d701b6dd5d36245c7d43acf2d8d5ff6189b2bb4f695900963c340eed77",
+      "source": "Fluid design system / brand assets"
+    }
+  ]
+}

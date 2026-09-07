@@ -155,8 +155,8 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
   garden.border(17.03, -2.17, 2.89, .25, 3.15, true);
   garden.finish();
   for (const [index, [x, z, y]] of [[17.21, 2.36, .3], [19.99, 2.36, .3], [9.65, .18, .54], [22.9, .18, .54], [8.4, 11.6, low], [15.4, 11.6, low], [22.7, 11.6, low]].entries()) lantern(x, z, y, index + 1, x === 17.21 || x === 22.7);
-  return { lightSwitches, dispose() { switchMaterials.forEach(material => material.dispose()); glow.dispose(); }, update(snow: number, rain: number, night: boolean, time: number, reducedMotion = false) {
-    garden.update(snow, rain, time, reducedMotion);
+  return { lightSwitches, dispose() { garden.dispose(); switchMaterials.forEach(material => material.dispose()); glow.dispose(); }, update(snow: number, rain: number, night: boolean, time: number, reducedMotion = false, viewWidth = 16) {
+    garden.update(snow, rain, time, reducedMotion, viewWidth);
     warmBrightness = night ? 2.8 : 1.25;
     for (const { light, isOn } of warmLights) light.intensity = isOn() ? warmBrightness : 0;
     flames.forEach((flame, i) => { flame.scale.y = reducedMotion ? 1 : 1 + Math.sin(time * 3.5 + i * 2) * .12; });

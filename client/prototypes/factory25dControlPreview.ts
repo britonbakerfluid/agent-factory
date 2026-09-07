@@ -1,4 +1,4 @@
-import { DEFAULT_AVATAR, VALID_EMOTES } from '@shared/constants';
+import { CONTROL_MOVE_SPEED, DEFAULT_AVATAR, VALID_EMOTES } from '@shared/constants';
 import { constrainFactoryStep, toFactoryWorld, fromFactoryWorld, factoryRoomAt, FACTORY_ELEVATOR, GARAGE_ELEVATOR, WORKSTATIONS, factory25dWaypoints, MINI_WORKSTATION_SLOT, MINI_WORKSTATION_USERNAME } from '@shared/factory25d-layout';
 import { manualElevatorEntry, manualElevatorLanding, MANUAL_ELEVATOR_DURATION_MS } from '@shared/factory25d-manual-travel';
 import { slotPosition, routeDistance, positionAt, zoneForActivity, WORLD_LAYOUTS } from '@shared/world-layouts';
@@ -25,6 +25,11 @@ export function createControlPreview(publish: (data: BoardData) => void,
   const miniActions = tools.querySelector<HTMLElement>('.preview-mini-actions')!;
   const travelActions = tools.querySelector<HTMLElement>('.preview-travel-actions')!;
   const miniStart = tools.querySelector<HTMLButtonElement>('.preview-mini-start')!, miniPack = tools.querySelector<HTMLButtonElement>('.preview-mini-pack')!;
+  const phoneMessage = document.createElement('button'); phoneMessage.type = 'button';
+  phoneMessage.className = 'preview-phone-message'; phoneMessage.textContent = 'receive sample message';
+  phoneMessage.title = 'A local teammate message; nothing is sent to the factory';
+  const phoneActions = document.createElement('div'); phoneActions.className = 'preview-actions'; phoneActions.append(phoneMessage);
+  tools.append(phoneActions);
   for (const scenario of SCENARIOS) picker.add(new Option(scenario === 'empty' ? 'connected · no agents' : scenario === 'error' ? 'claim denied' : scenario === 'mini-laptop' ? 'mini laptop' : scenario === 'activity' ? 'agent states' : scenario, scenario));
   document.body.append(tools);
   const controlPanel = document.querySelector<HTMLElement>('.factory-controls')!;
@@ -38,6 +43,7 @@ export function createControlPreview(publish: (data: BoardData) => void,
   const abort = new AbortController(), events = { signal: abort.signal };
   mobile.addEventListener('change', event => { tools.open = !event.matches; }, events);
   let scenario: Scenario = 'watching', epoch = 0, selected: string | undefined;
+  let phoneSample = 0;
   let input = emptyInput(), world: WorldSnapshot, elevatorArmed = true;
   const carHomes = new Map<string, WorldAgent['world']>();
   const actionRevision = new Map<string, number>();
@@ -63,8 +69,21 @@ export function createControlPreview(publish: (data: BoardData) => void,
     world = { ...world, revision: world.revision + 1, serverTime: Date.now(), agents: [...world.agents] };
     const miniWork=world.agents.find(agent => agent.sessionId === 'preview-mine')?.world.miniWork;
     miniPack.disabled = !miniWork || miniWork.packingAt !== undefined;
+    phoneMessage.disabled = !connected();
     publish(data());
   }
+  phoneMessage.addEventListener('click', () => {
+    if (!connected()) return;
+    // The in-memory playground usually publishes snapshots only. Bracket this
+    // sample with a silent baseline and an actual append event, exactly as the
+    // phone's live listener expects; no socket or chat-send command is involved.
+    receive({ type: 'world_snapshot', snapshot: world });
+    const previousRevision = world.revision;
+    const chat = { username: 'teammate · preview', message: `hey, meet you in the lounge · ${++phoneSample}`, timestamp: Date.now() };
+    world = { ...world, chat: [...world.chat, chat].slice(-100) }; update();
+    receive({ type: 'world_delta', delta: { previousRevision, revision: world.revision, serverTime: world.serverTime,
+      changes: [{ kind: 'chat_append', chat }] } });
+  }, events);
   function currentPosition(agent: WorldAgent) {
     return agent.manualControl?.elevatorTrip ? manualElevatorLanding(agent.manualControl.elevatorTrip, Date.now())
       : agent.world.movement ? positionAt(agent.world.movement, Date.now()) : agent.world.position;
@@ -219,7 +238,7 @@ export function createControlPreview(publish: (data: BoardData) => void,
     const x = Number(input.right) - Number(input.left), y = Number(input.down) - Number(input.up);
     const distance = Math.hypot(x, y), before = agent.world.position;
     if (distance) {
-      const position = constrainFactoryStep(before, { x: before.x + x / distance * dt * 65, y: before.y + y / distance * dt * 65 });
+      const position = constrainFactoryStep(before, { x: before.x + x / distance * dt * CONTROL_MOVE_SPEED, y: before.y + y / distance * dt * CONTROL_MOVE_SPEED });
       const entrance = manualElevatorEntry(before, position);
       if (entrance) {
         const elevatorTrip = {...entrance,startedAt:now,arrivesAt:now+MANUAL_ELEVATOR_DURATION_MS};

@@ -5,6 +5,7 @@ import { CONTROL_WORLD_BOUNDS, GRAB_POINTER_BOUNDS } from '../shared/constants.j
 import { randomUUID } from 'node:crypto';
 import type {
   AgentAttention,
+  AgentActivity,
   AgentSession,
   AvatarConfig,
   ChatMessage,
@@ -22,6 +23,7 @@ import type {
   WorldChange,
   WorldDelta,
   WorldSnapshot,
+  WorldMovement,
 } from '../shared/types.js';
 import { isInShotCorridor } from '../shared/world-geometry.js';
 import {
@@ -110,13 +112,19 @@ export class StateManager {
   private restoringWorkReservations = new Map<number, string>();
   private avatarResolver: ((ownerId: string) => AvatarConfig | undefined) | undefined;
   private grabbedSession: (sessionId: string) => boolean = () => false;
+  private garageDriving?: { occupied: (car: GarageCarId) => boolean; blocks: (from: Position, to: Position) => boolean };
+  private garageDrivers = new Set<string>();
+  private garageYielding = new Map<string, { movement: WorldMovement; pausedAt: number; activity: AgentActivity }>();
 
   constructor(
     private environment: EnvironmentType = 'arcade',
     private now: () => number = Date.now,
   ) {}
 
-  constrainStep(from: Position, to: Position) { return this.environment === 'factory25d' ? constrainFactoryStep(from, to) : to; }
+  constrainStep(from: Position, to: Position) {
+    const next = this.environment === 'factory25d' ? constrainFactoryStep(from, to) : to;
+    return this.garageDriving?.blocks(from, next) ? from : next;
+  }
   manualElevatorEntry(from: Position, to: Position) { return this.environment === 'factory25d' ? manualElevatorEntry(from, to) : undefined; }
   get worldBounds() { return this.environment === 'factory25d' ? FACTORY25D_BOUNDS : CONTROL_WORLD_BOUNDS; }
   get grabBounds() { return this.environment === 'factory25d' ? { ...FACTORY25D_BOUNDS, minY: -82 } : GRAB_POINTER_BOUNDS; }
@@ -138,6 +146,53 @@ export class StateManager {
   }
 
   setGrabbedSessionCheck(check: (sessionId: string) => boolean): void { this.grabbedSession = check; }
+  setGarageDrivingHooks(hooks: StateManager['garageDriving']) { this.garageDriving = hooks; }
+  isGarageCarReserved(car: GarageCarId, exceptSessionId?: string) { return this.garageCarOccupied(car, exceptSessionId); }
+  isSessionGrabbed(sessionId: string) { return this.grabbedSession(sessionId); }
+  holdGarageDriver(sessionId: string) {
+    const session = this.sessions.get(sessionId); if (!session) return;
+    session.world.position = this.currentWorldPosition(session); delete session.world.movement;
+    this.garageDrivers.add(sessionId); this.emit('update', { agent: session });
+  }
+  finishGarageDriver(sessionId: string, parked = false) {
+    if (!this.garageDrivers.delete(sessionId)) return;
+    const session = this.sessions.get(sessionId); if (!session) return;
+    if (parked && session.activity === 'idle' && !session.manualControl && !this.grabbedSession(sessionId) && session.world.carVisit) {
+      // Resume only the existing door-open / get-out / walk-back section.
+      const timestamp = this.now(); session.world.carVisit.startedAt = timestamp - 8_150;
+      this.idleRoamAt.set(sessionId, timestamp + GARAGE_CAR_VISIT_MS - 8_150);
+      this.emit('update', { agent: session }); return;
+    }
+    delete session.world.carVisit; delete session.world.idleVisit; this.idleRoamAt.delete(sessionId);
+    this.syncWorld(session); this.emit('update', { agent: session });
+  }
+  /** Pause automatic pedestrians before a moving car, retaining the exact route for resumption. */
+  yieldToGarageCars(timestamp: number) {
+    if (!this.garageDriving) return;
+    for (const id of this.garageYielding.keys()) if (!this.sessions.has(id)) this.garageYielding.delete(id);
+    const changes: WorldChange[] = [];
+    for (const session of this.sessions.values()) {
+      const held = this.garageYielding.get(session.sessionId);
+      if (held) {
+        if (session.manualControl || session.activity !== held.activity || session.world.movement || this.grabbedSession(session.sessionId)) this.garageYielding.delete(session.sessionId);
+        else {
+          const from = positionAt(held.movement, held.pausedAt), to = positionAt(held.movement, held.pausedAt + 350);
+          if (this.garageDriving.blocks(from, to)) continue;
+          const delay = timestamp - held.pausedAt;
+          session.world.movement = { ...held.movement, startedAt: held.movement.startedAt + delay, arrivesAt: held.movement.arrivesAt + delay };
+          this.garageYielding.delete(session.sessionId); changes.push({ kind: 'agent_upsert', agent: clone(session) }); continue;
+        }
+      }
+      const movement = session.world.movement;
+      if (!movement || session.manualControl || session.activity === 'stopped' || this.garageDrivers.has(session.sessionId) || this.grabbedSession(session.sessionId)) continue;
+      const from = positionAt(movement, timestamp), to = positionAt(movement, timestamp + 350);
+      if (!this.garageDriving.blocks(from, to)) continue;
+      this.garageYielding.set(session.sessionId, { movement, pausedAt: timestamp, activity: session.activity });
+      session.world.position = from; delete session.world.movement;
+      changes.push({ kind: 'agent_upsert', agent: clone(session) });
+    }
+    if (changes.length) this.commit(changes, false, timestamp);
+  }
 
   updateOwnerAvatar(ownerId: string, avatar: AvatarConfig) {
     const changes: WorldChange[] = [];
@@ -168,6 +223,13 @@ export class StateManager {
     if (!ownerId) return { success: false, error: 'Connect this browser to visit a car with your agent.' };
     const session = this.sessions.get(sessionId);
     if (!session || session.ownerId !== ownerId) return { success: false, error: 'Choose one of your own agents.' };
+    return this.startIdleGarageCarVisit(sessionId, car);
+  }
+
+  /** Only the server's occasional idle excursion policy calls this without browser ownership. */
+  startIdleGarageCarVisit(sessionId: string, car: unknown): { success: boolean; error?: string } {
+    const session = this.sessions.get(sessionId);
+    if (!session || this.grabbedSession(sessionId)) return { success: false, error: 'That agent is unavailable.' };
     if (this.environment !== 'factory25d') return { success: false, error: 'Car visits are available in the factory garage.' };
     if (!isGarageCarId(car)) return { success: false, error: 'Choose a car from the garage.' };
     if (session.activity !== 'idle') return { success: false, error: 'That agent is busy. Try again when they are idle.' };
@@ -199,7 +261,7 @@ export class StateManager {
   }
 
   private garageCarOccupied(car: GarageCarId, exceptSessionId?: string): boolean {
-    return [...this.sessions.values()].some(session => session.sessionId !== exceptSessionId && session.activity !== 'stopped' && !session.manualControl
+    return !!this.garageDriving?.occupied(car) || [...this.sessions.values()].some(session => session.sessionId !== exceptSessionId && session.activity !== 'stopped' && !session.manualControl
       && (session.activity === 'idle' && session.world.carVisit?.car === car
         || car === 'mini' && (this.packingMini(session) || session.world.zone === 'work' && session.world.slotIndex === MINI_WORKSTATION_SLOT)));
   }
@@ -286,6 +348,7 @@ export class StateManager {
       schemaVersion: WORLD_SCHEMA_VERSION,
       workstationCount: WORLD_LAYOUTS[this.environment].workSlots.length,
       ...(this.environment === 'factory25d' ? { garageCars: true as const } : {}),
+      ...(this.garageDriving ? { garageDriving: true as const } : {}),
       revision: this.revision,
       serverTime: timestamp,
       environment: this.environment,
@@ -446,6 +509,7 @@ export class StateManager {
   private advanceFactoryRoaming(timestamp: number): void {
     const changes: WorldChange[] = [];
     for (const session of this.sessions.values()) {
+      if (this.garageDrivers.has(session.sessionId) || this.garageYielding.has(session.sessionId)) continue;
       const packingAt = session.world.miniWork?.packingAt;
       if (packingAt !== undefined && timestamp >= packingAt + MINI_WORK_PACK_MS) {
         if (session.world.zone === 'work' && session.world.slotIndex === MINI_WORKSTATION_SLOT && zoneForActivity(session.activity) === 'work' && !session.manualControl) session.world.miniWork = { startedAt: packingAt + MINI_WORK_PACK_MS };
@@ -1417,6 +1481,9 @@ export class StateManager {
   }
 
   private syncWorld(session: WorldAgent, timestamp = this.now()): void {
+    // Work begins immediately as data; the seated person finishes the safe car
+    // return before walking to their workstation. Manual/grab/stopped overrides win.
+    if (this.garageDrivers.has(session.sessionId) && !session.manualControl && session.activity !== 'stopped' && !this.grabbedSession(session.sessionId)) return;
     // Hooks must not re-open the portable workstation while a viewer is holding its agent.
     if (this.environment === 'factory25d' && !session.manualControl && session.activity !== 'stopped' && this.grabbedSession(session.sessionId)) {
       const mini = !!session.world.miniWork || session.world.zone === 'work' && session.world.slotIndex === MINI_WORKSTATION_SLOT;

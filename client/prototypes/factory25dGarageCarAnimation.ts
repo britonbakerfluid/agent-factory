@@ -30,7 +30,7 @@ export function createGarageCarAnimation(cars: Map<string, THREE.Group>) {
     visits,
     configure(next: ReturnType<typeof createLiveAgents>) { agents = next; },
     engine: () => engine,
-    update(visible: boolean, reduced: boolean) {
+    update(visible: boolean, reduced: boolean, drivingCars: ReadonlySet<string> = new Set()) {
       engine = undefined;
       visits.clear();
       for (const id of GARAGE_CAR_IDS) {
@@ -42,7 +42,7 @@ export function createGarageCarAnimation(cars: Map<string, THREE.Group>) {
       const now = agents.serverNow();
       for (const entry of agents.entries.values()) {
         const visit = entry.session.world.carVisit;
-        if (!visit || entry.session.manualControl || entry.session.activity !== 'idle') continue;
+        if (!visit || drivingCars.has(visit.car) || entry.session.manualControl || entry.session.activity !== 'idle') continue;
         const elapsed = now - visit.startedAt, rig = rigFor(visit.car);
         if(elapsed < GARAGE_CAR_VISIT_MS) visits.set(visit.car,elapsed < 0 ? 'walking over' : garageCarVisitPose(elapsed).phase);
         if (!rig || elapsed < 0 || elapsed >= GARAGE_CAR_VISIT_MS) continue;

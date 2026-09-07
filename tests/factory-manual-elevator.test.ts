@@ -169,7 +169,7 @@ describe('authoritative manual elevator leases', () => {
   it('retains collision-constrained walking outside the door and never activates in the arcade', () => {
     const f = fixture();
     f.controls.release(f.ws, 'owner', 'passenger');
-    const away = toFactoryWorld({ x: -7.4, z: -3 });
+    const away = toFactoryWorld({ x: FACTORY_ELEVATOR.x + .7, z: -3 });
     f.agent().world = { zone: 'idle', position: away, facing: 'up' };
     f.controls.claim(f.ws, 'owner', 'passenger');
     f.input(up); f.advance(200);

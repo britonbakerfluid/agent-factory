@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { factoryHost, sendFactoryCommand, type BoardData } from './factory25dBoardData';
+import { factoryHost, onFactoryConnection, onFactoryMessage, sendFactoryCommand, type BoardData } from './factory25dBoardData';
 import type { AvatarConfig, ChatMessage } from '@shared/types';
 import type { TeamMember } from '@shared/team';
 import { ChatCommandHistory, chatSuggestions, completeChatSuggestion, executeChatCommand, type ChatSuggestion } from './factory25dChatCommands';
@@ -8,6 +8,7 @@ import { blendCamera, cameraPose, type CameraPose } from './factory25dCameraMoti
 import { createPhoneMessage } from './factory25dPhoneMessages';
 import { avatarPortrait, createProfilePortrait } from './factory25dPortrait';
 import { createLoungePhone, phoneCameraPose, PHONE } from './factory25dLoungePhone';
+import { PhoneMessageArrivals } from './factory25dPhoneNotifications';
 import './factory25dLoungePhone.css';
 
 export interface LoungeChatCommands {
@@ -16,6 +17,7 @@ export interface LoungeChatCommands {
   /** Return false when another focused view must be closed first. */
   requestRoom: () => boolean;
 }
+export interface PhoneNotificationSounds { buzz?: () => void; stop?: () => void }
 
 /** The existing live conversation is projected onto the phone on the lounge table. */
 export function createLoungeChat(
@@ -172,6 +174,27 @@ export function createLoungeChat(
   let lastData: BoardData | null = null;
   let layoutWidth = 360;
   const focus = new THREE.Vector3();
+  const arrivals = new PhoneMessageArrivals();
+  let notificationSounds: PhoneNotificationSounds = {};
+  let notificationPlaying = false;
+  function cancelNotification() {
+    handset.updateNotification(performance.now(), reduced.matches, false);
+    if (notificationPlaying) notificationSounds.stop?.();
+    notificationPlaying = false; button.dataset.notification = 'false';
+  }
+  const stopMessages = onFactoryMessage(message => {
+    const incoming = arrivals.receive(message);
+    // Consume unseen arrivals even while elsewhere or reading; returning to the
+    // lounge must never play a backlog of notification animations or sounds.
+    if (!incoming || active || !canOpen || document.hidden) return;
+    if (handset.notify(performance.now())) {
+      notificationPlaying = true; notificationSounds.buzz?.();
+    }
+  });
+  const stopConnection = onFactoryConnection(connected => {
+    if (!connected) { arrivals.disconnect(); cancelNotification(); }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelNotification(); }, options);
 
   function fit() {
     const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
@@ -184,6 +207,7 @@ export function createLoungeChat(
   }
   function enter() {
     if (active || !canOpen) return;
+    cancelNotification();
     room = cameraPose(roomCamera); from = cameraPose(roomCamera);
     const previousHeight = canvas.clientHeight;
     open = active = moving = true; started = performance.now();
@@ -295,13 +319,19 @@ export function createLoungeChat(
   return {
     camera,
     configureCommands(commands: LoungeChatCommands) { integration = commands; },
-    dispose() { saveDraft(); abort.abort(); handset.dispose(); if (soundPanel && soundParent) soundParent.insertBefore(soundPanel, soundSibling ?? null); document.body.classList.remove('chat-open'); view.remove(); button.remove(); },
+    configureNotifications(sounds: PhoneNotificationSounds) { notificationSounds = sounds; },
+    dispose() { saveDraft(); cancelNotification(); stopMessages(); stopConnection(); abort.abort(); handset.dispose(); if (soundPanel && soundParent) soundParent.insertBefore(soundPanel, soundSibling ?? null); document.body.classList.remove('chat-open'); view.remove(); button.remove(); },
     isActive: () => active,
     focusPoint: () => board.localToWorld(focus.set(0, 0, PHONE.faceZ)),
     update(now: number, data: BoardData, visible: boolean) {
+      arrivals.setOwnUsername(data.principal?.username);
+      if (data.connected) arrivals.seed(data.world?.revision, data.chat ?? []);
       const members = getMembers();
       if (data !== lastData || members !== lastMembers) { lastData = data; lastMembers = members; refresh(data); }
       canOpen = visible && !document.body.classList.contains('inspect-open');
+      if (notificationPlaying && (active || !canOpen || document.hidden)) cancelNotification();
+      notificationPlaying = handset.updateNotification(now, reduced.matches, canOpen && !active && !document.hidden);
+      button.dataset.notification = String(notificationPlaying);
       if (queuedEntry && document.body.matches('.board-open, .weather-open, .inspect-open')) { queuedEntry = false; focusComposer = false; }
       if (queuedEntry && canOpen) { queuedEntry = false; enter(); }
       button.hidden = active || !canOpen;

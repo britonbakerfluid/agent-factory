@@ -10,9 +10,14 @@ export interface VendingInteractionOptions {
   visible: () => boolean;
   sounds?: VendingSounds;
 }
+export interface VendingDispenseEvents {
+  accepted?: () => void;
+  released?: (body: VendingCanBody) => void;
+  rockAngle?: () => number;
+}
 
 /** One batch per snack shape plus one shared floor shadow batch. */
-export function createVendingDispenser(root: THREE.Group) {
+export function createVendingDispenser(root: THREE.Group, events: VendingDispenseEvents = {}) {
   const pile = new VendingPilePhysics();
   const material = new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: .61, metalness: .08 });
   const batches = new Map<VendingSnackKind, THREE.InstancedMesh>();
@@ -41,12 +46,15 @@ export function createVendingDispenser(root: THREE.Group) {
   shadows.instanceMatrix.setUsage(THREE.DynamicDrawUsage); shadows.frustumCulled = false; root.add(shadows);
   const transform = new THREE.Object3D();
   let wasActive = false;
+  let lastReleasedId = -1;
   const soundEvents = new VendingSoundEvents();
   let attach: ReturnType<typeof attachVendingInteraction> | undefined;
+  const visible = () => (attach?.visible() ?? true) && !document.hidden;
   const dispense = () => {
     const accepted = pile.dispense();
     attach?.announce(accepted);
-    soundEvents.select(accepted, (attach?.visible() ?? true) && !document.hidden);
+    soundEvents.select(accepted, visible());
+    if (accepted && visible()) events.accepted?.();
     return accepted;
   };
   function syncMeshes() {
@@ -76,25 +84,29 @@ export function createVendingDispenser(root: THREE.Group) {
     },
     get count() { return pile.bodies.length; },
     get queued() { return pile.queued; },
+    get visible() { return visible(); },
     attachInteraction(options: VendingInteractionOptions) {
       attach?.dispose();
       soundEvents.configure(options.sounds);
-      attach = attachVendingInteraction(root, options, dispense, () => pile.bodies.length + pile.queued);
+      attach = attachVendingInteraction(root, options, dispense, () => pile.bodies.length + pile.queued, () => events.rockAngle?.() ?? 0);
     },
     update(dt: number) {
       // All particles pause offscreen along with the floor, avoiding surprise
       // object movement behind an open room/computer/phone view.
-      const visible = attach?.visible() ?? true;
-      if (visible && !document.hidden) {
+      const isVisible = visible();
+      if (isVisible) {
         const before = pile.bodies.length;
         pile.update(dt);
+        for (const body of pile.bodies) if (body.id > lastReleasedId) {
+          lastReleasedId = body.id; events.released?.(body);
+        }
         const active = pile.bodies.some(body => !body.sleeping);
         if (active || wasActive || pile.bodies.length !== before) {
           syncMeshes();
         }
         wasActive = active;
       }
-      soundEvents.update(pile.bodies, visible && !document.hidden);
+      soundEvents.update(pile.bodies, isVisible);
       attach?.update();
     },
     dispose() {
@@ -107,7 +119,7 @@ export function createVendingDispenser(root: THREE.Group) {
 }
 
 function attachVendingInteraction(root: THREE.Group, options: VendingInteractionOptions,
-  dispense: () => boolean, count: () => number) {
+  dispense: () => boolean, count: () => number, rockAngle: () => number) {
   const { canvas } = options;
   const button = document.createElement('button');
   button.type = 'button'; button.className = 'vending-dispense';
@@ -132,6 +144,7 @@ function attachVendingInteraction(root: THREE.Group, options: VendingInteraction
       status.textContent = accepted ? `Snack ${count()} selected. Watch the pickup tray.` : 'The pickup area is full.';
     },
     update() {
+      button.dataset.rockAngle = rockAngle().toFixed(4);
       button.hidden = !options.visible() || document.hidden;
       if (button.hidden) return;
       root.updateWorldMatrix(true, false);

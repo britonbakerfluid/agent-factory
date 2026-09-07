@@ -110,6 +110,8 @@ export function createFactoryAudio() {
     vendingLand(energy = 1) { if (propsAudible()) graph!.vendingLand(energy); },
     lampSwitch(on = true) { if (propsAudible()) graph!.lampSwitch(on); },
     candle(on: boolean) { if (propsAudible()) graph!.candle(on); },
+    phoneBuzz() { if (propsAudible()) graph!.phoneBuzz(); },
+    stopPhoneBuzz() { graph?.stopPhoneBuzz(); },
     stopPropSounds() { graph?.stopPropSounds(); },
     thunder(energy = 1, pan = 0) {
       if (!disposed && enabled && volume > 0 && !document.hidden && context?.state === 'running') graph?.thunder(energy, pan);

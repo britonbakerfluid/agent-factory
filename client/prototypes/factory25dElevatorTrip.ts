@@ -1,7 +1,10 @@
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
 /** A continuous floor descent; reduced motion keeps a short stationary fade. */
-export function elevatorTrip(elapsed: number, fromGarage: boolean, toGarage: boolean, reduced = false, passenger = false) {
+export function elevatorTrip(elapsedMs: number, fromGarage: boolean, toGarage: boolean, reduced = false, passenger = false) {
+  // A clicked tour has time to read the change in viewpoint. An actual
+  // passenger stays synchronized with the server; reduced motion stays brief.
+  const elapsed = !passenger && !reduced ? elapsedMs / 1.35 : elapsedMs;
   if (reduced && !passenger) {
     const switched = elapsed >= 110;
     return { done: elapsed >= 240, garage: switched ? toGarage : fromGarage,

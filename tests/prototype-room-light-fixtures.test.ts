@@ -8,7 +8,7 @@ import { createSideRoom } from '../client/prototypes/factory25dSideRoom';
 // Plant generation, water and contact textures are independent of fixture circuits.
 vi.mock('../client/prototypes/factory25dContactShadows', () => ({ contactShadow: () => new THREE.Mesh() }));
 vi.mock('../client/prototypes/factory25dPlants', () => ({ createIndoorPlants: () => ({ shelf() {}, plant() {}, update() {} }) }));
-vi.mock('../client/prototypes/factory25dPatioGarden', () => ({ createPatioGarden: () => ({ tree() {}, border() {}, finish() {}, update() {} }) }));
+vi.mock('../client/prototypes/factory25dPatioGarden', () => ({ createPatioGarden: () => ({ tree() {}, border() {}, finish() {}, update() {}, dispose() {} }) }));
 vi.mock('../client/prototypes/factory25dPatioWater', () => ({ createPatioWater: () => ({ update() {}, dispose() {} }) }));
 vi.mock('../client/prototypes/factory25dPatioStations', () => ({ createPatioStations: () => [] }));
 

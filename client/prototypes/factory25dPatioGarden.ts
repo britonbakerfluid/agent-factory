@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { propPart, standard } from './factory25dProps';
 import { contactShadow } from './factory25dContactShadows';
-import { createPothosFoliage, positionPothosLeaf, pothosSway, pothosVineGeometry } from './factory25dPothosFoliage';
+import { createPothosFoliage, createPothosLeafGeometry, positionPothosLeaf, pothosSway, pothosVineGeometry } from './factory25dPothosFoliage';
 
 // A folded leaf catches light on both sides of its midrib. The silhouette,
 // rather than a solid canopy volume, carries the species at inspection distance.
@@ -39,6 +39,8 @@ function pineSpray() {
 /** Instanced leaves, needles and stems leave air between the planted silhouettes. */
 export function createPatioGarden(parent: THREE.Group) {
   const pothos = createPothosFoliage();
+  const distantLeaf = createPothosLeafGeometry(false);
+  let detailedLeaves = true;
   const trails: THREE.Group[] = [];
   const concrete = standard('#85897d', 1), lip = standard('#a0a294', 1), soil = standard('#343a2d', 1);
   const bark = standard('#71654e', 1), vineMaterial = standard('#526245', 1);
@@ -195,7 +197,19 @@ export function createPatioGarden(parent: THREE.Group) {
       mesh.computeBoundingSphere();
     }
   }
-  return { tree, border, finish, update(snow: number, rain: number, time: number, reducedMotion: boolean) {
+  return { tree, border, finish, dispose() { distantLeaf.dispose(); },
+    update(snow: number, rain: number, time: number, reducedMotion: boolean, viewWidth = 16) {
+    // At the normal 16-unit view, each bevel is well below one render pixel.
+    // Restore the canonical mesh before inspection zoom settles. Hysteresis
+    // prevents detail from flickering around the threshold while travelling.
+    const nextDetail = !Number.isFinite(viewWidth) || viewWidth <= 0 || (detailedLeaves ? viewWidth < 12 : viewWidth < 10);
+    if (nextDetail !== detailedLeaves) {
+      detailedLeaves = nextDetail;
+      for (const mesh of [groundLeaves, planterSnow]) {
+        mesh.geometry = detailedLeaves ? pothos.leafGeometry : distantLeaf;
+        mesh.computeBoundingSphere();
+      }
+    }
     snowMeshes.forEach(mesh => { mesh.visible = snow > .08; });
     snowMaterial.opacity = THREE.MathUtils.smoothstep(snow, .08, .6) * .96;
     concrete.color.set('#85897d').multiplyScalar(1 - rain * .12);

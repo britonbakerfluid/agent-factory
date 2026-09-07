@@ -1,6 +1,6 @@
 # Shared driving — next update
 
-Status: requested follow-up, outside the garage and room-life release.
+Status: garage-floor driving is now implemented locally; see `garage-driving.md`. The connected ramp/exterior portion below remains future work. Neither this driving change nor the recent room-life follow-ups have been deployed from the current worktree.
 
 Click a parked car to drive it around the actual factory scene. Other visitors see the same car movement, collisions, damage, and tire marks in real time. Signed-out visitors can drive too. Keep the garage, elevator, working agents, and current room transitions intact.
 

@@ -2,15 +2,25 @@ import * as THREE from 'three';
 
 export const pothosMaterial = (color: string) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, emissive: '#091408' });
 
-/** The indoor hanging plant is the canonical leaf, vein, color and vine recipe. */
-export function createPothosFoliage() {
+/** The same solid outline supports a cheaper distant leaf. Keep the approved
+ * bevel for indoor plants and for the outdoor inspection view. */
+export function createPothosLeafGeometry(beveled = true) {
   const shape = new THREE.Shape();
   shape.moveTo(0, 0.035);
   shape.lineTo(-0.045, 0.078); shape.lineTo(-0.09, 0.055); shape.lineTo(-0.105, 0.005);
   shape.lineTo(-0.075, -0.067); shape.lineTo(0, -0.165);
   shape.lineTo(0.075, -0.067); shape.lineTo(0.105, 0.005); shape.lineTo(0.09, 0.055);
   shape.lineTo(0.045, 0.078); shape.closePath();
-  const leafGeometry = new THREE.ExtrudeGeometry(shape, { depth: 0.015, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.007, bevelSegments: 1, steps: 1 });
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: beveled ? .015 : .027, bevelEnabled: beveled,
+    bevelThickness: .006, bevelSize: .007, bevelSegments: 1, steps: 1 });
+  // Match the full leaf's front/back surfaces so the vein remains attached.
+  if (!beveled) geometry.translate(0, 0, -.006);
+  return geometry;
+}
+
+/** The indoor hanging plant is the canonical leaf, vein, color and vine recipe. */
+export function createPothosFoliage() {
+  const leafGeometry = createPothosLeafGeometry();
   const leafMaterials = ['#448047', '#588d49', '#366c3c'].map(pothosMaterial);
   const instanceMaterial = pothosMaterial('#ffffff');
   const veinGeometry = new THREE.BoxGeometry(0.009, 0.125, 0.006);

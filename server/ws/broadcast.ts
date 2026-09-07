@@ -96,6 +96,8 @@ export class BroadcastManager {
     for (const client of this.clients.keys()) if (client !== sender) this.sendTo(client, message);
   }
 
+  broadcastGarageDriving(message: import('../../shared/factory25d-driving.js').GarageDriveState) { this.broadcast(message); }
+
   broadcastGrabRelease(target: GrabTarget, x: number, y: number, reason: string) {
     this.broadcast({ type: 'grab_release', ...target, x, y, reason });
   }

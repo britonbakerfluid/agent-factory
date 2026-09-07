@@ -203,6 +203,8 @@ export function createSoundscape(context: BaseAudioContext, samples: SoundSample
     vendingLand(energy = 1) { props.play('vending-land', energy); },
     lampSwitch(_on = true) { props.play('lamp-switch'); },
     candle(on: boolean) { props.play(on ? 'candle-on' : 'candle-off'); },
+    phoneBuzz() { props.play('phone-buzz'); },
+    stopPhoneBuzz() { props.stop('phone-buzz'); },
     stopPropSounds: props.stop,
     get activeSourceCount() { return sources.size + props.activeVoiceCount; },
     dispose() {

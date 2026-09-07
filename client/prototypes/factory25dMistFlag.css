@@ -1,0 +1,11 @@
+.mist-flag-source {
+  position: fixed; left: -2048px; top: 0; width: 1024px; height: 576px;
+  pointer-events: none; contain: strict; visibility: hidden;
+}
+.mist-flag-hotspot {
+  position: absolute; z-index: 7; background: transparent; border: 0;
+  padding: 0; pointer-events: none; border-radius: 2px;
+}
+.mist-flag-hotspot[hidden] { display: none; }
+.mist-flag-hotspot.is-hovered { pointer-events: auto; cursor: pointer; }
+.mist-flag-hotspot:focus-visible { outline: 2px dashed #d8e6d8; outline-offset: 4px; }

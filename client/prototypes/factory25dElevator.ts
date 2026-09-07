@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { propPart, standard } from './factory25dProps';
 import { contactShadow } from './factory25dContactShadows';
 
+export const ELEVATOR_WIDTH = 1.36;
+
 /** Shallow wall assembly, with door panels masked by their pocket opening. */
 export function createElevator(parent: THREE.Object3D, x: number, floorY: number, width: number, floor: '01' | 'G') {
-  const heightScale=1.95/3.16;
+  const heightScale=1.82/3.16;
   const root = new THREE.Group(); root.scale.y=heightScale; root.position.set(x, floorY, -4.28); parent.add(root);
   const navy = standard('#252b44'), frame = standard('#465168'), recess = standard('#111929');
   const brass = standard('#ac956e', .7), cyan = standard('#69cbbf', .7, '#247f77');

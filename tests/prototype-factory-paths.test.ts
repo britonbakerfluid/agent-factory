@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { DEFAULT_AVATAR } from '../shared/constants';
 import type { WorldAgent, WorldMovement } from '../shared/types';
 import { StateManager } from '../server/state';
-import { FACTORY_ENTRANCE, FACTORY_ELEVATOR, GARAGE_ELEVATOR, clearFactorySegment, factory25dWaypoints, factoryMovementIsClear, fromFactoryWorld, recoverFactoryPosition, toFactoryWorld } from '../shared/factory25d-layout';
+import { BRAND_SHELF, FACTORY_ENTRANCE, FACTORY_ELEVATOR, GARAGE_ELEVATOR, clearFactorySegment, factory25dWaypoints, factoryMovementIsClear, fromFactoryWorld, recoverFactoryPosition, toFactoryWorld } from '../shared/factory25d-layout';
 import { positionAt, slotPosition, WORLD_LAYOUTS } from '../shared/world-layouts';
 import { agentPosition, factoryMovementForScene, garageElevatorPose } from '../client/prototypes/factory25dWorld';
 
@@ -17,6 +17,18 @@ function agent(move?: WorldMovement): WorldAgent {
 }
 
 describe('visible factory arrivals and safe server paths', () => {
+  it('walks around the brand shelf while keeping the front-counter entrance clear', () => {
+    const from = toFactoryWorld({ x:BRAND_SHELF.x, z:BRAND_SHELF.z-.65 });
+    const to = toFactoryWorld({ x:BRAND_SHELF.x, z:BRAND_SHELF.z+.9 });
+    expect(clearFactorySegment(fromFactoryWorld(from), fromFactoryWorld(to))).toBe(false);
+    const waypoints = factory25dWaypoints(from, to);
+    expect(waypoints.length).toBeGreaterThan(0);
+    expect(factoryMovementIsClear({from, to, waypoints})).toBe(true);
+    expect(clearFactorySegment({x:-6.9,z:5.15}, {x:-6.9,z:6.1})).toBe(true);
+    const recovered = fromFactoryWorld(recoverFactoryPosition(toFactoryWorld(BRAND_SHELF)));
+    expect(clearFactorySegment(recovered, recovered)).toBe(true);
+  });
+
   it('starts new sessions inside the visible open doorway, instead of below the cutaway frame', () => {
     const camera = new THREE.OrthographicCamera(-8, 8, 5.64, -5.64, .1, 50);
     camera.position.set(0, 9, 14.6); camera.lookAt(0, .35, .45); camera.updateMatrixWorld();

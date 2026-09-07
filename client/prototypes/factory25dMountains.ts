@@ -1,4 +1,6 @@
 import { createMountainClimbers } from './factory25dClimbers';
+import { createLakeCanoe } from './factory25dCanoe';
+import { landscapeVisitors } from './factory25dVisitors';
 import * as THREE from 'three';
 import { CLEAR_WEATHER } from '../sky/weather';
 import type { WeatherVisualState } from '../sky/weather';
@@ -26,6 +28,8 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   scene.add(landscape.group);
   const bear = createRidgeBear(scene, originalLandscape.hazeColor, (x, z) => landscape.heightAt(x, z));
   const climbers = createMountainClimbers(scene, (x, z) => landscape.heightAt(x, z), originalLandscape.hazeColor);
+  const canoe = createLakeCanoe(scene, originalLandscape.hazeColor);
+  let visitorIds: { climbers: string[]; canoe: string[] } = { climbers: [], canoe: [] };
   const birds = createValleyBirds(scene, landscape.hazeColor);
   const fill = new THREE.HemisphereLight('#c8d5e5', '#7b8998', 1.35);
   const sunlight = new THREE.DirectionalLight('#fff1d9', 2.2);
@@ -85,8 +89,13 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   const previousClearColor = new THREE.Color();
   return {
     texture: target.texture,
+    dispose() { climbers.dispose(); canoe.dispose(); focus.dispose(); target.dispose(); },
     setLightning(pulse:number){const intensity=THREE.MathUtils.clamp(pulse,0,1)*2.4;if(Math.abs(intensity-lightningLight.intensity)>.002){lightningLight.intensity=intensity;dirty=true;}},
-    setVisitors(members: readonly TeamMember[]) { climbers.setVisitors(members); dirty = true; },
+    setVisitors(members: readonly TeamMember[]) {
+      const cast = landscapeVisitors(members, visitorIds);
+      visitorIds = { climbers: cast.climbers.map(member => member.id), canoe: cast.canoe.map(member => member.id) };
+      climbers.setVisitors(cast.climbers); canoe.setVisitors(cast.canoe); dirty = true;
+    },
     async setLandscape(style: 'current' | 'blender') {
       requestedLandscape = style;
       let next = originalLandscape;
@@ -123,6 +132,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
       bear.update(dt, reducedMotion.matches);
       birds.update(dt, currentWeather, isNight, reducedMotion.matches);
       climbers.update(dt, isNight, reducedMotion.matches);
+      canoe.update(dt, currentWeather, isNight, reducedMotion.matches);
       const windFrame = Math.floor(elapsed * 12);
       if (!reducedMotion.matches && windFrame !== lastWindFrame) {
         landscape.windTime.value = elapsed;
