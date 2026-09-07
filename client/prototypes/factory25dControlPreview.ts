@@ -9,7 +9,7 @@ import { activityForVisualState, type AgentVisualState } from './factory25dAgent
 import { createAgentStateEditor } from './factory25dStateEditor';
 import './factory25dControlPreview.css';
 
-const SCENARIOS = ['watching', 'connecting', 'empty', 'ready', 'activity', 'travel', 'arrival', 'legacy-arrival', 'garage', 'mini-laptop', 'claiming', 'controlling', 'reconnecting', 'expired', 'error'] as const;
+const SCENARIOS = ['watching', 'connecting', 'empty', 'ready', 'room-life', 'activity', 'travel', 'arrival', 'legacy-arrival', 'garage', 'mini-laptop', 'claiming', 'controlling', 'reconnecting', 'expired', 'error'] as const;
 type Scenario = typeof SCENARIOS[number];
 const emptyInput = (): ControlInputState => ({ up: false, down: false, left: false, right: false });
 
@@ -29,7 +29,10 @@ export function createControlPreview(publish: (data: BoardData) => void,
   phoneMessage.className = 'preview-phone-message'; phoneMessage.textContent = 'receive sample message';
   phoneMessage.title = 'A local teammate message; nothing is sent to the factory';
   const phoneActions = document.createElement('div'); phoneActions.className = 'preview-actions'; phoneActions.append(phoneMessage);
-  tools.append(phoneActions);
+  const sampleNote = document.createElement('button'); sampleNote.type = 'button'; sampleNote.textContent = 'update sample note';
+  const sampleLift = document.createElement('button'); sampleLift.type = 'button'; sampleLift.textContent = 'replay elevator';
+  const lifeActions = document.createElement('div'); lifeActions.className = 'preview-actions'; lifeActions.append(sampleNote, sampleLift);
+  tools.append(phoneActions, lifeActions);
   for (const scenario of SCENARIOS) picker.add(new Option(scenario === 'empty' ? 'connected · no agents' : scenario === 'error' ? 'claim denied' : scenario === 'mini-laptop' ? 'mini laptop' : scenario === 'activity' ? 'agent states' : scenario, scenario));
   document.body.append(tools);
   const controlPanel = document.querySelector<HTMLElement>('.factory-controls')!;
@@ -72,6 +75,19 @@ export function createControlPreview(publish: (data: BoardData) => void,
     phoneMessage.disabled = !connected();
     publish(data());
   }
+  sampleNote.addEventListener('click', () => {
+    if (scenario !== 'room-life') return;
+    const agent = world.agents.find(agent => agent.sessionId === 'preview-teammate')!;
+    agent.activity = agent.activity === 'reading' ? 'writing' : agent.activity === 'writing' ? 'thinking' : 'reading';
+    agent.currentTool = null; update();
+  }, events);
+  sampleLift.addEventListener('click', () => {
+    if (scenario !== 'room-life') return;
+    const agent = world.agents.find(agent => agent.sessionId === 'preview-patio')!;
+    const upstairs = factoryRoomAt(fromFactoryWorld(agent.world.movement?.to ?? agent.world.position)) === 'factory';
+    const from = toFactoryWorld(upstairs ? FACTORY_ELEVATOR : GARAGE_ELEVATOR), to = toFactoryWorld(upstairs ? GARAGE_ELEVATOR : FACTORY_ELEVATOR), startedAt = Date.now() + 1500;
+    agent.world = {zone:'idle',position:from,facing:'up',movement:{from,to,startedAt,arrivesAt:startedAt+6000}}; update();
+  }, events);
   phoneMessage.addEventListener('click', () => {
     if (!connected()) return;
     // The in-memory playground usually publishes snapshots only. Bracket this
@@ -166,11 +182,20 @@ export function createControlPreview(publish: (data: BoardData) => void,
     selected = undefined; input = emptyInput(); elevatorArmed = true; scenario = next; picker.value = next; carHomes.clear(); actionRevision.clear();
     finish.hidden = next !== 'connecting';
     miniActions.hidden = next !== 'mini-laptop';
+    lifeActions.hidden = next !== 'room-life';
     travelActions.hidden = next !== 'travel';
     activityPanel.hidden = next !== 'activity';
     world = { schemaVersion: 1, revision: 1, serverTime: Date.now(), environment: 'factory25d', workstationCount: WORKSTATIONS.length, garageCars:true,
       agents: [sample('preview-teammate', 4, false), ...(next === 'empty' ? [] : [sample('preview-mine', 1, true), sample('preview-patio', 2, true)])],
       tombstones: [], chat: [], events: [] };
+    if (next === 'room-life') {
+      const resting = world.agents.find(agent => agent.sessionId === 'preview-mine')!;
+      resting.activity = 'idle'; resting.sessionName = 'chair visitor · preview';
+      resting.world = { zone: 'idle', slotIndex: 0, position: slotPosition('factory25d', 'idle', 0), facing: 'up' };
+      const rider = world.agents.find(agent => agent.sessionId === 'preview-patio')!;
+      const from = toFactoryWorld(FACTORY_ELEVATOR), to = toFactoryWorld(GARAGE_ELEVATOR), startedAt = Date.now() + 3000;
+      rider.world = { zone: 'idle', position: from, facing: 'up', movement: { from, to, startedAt, arrivesAt: startedAt + 6000 } };
+    }
     if (next === 'activity') {
       world.agents = [sample('preview-mine',1,true)]; applyActivityState(stateEditor.state);
     }

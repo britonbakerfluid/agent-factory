@@ -17,12 +17,13 @@ import { effectPose, effectSeed, FactoryEffectsState, vortexStrength } from './f
 import { createFactoryTombstones } from './factory25dTombstones';
 import { agentStateStyle, resolveAgentVisualState } from './factory25dAgentStates';
 import { ManualMotionBuffer } from './factory25dManualMotion';
+import { BEANBAG_REST } from '@shared/factory25d-rest';
 import { AvatarWalkCycle } from './factory25dAvatarGait';
 
 type Sprite = { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>; texture: THREE.CanvasTexture;
   shadow: THREE.Mesh; sheet: ReturnType<typeof avatarSheet>; signature: string; labelFeet: THREE.Vector3; walk: AvatarWalkCycle };
 type Entry = Sprite & { session: WorldAgent; label: ReturnType<typeof createNameTag>; children: Map<string, Sprite>;
-  lastX: number; lastZ: number; baseHeight: number; manualMotion: ManualMotionBuffer; garageWalk: AvatarWalkCycle };
+  lastX: number; lastZ: number; baseHeight: number; manualMotion: ManualMotionBuffer; garageWalk: AvatarWalkCycle; seatBlend: number; poseTime: number };
 
 export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canvas: HTMLCanvasElement) {
   const entries = new Map<string, Entry>();
@@ -138,7 +139,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
           const label = createNameTag(agent.sessionName || agent.username, isWorking(agent.activity), canvas.parentElement!);
           label.element.dataset.sessionId = agent.sessionId;
           entry = { ...sprite(agent), session: agent, label, children: new Map(), lastX: point.x, lastZ: point.z, baseHeight: .25,
-            manualMotion: new ManualMotionBuffer(), garageWalk: new AvatarWalkCycle() };
+            manualMotion: new ManualMotionBuffer(), garageWalk: new AvatarWalkCycle(), seatBlend: 0, poseTime: 0 };
           place(entry, point.x, point.z); entries.set(agent.sessionId, entry);
         }
         entry.session = agent;
@@ -170,11 +171,17 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
       const vortex = effectState.vortex;
       for (const entry of entries.values()) {
         const agent = entry.session, manualPose = entry.manualMotion.sample(performance.now());
-        const point = manualPose ? fromFactoryWorld(manualPose) : agentPosition(agent, now, snapshot.environment);
+        let point = manualPose ? fromFactoryWorld(manualPose) : agentPosition(agent, now, snapshot.environment);
+        const resting = !agent.manualControl && agent.activity === 'idle' && agent.world.zone === 'idle' && !agent.world.idleVisit && !agent.world.carVisit;
+        const chair = resting && agent.world.slotIndex === 0 && Math.hypot(point.x - BEANBAG_REST.approach.x, point.z - BEANBAG_REST.approach.z) < .12 && !effectState.effects.has(agent.sessionId) && !vortex;
+        const poseDt = entry.poseTime ? Math.min(.1, elapsed - entry.poseTime) : 0; entry.poseTime = elapsed;
+        entry.seatBlend = agent.manualControl ? 0 : THREE.MathUtils.damp(entry.seatBlend, Number(chair), 7, poseDt);
+        if (entry.seatBlend < .001) entry.seatBlend = 0;
+        if (entry.seatBlend) point = { x: THREE.MathUtils.lerp(point.x, BEANBAG_REST.seat.x, entry.seatBlend), z: THREE.MathUtils.lerp(point.z, BEANBAG_REST.seat.z, entry.seatBlend) };
         const elevator = garageElevatorPose(agent, now, snapshot.environment);
         const visible = !elevator?.hidden && (elevator ? (elevator.room === 'garage' ? garage?.isVisible() ?? false : showFactory) : visibleAt(point));
         const dx = point.x - entry.lastX, dz = point.z - entry.lastZ;
-        const moving = manualPose ? manualPose.moving : Math.hypot(dx, dz) > 0.001 || !!agent.manualControl?.moving;
+        const moving = elevator ? elevator.walking : manualPose ? manualPose.moving : Math.hypot(dx, dz) > 0.001 || !!agent.manualControl?.moving;
         const effect = effectState.effects.get(agent.sessionId);
         const facing = effect?.kind === 'shot' || effect?.kind === 'gun' ? effect.facing : manualPose?.facing ?? agent.manualControl?.facing ?? (moving
           ? (Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'right' : 'left') : (dz > 0 ? 'down' : 'up')) : agent.world.facing);
@@ -183,19 +190,21 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
         const style = agentStateStyle(resolveAgentVisualState(agent));
         // Walking, user control and physical interactions outrank a desk pose.
         const stationaryRow = agent.manualControl ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : isWorking(agent.activity) && !working ? 0 : AVATAR_ANIMATIONS.indexOf(style.pose);
-        let row = moving ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : lookingAtMini ? AVATAR_ANIMATIONS.indexOf('walk_up') : stationaryRow;
+        let row = entry.seatBlend > .6 ? AVATAR_ANIMATIONS.indexOf('sit_up') : moving ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : resting ? AVATAR_ANIMATIONS.indexOf('walk_up') : lookingAtMini ? AVATAR_ANIMATIONS.indexOf('walk_up') : stationaryRow;
+        if (elevator) row = AVATAR_ANIMATIONS.indexOf(`walk_${elevator.facing}`);
         if (effect && now >= effect.startedAt) row = ['dance', 'merge', 'dizzy', 'shot', 'gun'].includes(effect.kind)
           ? AVATAR_ANIMATIONS.indexOf(`walk_${facing}`) : effect.kind === 'sleep' ? 6 : 0;
         place(entry, point.x, point.z, elevator); entry.lastX = point.x; entry.lastZ = point.z;
         const floorY = elevator?.floor ?? floorAt(point);
         const stateFrame = reduced ? 0 : Math.floor(elapsed * style.fps) % 4;
-        const walkFrame = entry.walk.sample(point, elapsed, moving && !elevator && !effect && !vortex, reduced);
+        const walkFrame = entry.walk.sample(elevator ?? point, elapsed, moving && !effect && !vortex, reduced);
         setFrame(entry, row, lookingAtMini || agent.manualControl && !moving && !effect ? 0 : effect ? frame : moving ? walkFrame : stateFrame, floorY);
         const pose = effectPose(effect, now, reduced);
         const baseHeight = entry.mesh.position.y - floorY;
         entry.baseHeight = baseHeight;
         entry.mesh.scale.set(pose.scaleX, pose.scaleY, 1); entry.mesh.rotation.set(0, 0, pose.angle);
-        entry.mesh.position.x += pose.x; entry.mesh.position.y = floorY + baseHeight * pose.scaleY + pose.lift;
+        entry.mesh.position.x += pose.x; entry.mesh.position.y = floorY + baseHeight * pose.scaleY + pose.lift + BEANBAG_REST.height * entry.seatBlend;
+        if (entry.seatBlend > .5) entry.shadow.visible = false;
         if (vortex && !reduced && !agent.manualControl && !elevator?.hidden) {
           const strength = vortexStrength(vortex, now), seed = effectSeed(agent.sessionId) + vortex.seed;
           const t = (now - vortex.startedAt) / 1000, angle = seed + t * .75, radius = .7 + (seed % 10) * .12;
@@ -206,7 +215,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
           entry.mesh.rotation.z += Math.sin(angle) * .3 * strength;
           entry.mesh.scale.multiplyScalar(1 - strength * .18);
         }
-        entry.label.setActivity(effect ? (effect.kind === 'return' ? 'back again' : effect.kind) : lookingAtMini ? 'looking at the Mini' : [agent.activity, agent.currentTool].filter(Boolean).join(' · '));
+        entry.label.setActivity(effect ? (effect.kind === 'return' ? 'back again' : effect.kind) : chair ? 'relaxing in the orange chair' : lookingAtMini ? 'looking at the Mini' : [agent.activity, agent.currentTool].filter(Boolean).join(' · '));
         entry.label.element.dataset.performing = effect?.kind ?? (vortex ? 'vortex' : '');
         entry.mesh.material.opacity = pose.opacity * (agent.activity === 'stopped' ? .45 : 1);
         entry.mesh.material.transparent = entry.mesh.material.opacity < 1;

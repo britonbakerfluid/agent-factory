@@ -59,11 +59,12 @@ describe('a passenger behind the elevator doors', () => {
     for (const fromGarage of [false, true]) {
       const agent = passenger(fromGarage), trip = agent.manualControl!.elevatorTrip!;
       expect(agentPosition(agent, 1000, 'factory25d')).toEqual(fromFactoryWorld(trip.departure));
-      const entry = garageElevatorPose(agent, 1120, 'factory25d')!;
+      expect(garageElevatorPose(agent, 1120, 'factory25d')!.z).toBeCloseTo(-3.14); // Wait while the doors open.
+      const entry = garageElevatorPose(agent, 1280, 'factory25d')!;
       expect(entry).toMatchObject({ room: fromGarage ? 'garage' : 'factory', hidden: false });
       expect(entry.z).toBeLessThan(-3.14);
-      expect(garageElevatorPose(agent, 1400, 'factory25d')).toMatchObject({ hidden: true, room: fromGarage ? 'garage' : 'factory' });
-      expect(garageElevatorPose(agent, 2000, 'factory25d')).toMatchObject({ hidden: true, room: fromGarage ? 'factory' : 'garage' });
+      expect(garageElevatorPose(agent, 1700, 'factory25d')).toMatchObject({ hidden: true, room: fromGarage ? 'garage' : 'factory' });
+      expect(garageElevatorPose(agent, 1800, 'factory25d')).toMatchObject({ hidden: true, room: fromGarage ? 'factory' : 'garage' });
       expect(garageElevatorPose(agent, 2350, 'factory25d')).toMatchObject({ hidden: false, room: fromGarage ? 'factory' : 'garage', floor: fromGarage ? .018 : GARAGE_LEVEL + .018 });
       expect(agentPosition(agent, 2770, 'factory25d')).toEqual(fromFactoryWorld(trip.arrival));
       const pose = garageElevatorPose(agent, 2770, 'factory25d')!;

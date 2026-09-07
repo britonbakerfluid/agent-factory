@@ -57,11 +57,11 @@ describe('garage workstations', () => {
     const agent = state.get('ada')!;
     agent.world.movement={from:toFactoryWorld(FACTORY_ELEVATOR),to:toFactoryWorld(GARAGE_ELEVATOR),startedAt:1000,arrivesAt:3000};
     expect(garageElevatorPose(agent,1000,'factory25d')).toMatchObject({x:expect.closeTo(FACTORY_ELEVATOR.x),z:expect.closeTo(-2.9),room:'factory',hidden:false});
-    const halfway=garageElevatorPose(agent,2000,'factory25d');
-    expect(halfway).toMatchObject({x:expect.closeTo(FACTORY_ELEVATOR.x),z:expect.closeTo(-2.9),room:'factory',hidden:true});
+    const inTransit=garageElevatorPose(agent,1800,'factory25d');
+    expect(inTransit).toMatchObject({x:expect.closeTo(FACTORY_ELEVATOR.x),z:expect.closeTo(-4.1),room:'factory',hidden:true});
     expect(garageElevatorPose(agent,3000,'factory25d')).toMatchObject({x:expect.closeTo(-10.5),z:expect.closeTo(-2.9),room:'garage',floor:GARAGE_LEVEL+.018,hidden:false});
     agent.world.movement={from:toFactoryWorld(GARAGE_ELEVATOR),to:toFactoryWorld(FACTORY_ELEVATOR),startedAt:1000,arrivesAt:3000};
-    expect(garageElevatorPose(agent,2000,'factory25d')).toMatchObject({x:expect.closeTo(-10.5),hidden:true});
+    expect(garageElevatorPose(agent,1800,'factory25d')).toMatchObject({x:expect.closeTo(-10.5),hidden:true});
     expect(garageElevatorPose(agent,3000,'factory25d')).toMatchObject({x:expect.closeTo(FACTORY_ELEVATOR.x),room:'factory',hidden:false});
     agent.world.movement={from:toFactoryWorld({x:FACTORY_ELEVATOR.x,z:3}),waypoints:[toFactoryWorld(FACTORY_ELEVATOR)],to:toFactoryWorld(GARAGE_ELEVATOR),startedAt:1000,arrivesAt:3400};
     expect(garageElevatorPose(agent,1100,'factory25d')).toBeUndefined(); // The approach remains a normal walk.

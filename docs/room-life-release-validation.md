@@ -23,3 +23,17 @@ The browser check uses an emulated phone-sized viewport, not a physical-phone fr
 ## Deployment verification
 
 Use the existing `wolzey/agent-factory` main deployment to `https://fluid-factory.onrender.com/`. Preserve service configuration and durable storage. Verify that service's health, team count, root assets, garage-driving capability and WebSocket build ID against the merged commit; a success for a different Render URL is not evidence that Fluid updated.
+
+## Room-life follow-up — September 7, 2026
+
+Base: `899cebb19f231d5047b46a01df0c34f121c9e06d`, checked against current upstream main before pushing.
+
+- Idle rest stops face the windows and room activities. The first stop sits in the orange chair, with a matching back-facing seated pose and a protected furniture footprint.
+- Autonomous and controlled elevator passengers share opening, boarding, shaft travel and exit timing. Both floors render their passengers during the floor transition.
+- A board manager follows live note changes; the receptionist opens the existing team screen. Staff use the shared avatar artwork and do not create sessions or contribution credit.
+- Opening the avatar editor walks an obstructed draft into nearby visible space before zooming. Closing returns it safely, including interrupted entries and a live agent that moved while editing. Draft movement does not mutate the server session or save appearance changes.
+- Sachin's verified GitHub identity and historical merged-PR total join the existing contribution seed.
+
+Validation: all 817 tests across 119 files pass with two local workers; client typecheck, Vite production build, server TypeScript build and `git diff --check` pass. Local browser checks covered the chair, both elevator landings, staff actions, live-note presentation, unobstructed avatar editing and its return animation, with no captured console errors. Avatar regressions include cancellation, reopening, reduced motion, garage clearance, and viewport resizing. The `room-life` sample scenario is development-only.
+
+This follow-up changes no dependencies, hosting settings, authentication, or storage schema. Its publication and production verification are separate from these local checks.

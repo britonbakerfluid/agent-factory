@@ -14,7 +14,9 @@ The initial five mappings in `shared/factory-contribution-seed.ts` were checked 
 
 ## Refresh and release
 
-`ContributionService` refreshes the five known accounts on startup and hourly using [GitHub's search API](https://docs.github.com/en/rest/search/search#search-issues-and-pull-requests). Browser requests to `/api/contributions` only read cached public totals; they never trigger a GitHub call. The client polls every five minutes while visible and preserves its last verified totals on network errors or malformed/stale responses. Partial GitHub search results, timeouts, auth failures and rate limits do not overwrite known counts.
+Sachin → sachin-fluid was added after checking the live roster and GitHub's complete merged-PR search on September 7, 2026: 40 authored PRs merged into main, earning level 9. Previously Sachin was absent from the explicit alias list, so the UI correctly withheld an unverified level even though his work existed.
+
+`ContributionService` refreshes the known accounts on startup and hourly using [GitHub's search API](https://docs.github.com/en/rest/search/search#search-issues-and-pull-requests). Browser requests to `/api/contributions` only read cached public totals; they never trigger a GitHub call. The client polls every five minutes while visible and preserves its last verified totals on network errors or malformed/stale responses. Partial GitHub search results, timeouts, auth failures and rate limits do not overwrite known counts.
 
 Successful server totals use the existing durable libSQL/Turso database in a separate single-row `contribution_totals` table. The table is created additively during normal initialization; no world, team or avatar records are changed. `AF_CONTRIBUTIONS_CACHE_PATH` optionally substitutes an atomic file cache for local installations. Only account names, counts and timestamps are saved or returned.
 
