@@ -23,6 +23,7 @@ Thumbs.db
 .env
 .env.*
 server-config.json
+*.pem
 
 # Local-only scripts
 install.sh
@@ -41,7 +42,6 @@ README.md
 # Local hooks and config templates
 hooks/
 scripts/
-config/
 
 # Logs
 *.log

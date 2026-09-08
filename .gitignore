@@ -11,3 +11,4 @@ server-config.json
 
 # Local design QA captures
 design-qa*
+*.pem

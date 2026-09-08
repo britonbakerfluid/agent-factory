@@ -78,6 +78,11 @@ export class LibSqlWorldRepository implements WorldRepository {
         id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL,
         avatar TEXT NOT NULL, last_seen INTEGER NOT NULL
       )`);
+      await this.client.execute(`CREATE TABLE IF NOT EXISTS github_contribution_totals (
+        scope TEXT PRIMARY KEY,
+        records TEXT NOT NULL,
+        checked_at INTEGER NOT NULL
+      )`);
       await this.client.execute(`CREATE TABLE IF NOT EXISTS contribution_totals (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         records TEXT NOT NULL,
@@ -185,8 +190,10 @@ export class LibSqlWorldRepository implements WorldRepository {
     })), 'write');
   }
 
-  async loadContributionRecords(): Promise<ContributionRecord[]> {
-    const result = await this.requireClient().execute('SELECT records, checked_at FROM contribution_totals WHERE id = 1');
+  async loadContributionRecords(scope?: string): Promise<ContributionRecord[]> {
+    const result = await this.requireClient().execute(scope
+      ? { sql: 'SELECT records, checked_at FROM github_contribution_totals WHERE scope = ?', args: [scope] }
+      : 'SELECT records, checked_at FROM contribution_totals WHERE id = 1');
     const row = result.rows[0];
     if (!row) return [];
     try {
@@ -202,11 +209,20 @@ export class LibSqlWorldRepository implements WorldRepository {
     }
   }
 
-  async saveContributionRecords(records: ContributionRecord[]): Promise<void> {
+  async saveContributionRecords(records: ContributionRecord[], scope?: string): Promise<void> {
     const publicRecords = publicContributionRecords(records);
     // A missing response is not a new empty snapshot of everyone's history.
     if (!publicRecords.length) return;
     const checkedAt = Math.max(...publicRecords.map(record => record.checkedAt));
+    if (scope) {
+      await this.requireClient().execute({
+        sql: `INSERT INTO github_contribution_totals (scope, records, checked_at) VALUES (?, ?, ?)
+          ON CONFLICT(scope) DO UPDATE SET records = excluded.records, checked_at = excluded.checked_at
+          WHERE excluded.checked_at >= github_contribution_totals.checked_at`,
+        args: [scope, JSON.stringify(publicRecords), checkedAt],
+      });
+      return;
+    }
     await this.requireClient().execute({
       sql: `INSERT INTO contribution_totals (id, records, checked_at) VALUES (1, ?, ?)
         ON CONFLICT(id) DO UPDATE SET records = excluded.records, checked_at = excluded.checked_at
