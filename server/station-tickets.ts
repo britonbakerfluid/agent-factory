@@ -26,14 +26,21 @@ export class StationTickets {
   }
   private sample(agent: WorldAgent, now: number, grabbed: boolean): Sample {
     const slotIndex = agent.world.slotIndex ?? -1;
-    return { at: now, after: Math.max(now, agent.world.movement?.arrivesAt ?? now), until: (agent.ticketHookAt ?? agent.lastEventAt) + TICKET_HOOK_GRACE_MS,
+    // Date.now can move backward after a clock correction. Keep the accounting
+    // boundary at the newest observed time, while payout/attention use wall time.
+    const at = Math.max(now, this.samples.get(agent.sessionId)?.at ?? now);
+    return { at, after: Math.max(at, agent.world.movement?.arrivesAt ?? at), until: (agent.ticketHookAt ?? agent.lastEventAt) + TICKET_HOOK_GRACE_MS,
       slotIndex, ownerKey: ticketOwnerKey(agent), username: agent.username,
       eligible: agent.world.zone === 'work' && !!WORKSTATIONS[slotIndex] && zoneForActivity(agent.activity) === 'work'
         && !agent.attention && !agent.manualControl && !grabbed && !(agent.ticketPayout && now < agent.ticketPayout.collectAt) };
   }
   /** Re-arm after routing; no interval is accrued twice at the same timestamp. */
-  track(agent: WorldAgent, now: number, grabbed = false) { this.samples.set(agent.sessionId, this.sample(agent, now, grabbed)); }
+  track(agent: WorldAgent, now: number, grabbed = false) {
+    if (!Number.isFinite(now)) return;
+    this.samples.set(agent.sessionId, this.sample(agent, now, grabbed));
+  }
   observe(agent: WorldAgent, now: number, grabbed = false): StationTicketPayout | undefined {
+    if (!Number.isFinite(now)) return;
     const previous = this.samples.get(agent.sessionId), next = this.sample(agent, now, grabbed);
     let visit = this.visits.get(agent.sessionId);
     if (previous?.eligible) {
@@ -50,6 +57,7 @@ export class StationTickets {
   }
   /** Idempotent: consuming the visit and updating its wallet are one synchronous operation. */
   collect(sessionId: string, now: number): StationTicketPayout | undefined {
+    if (!Number.isFinite(now)) return;
     const visit = this.visits.get(sessionId); if (!visit) return;
     this.visits.delete(sessionId);
     const wallet = this.wallets.get(visit.ownerKey) ?? { key: visit.ownerKey, username: visit.username, balance: 0, remainderMs: 0 };
@@ -58,5 +66,8 @@ export class StationTickets {
     this.wallets.set(wallet.key, wallet); this.version++;
     if (count) return { id: `${sessionId}:${now}:${wallet.balance}`, slotIndex: visit.slotIndex, count, startedAt: now, collectAt: now + TICKET_COLLECT_MS };
   }
-  forget(sessionId: string, now: number) { const payout = this.collect(sessionId, now); this.samples.delete(sessionId); return payout; }
+  forget(sessionId: string, now: number) {
+    if (!Number.isFinite(now)) return;
+    const payout = this.collect(sessionId, now); this.samples.delete(sessionId); return payout;
+  }
 }

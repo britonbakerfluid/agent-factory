@@ -72,6 +72,45 @@ describe('station ticket accounting', () => {
     expect(ledger.snapshot()).toEqual(snapshot);
   });
 
+  it('does not award an elapsed interval again when observations and routing clocks move backward', () => {
+    const ledger = new StationTickets(), agent = worker();
+    ledger.track(agent, 1_000); ledger.observe(agent, 61_000);
+    ledger.observe(agent, 31_000); ledger.track(agent, 21_000); ledger.observe(agent, 61_000);
+    expect(ledger.snapshot().visits[0].activeMs).toBe(60_000);
+    agent.activity = 'idle';
+    expect(ledger.observe(agent, 91_000)).toMatchObject({ count: 1 });
+    expect(wallet(ledger)).toMatchObject({ balance: 1, remainderMs: 30_000 });
+  });
+
+  it('still pays and changes activity immediately during a clock correction without crediting the rewind', () => {
+    const ledger = new StationTickets(), agent = worker();
+    ledger.track(agent, 1_000); ledger.observe(agent, 61_000);
+    agent.activity = 'idle';
+    const payout = ledger.observe(agent, 31_000);
+    expect(payout).toMatchObject({ count: 1, startedAt: 31_000, collectAt: 31_000 + TICKET_COLLECT_MS });
+    agent.ticketPayout = payout;
+    ledger.track(agent, 31_000); ledger.observe(agent, 41_000);
+    agent.activity = 'thinking'; ledger.track(agent, 41_000); ledger.observe(agent, 61_000);
+    expect(ledger.snapshot().visits).toEqual([]);
+    agent.activity = 'idle'; ledger.observe(agent, 91_000);
+    expect(wallet(ledger)).toMatchObject({ balance: 1, remainderMs: 30_000 });
+  });
+
+  it('ignores nonfinite timestamps without consuming earned work or poisoning the next observation', () => {
+    const ledger = new StationTickets(), agent = worker();
+    ledger.track(agent, 1_000); ledger.observe(agent, 21_000);
+    const before = ledger.snapshot(), version = ledger.version;
+    for (const invalid of [NaN, Infinity, -Infinity]) {
+      ledger.track(agent, invalid);
+      expect(ledger.observe(agent, invalid)).toBeUndefined();
+      expect(ledger.collect(agent.sessionId, invalid)).toBeUndefined();
+      expect(ledger.forget(agent.sessionId, invalid)).toBeUndefined();
+    }
+    expect(ledger.snapshot()).toEqual(before); expect(ledger.version).toBe(version);
+    agent.activity = 'idle'; ledger.observe(agent, 61_000);
+    expect(wallet(ledger)).toMatchObject({ balance: 1, remainderMs: 0 });
+  });
+
   it('restores unfinished active minutes without accruing server downtime or repeating an already consumed visit', () => {
     const ledger = new StationTickets(), agent = worker();
     ledger.track(agent, 1_000); ledger.observe(agent, 41_000);

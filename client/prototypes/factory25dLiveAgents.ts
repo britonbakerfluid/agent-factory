@@ -101,6 +101,21 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
     entries,
     contributionFor: contributions.forUser,
     serverNow: () => Date.now() + clockOffset,
+    finishArrival(id: string) {
+      const entry = entries.get(id);
+      if (!entry || !arrivals.active.has(id) && !arrivalVisuals.has(id)) return;
+      cancelArrival(id);
+      const room = entry.mesh.parent === garage?.scene ? 'garage' : entry.mesh.parent === patio ? 'patio' : 'factory';
+      const point = factoryWorldPoint(entry.mesh.position, room), floorY = floorAt(point);
+      // A close-up can open between animation frames. Ground the visible pose
+      // immediately instead of letting its temporary lift become the edit floor.
+      setFrame(entry, 0, 0, floorY); entry.baseHeight = entry.mesh.position.y - floorY;
+      entry.mesh.scale.set(1, 1, 1); entry.mesh.rotation.set(0, 0, 0);
+      entry.shadow.position.y = floorY + .003;
+      entry.label.element.dataset.performing = '';
+      entry.label.setActivity([entry.session.activity, entry.session.currentTool].filter(Boolean).join(' · '));
+      if (view) entry.label.update(entry.mesh, floorY, view.camera, canvas, visibleAt(point), room === 'factory' ? view.occluder : undefined, entry.labelFeet);
+    },
     poseGarageWorker(id: string, point: { x: number; z: number }, walking: boolean, working: boolean, elapsed: number, activity: string) {
       eyeTime = elapsed;
       const entry = entries.get(id); if (!entry || !view) return;

@@ -4,6 +4,7 @@ import { DEFAULT_AVATAR } from '../shared/constants';
 import { toFactoryWorld } from '../shared/factory25d-layout';
 import type { WorldAgent, WorldSnapshot, WSMessageToClient } from '../shared/types';
 import { createLiveAgents } from '../client/prototypes/factory25dLiveAgents';
+import { createAvatarStage } from '../client/prototypes/factory25dAvatarStage';
 
 const hooks = vi.hoisted(() => ({ message: undefined as ((message: WSMessageToClient) => void) | undefined,
   connection: undefined as ((connected: boolean) => void) | undefined, labelUpdates: vi.fn(), tickets: vi.fn() }));
@@ -82,4 +83,47 @@ it('applies the live fall once, tracks its feet, preserves tickets, and lets con
   expect(actors.isPerforming('snapshot-only')).toBe(false);
   actors.dispose(); expect(scene.children).toHaveLength(0);
   expect(hooks.message).toBeUndefined(); expect(hooks.connection).toBeUndefined();
+});
+
+it('grounds an arriving agent before taking an avatar-editor snapshot, even when no clearance walk is needed', () => {
+  let now = 1000;
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
+  vi.stubGlobal('matchMedia', () => ({ matches: false }));
+  vi.stubGlobal('document', { body: { classList: { add() {}, remove() {} } }, querySelector: () => null });
+  const factory = new THREE.Scene(), patio = new THREE.Scene(), garage = new THREE.Scene();
+  const camera = new THREE.OrthographicCamera(-8, 8, 5.64, -5.64, .1, 50);
+  camera.position.set(0, 9, 14.6); camera.lookAt(0, .35, .45);
+  const canvas = { dataset: {}, parentElement: {}, clientWidth: 1000, clientHeight: 800 } as HTMLCanvasElement;
+  const renderer = { setSize: vi.fn() } as unknown as THREE.WebGLRenderer;
+  const actors = createLiveAgents(factory, patio, canvas), floor = .063;
+  const update = () => actors.update(now / 1000, camera, true, false, () => floor, new THREE.Group());
+  actors.sync(world([])); update();
+  now = 1200;
+  const fresh = { ...agent('mine', now), ownerId: 'me' };
+  fresh.world.position = toFactoryWorld({ x: 3, z: 3.5 });
+  actors.sync(world([fresh], now, 2)); update();
+  const entry = actors.entries.get('mine')!, originalSession = structuredClone(entry.session);
+  expect(entry.mesh.position.y - entry.baseHeight - floor).toBeCloseTo(1.8);
+  expect(factory.getObjectByName('agent-arrival-landing')).toBeDefined();
+  const stage = createAvatarStage(factory, patio, garage, actors, canvas, renderer, () => camera, () => 'mine', () => floor);
+  stage.open({ ownerId: 'me' });
+  expect(actors.isPerforming('mine')).toBe(false);
+  expect(entry.mesh.position.y - entry.baseHeight).toBeCloseTo(floor);
+  expect(entry.mesh.rotation.toArray().slice(0, 3)).toEqual([0, 0, 0]);
+  expect(factory.getObjectByName('agent-arrival-landing')).toBeUndefined();
+  const draft = factory.getObjectByName('avatar-edit-draft')!;
+  stage.update(now);
+  expect(draft.position.x).toBeCloseTo(3); expect(draft.position.z).toBeCloseTo(3.5);
+  expect(draft.position.y).toBeCloseTo(floor + (24 / 32 - .5) * .86 + .004);
+  now += 1800; update(); stage.update(now);
+  expect(stage.focusPoint().y).toBeCloseTo(floor + .43);
+  expect(draft.position.y).toBeCloseTo(floor + (24 / 32 - .5) * .86 + .004);
+  expect(entry.mesh.visible).toBe(false); expect(entry.session).toEqual(originalSession);
+  stage.close(); now += 2000; update(); stage.update(now);
+  expect(stage.isActive()).toBe(false); expect(entry.mesh.visible).toBe(true);
+  expect(entry.mesh.position.y - entry.baseHeight).toBeCloseTo(floor);
+  expect(actors.isPerforming('mine')).toBe(false); expect(entry.session).toEqual(originalSession);
+  stage.dispose(); actors.dispose();
 });

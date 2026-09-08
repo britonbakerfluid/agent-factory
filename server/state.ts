@@ -791,10 +791,10 @@ export class StateManager {
     if (savedAvatar) payload = { ...payload, avatar: clone(savedAvatar) };
     const { hook_event_name, session_id } = payload;
     const ticketAgent = this.sessions.get(session_id);
-    if (ticketAgent) {
+    if (ticketAgent && (!payload.agent_id || hook_event_name === 'SubagentStart'
+      || ticketAgent.subagents.some(child => child.agentId === payload.agent_id))) {
       ticketAgent.ticketHookAt ??= ticketAgent.lastEventAt;
-      if (['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'PreCompact', 'PostCompact', 'ElicitationResult', 'SubagentStart', 'SubagentStop'].includes(hook_event_name)
-        && (!payload.agent_id || ['SubagentStart', 'SubagentStop'].includes(hook_event_name) || ticketAgent.subagents.some(child => child.agentId === payload.agent_id))) ticketAgent.ticketHookAt = this.now();
+      if (['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'PreCompact', 'PostCompact', 'ElicitationResult', 'SubagentStart', 'SubagentStop'].includes(hook_event_name)) ticketAgent.ticketHookAt = this.now();
     }
 
     // Codex tags child work with agent_id while retaining the parent session_id.

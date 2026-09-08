@@ -32,7 +32,8 @@ describe('bounded migration between factory layouts', () => {
     const state = migrate(input), output = state.getSnapshot();
     expect(output.environment).toBe('arcade'); expect(output.revision).toBe(input.revision);
     expect(output.chat).toEqual(input.chat); expect(output.events).toEqual(input.events);
-    expect(output.agents.map(({ world: _pose, ...data }) => data)).toEqual(input.agents.map(({ world: _pose, ...data }) => data));
+    expect(output.agents.map(({ world: _pose, ticketHookAt: _ticketClock, ...data }) => data)).toEqual(input.agents.map(({ world: _pose, ...data }) => data));
+    expect(output.agents.map(a => a.ticketHookAt)).toEqual(input.agents.map(a => a.lastEventAt));
     expect(output.agents.filter(a => a.world.zone === 'work')).toHaveLength(12);
     expect(output.agents.filter(a => a.world.zone === 'waiting').map(a => a.world.slotIndex)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(new Set(output.agents.map(a => `${a.world.position.x}:${a.world.position.y}`)).size).toBe(18);
