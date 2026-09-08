@@ -139,7 +139,36 @@ export interface AgentSession {
   manualControl?: ManualControlState;
 }
 
+export interface StationTicketWallet {
+  key: string;
+  username: string;
+  balance: number;
+  /** Fractional active minutes carry across stations and sessions. */
+  remainderMs: number;
+}
+export interface StationTicketVisit {
+  sessionId: string;
+  ownerKey: string;
+  username: string;
+  slotIndex: number;
+  activeMs: number;
+}
+export interface StationTicketState {
+  wallets: StationTicketWallet[];
+  visits: StationTicketVisit[];
+}
+export interface StationTicketPayout {
+  id: string;
+  slotIndex: number;
+  count: number;
+  startedAt: number;
+  collectAt: number;
+}
 export interface WorldAgent extends AgentSession {
+  /** Last real work hook, kept separate from process-liveness refreshes. */
+  ticketHookAt?: number;
+  /** Earned server-side; the collection pose never delays real activity/attention. */
+  ticketPayout?: StationTicketPayout;
   world: AgentWorldState;
 }
 
@@ -163,6 +192,7 @@ export interface TimedWorldEvent {
 }
 
 export interface WorldSnapshot {
+  stationTickets?: StationTicketState;
   /** Optional for compatibility with older factory hosts. */
   workstationCount?: number;
   /** Advertised only by hosts that support authenticated parked-car visits. */
@@ -180,6 +210,7 @@ export interface WorldSnapshot {
 }
 
 export type WorldChange =
+  | { kind: 'station_tickets'; tickets: StationTicketState }
   | { kind: 'agent_upsert'; agent: WorldAgent }
   | { kind: 'agent_remove'; sessionId: string }
   | { kind: 'tombstone_upsert'; tombstone: TombstoneState }

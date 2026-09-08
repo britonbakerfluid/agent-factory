@@ -16,12 +16,12 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
   const lightSwitches: SceneLightSwitch[] = [];
   const warmLights: Array<{ light: THREE.PointLight; isOn: () => boolean }> = [];
   let warmBrightness = 1.25;
-  function switchFixture(id: string, label: string, target: THREE.Object3D, bulbs: THREE.MeshBasicMaterial[], lights: THREE.PointLight[], hitTargets?: THREE.Object3D[]) {
+  function switchFixture(id: string, label: string, target: THREE.Object3D, bulbs: THREE.MeshBasicMaterial[], lights: THREE.PointLight[], hitTargets?: THREE.Object3D[], motionTargets?: THREE.Object3D[]) {
     let on = true;
     const isOn = () => on;
     bulbs.forEach(material => switchMaterials.add(material));
     for (const light of lights) warmLights.push({ light, isOn });
-    lightSwitches.push({ id, label, kind: 'lamp', target, hitTargets, isOn, setOn(enabled) {
+    lightSwitches.push({ id, label, kind: 'lamp', target, hitTargets, motionTargets, isOn, setOn(enabled) {
       on = enabled;
       for (const bulb of bulbs) bulb.color.set(on ? '#ffcf89' : '#423d33');
       for (const light of lights) light.intensity = on ? warmBrightness : 0;
@@ -56,14 +56,14 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
 
   function lantern(x: number, z: number, y: number, index: number, pooled = false) {
     const lampGlow = glow.clone();
-    propPart(room, [.18, .28, .18], [x, y + .14, z], iron);
+    const body = propPart(room, [.18, .28, .18], [x, y + .14, z], iron);
     const bulb = propPart(room, [.116, .18, .116], [x, y + .145, z], lampGlow);
-    propPart(room, [.23, .044, .23], [x, y + .295, z], iron);
+    const cap = propPart(room, [.23, .044, .23], [x, y + .295, z], iron);
     const lights: THREE.PointLight[] = [];
     if (pooled) {
       const light = new THREE.PointLight('#ffd197', 1, 4, 2); light.position.set(x, y + .38, z); room.add(light); lights.push(light);
     }
-    switchFixture(`patio-lantern-${index}`, `Patio lantern ${index}`, bulb, index === 1 ? [lampGlow, stairGlow] : [lampGlow], lights, index === 1 ? [bulb, ...stairEmitters] : undefined);
+    switchFixture(`patio-lantern-${index}`, `Patio lantern ${index}`, bulb, index === 1 ? [lampGlow, stairGlow] : [lampGlow], lights, index === 1 ? [bulb, ...stairEmitters] : undefined, [body, bulb, cap, ...lights]);
   }
   function railing(left: number, right: number, z: number, y: number, height = .72) {
     for (let x = left; x <= right + .01; x += (right - left) / Math.ceil((right - left) / 2.6)) propPart(room, [.065, height, .065], [x, y + height / 2, z], iron);
@@ -86,10 +86,10 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
     propPart(room, [.016, 1.04, .016], [x, 2.17, -.85], iron);
     const shade = new THREE.Mesh(new THREE.ConeGeometry(.19, .16, 8, 1, true), iron);
     shade.position.set(x, 1.65, -.85); room.add(shade);
-    propPart(room, [.20, .025, .20], [x, 1.58, -.85], lampGlow);
+    const emitter = propPart(room, [.20, .025, .20], [x, 1.58, -.85], lampGlow);
     const light = new THREE.PointLight('#ffd5a1', 1, 4, 2); light.position.set(x, 1.50, -.85); room.add(light);
     const index = x === 11 ? 1 : 2;
-    switchFixture(`patio-canopy-lamp-${index}`, `Patio canopy lamp ${index}`, shade, [lampGlow], [light]);
+    switchFixture(`patio-canopy-lamp-${index}`, `Patio canopy lamp ${index}`, shade, [lampGlow], [light], undefined, [shade, emitter, light]);
   }
   // A mountain-facing bench sits behind the third desk, clear of the entry route.
   propPart(room, [4.55, .38, .8], [19.775, .19, -3.55], wood);
@@ -140,6 +140,7 @@ export function createPatioTerraces(room: THREE.Group, timber: THREE.MeshStandar
   }
   lightSwitches.push({ id: 'patio-fire-bowl', label: 'Patio fire bowl', kind: 'candle', target: fireBed,
     hitTargets: [fireBed, ...flames],
+    motionTargets: [fireBed, ...flames, fire],
     isOn: () => fireOn, setOn(on) { fireOn = on; updateFire(); } });
 
   garden.tree(8.85, -3.35, 0, .9); garden.tree(23.15, -3.35, 0, 1.12, 'pine');

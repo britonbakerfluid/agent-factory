@@ -1,3 +1,4 @@
+import { TICKET_COLLECT_MS, ticketOwnerKey } from '@shared/station-tickets';
 import { CONTROL_MOVE_SPEED, DEFAULT_AVATAR, VALID_EMOTES } from '@shared/constants';
 import { constrainFactoryStep, toFactoryWorld, fromFactoryWorld, factoryRoomAt, FACTORY_ELEVATOR, GARAGE_ELEVATOR, WORKSTATIONS, factory25dWaypoints, MINI_WORKSTATION_SLOT, MINI_WORKSTATION_USERNAME } from '@shared/factory25d-layout';
 import { manualElevatorEntry, manualElevatorLanding, MANUAL_ELEVATOR_DURATION_MS } from '@shared/factory25d-manual-travel';
@@ -9,7 +10,7 @@ import { activityForVisualState, type AgentVisualState } from './factory25dAgent
 import { createAgentStateEditor } from './factory25dStateEditor';
 import './factory25dControlPreview.css';
 
-const SCENARIOS = ['watching', 'connecting', 'empty', 'ready', 'room-life', 'activity', 'travel', 'arrival', 'legacy-arrival', 'garage', 'mini-laptop', 'claiming', 'controlling', 'reconnecting', 'expired', 'error'] as const;
+const SCENARIOS = ['watching', 'connecting', 'empty', 'ready', 'room-life', 'tickets', 'spawn', 'activity', 'travel', 'arrival', 'legacy-arrival', 'garage', 'mini-laptop', 'claiming', 'controlling', 'reconnecting', 'expired', 'error'] as const;
 type Scenario = typeof SCENARIOS[number];
 const emptyInput = (): ControlInputState => ({ up: false, down: false, left: false, right: false });
 
@@ -21,6 +22,9 @@ export function createControlPreview(publish: (data: BoardData) => void,
   const mobile = window.matchMedia('(max-width: 600px)'); tools.open = !mobile.matches;
   tools.setAttribute('aria-label', 'Local control preview');
   tools.innerHTML = '<summary>local playground</summary><p>sample agents · nothing is sent live</p><label>jump to a state <select aria-label="Preview control state"></select></label><p class="preview-current" role="status"></p><div class="preview-actions"><button class="preview-reset">reset</button><button class="preview-finish">finish connecting</button></div><div class="preview-actions preview-mini-actions" hidden><button class="preview-mini-start" aria-label="start working">start working</button><button class="preview-mini-pack" aria-label="pack up">pack up</button></div><div class="preview-actions preview-travel-actions" hidden><button class="preview-by-elevator">by elevator</button><button class="preview-by-patio">by patio door</button><button class="preview-by-snacks">by snacks</button></div><div class="preview-activity" hidden></div><a href="?">leave playground ↗</a>';
+  let spawnSample = 0;
+  const dropSample = document.createElement('button'); dropSample.type = 'button'; dropSample.textContent = 'drop in a sample agent'; tools.append(dropSample);
+  const ticketSample = document.createElement('button'); ticketSample.textContent = 'sample ticket payout'; ticketSample.className = 'preview-ticket-payout'; tools.append(ticketSample);
   const picker = tools.querySelector('select')!, finish = tools.querySelector<HTMLButtonElement>('.preview-finish')!;
   const miniActions = tools.querySelector<HTMLElement>('.preview-mini-actions')!;
   const travelActions = tools.querySelector<HTMLElement>('.preview-travel-actions')!;
@@ -75,6 +79,44 @@ export function createControlPreview(publish: (data: BoardData) => void,
     phoneMessage.disabled = !connected();
     publish(data());
   }
+  function spawnAgent() {
+    world.agents = world.agents.filter(agent => !agent.sessionId.startsWith('preview-drop-'));
+    const agent = sample(`preview-drop-${++spawnSample}`, 1, true);
+    agent.sessionName = 'new arrival · preview'; agent.activity = 'idle';
+    const from = toFactoryWorld({ x: -1, z: 2.5 });
+    agent.world = { zone: 'idle', position: from, facing: 'down' };
+    world.agents.push(agent); update();
+    later(() => {
+      if (!world.agents.includes(agent)) return;
+      const to = slotPosition('factory25d', 'work', 1), waypoints = factory25dWaypoints(from, to), startedAt = Date.now();
+      agent.activity = 'reading';
+      agent.world = { zone: 'work', slotIndex: 1, position: from, facing: 'up',
+        movement: { from, to, waypoints, startedAt, arrivesAt: startedAt + routeDistance(from, waypoints, to) / 80 * 1000 } };
+      update();
+    }, 1100);
+  }
+  dropSample.addEventListener('click', () => reset('spawn'), events);
+  ticketSample.addEventListener('click', () => {
+    reset('tickets');
+    const now = Date.now();
+    world.stationTickets = { wallets: [], visits: [] };
+    for (const agent of world.agents) {
+      const key = ticketOwnerKey(agent);
+      let wallet = world.stationTickets.wallets.find(item => item.key === key);
+      if (!wallet) { wallet = { key, username: agent.username, balance: 0, remainderMs: 0 }; world.stationTickets.wallets.push(wallet); }
+      wallet.balance += 3;
+      agent.activity = 'idle'; agent.attention = { kind: 'ready', since: now };
+      agent.ticketPayout = { id: `preview:${agent.sessionId}:${now}`, count: 3, slotIndex: agent.world.slotIndex!, startedAt: now, collectAt: now + TICKET_COLLECT_MS };
+    }
+    update();
+    later(() => {
+      world.agents.forEach((agent, index) => {
+        const from = agent.world.position, to = slotPosition('factory25d', 'idle', index);
+        const waypoints = factory25dWaypoints(from, to), startsAt = Date.now();
+        agent.world = { zone: 'idle', slotIndex: index, position: from, facing: 'up', movement: { from, to, waypoints, startedAt: startsAt, arrivesAt: startsAt + routeDistance(from, waypoints, to) / 80 * 1000 } };
+      }); update();
+    }, TICKET_COLLECT_MS);
+  }, events);
   sampleNote.addEventListener('click', () => {
     if (scenario !== 'room-life') return;
     const agent = world.agents.find(agent => agent.sessionId === 'preview-teammate')!;
@@ -188,6 +230,17 @@ export function createControlPreview(publish: (data: BoardData) => void,
     world = { schemaVersion: 1, revision: 1, serverTime: Date.now(), environment: 'factory25d', workstationCount: WORKSTATIONS.length, garageCars:true,
       agents: [sample('preview-teammate', 4, false), ...(next === 'empty' ? [] : [sample('preview-mine', 1, true), sample('preview-patio', 2, true)])],
       tombstones: [], chat: [], events: [] };
+    if (next === 'spawn') world.agents = [];
+    if (next === 'tickets') {
+      const ids = ['inside-9', 'patio-0', 'garage-2'];
+      world.agents = ids.map((id, index) => {
+        const agent = sample(index === 0 ? 'preview-mine' : `preview-tickets-${index}`, index + 1, true);
+        const slotIndex = WORKSTATIONS.findIndex(station => station.id === id);
+        agent.sessionName = `${WORKSTATIONS[slotIndex].room} worker · preview`;
+        agent.world = { zone: 'work', slotIndex, position: slotPosition('factory25d', 'work', slotIndex), facing: 'up' };
+        return agent;
+      });
+    }
     if (next === 'room-life') {
       const resting = world.agents.find(agent => agent.sessionId === 'preview-mine')!;
       resting.activity = 'idle'; resting.sessionName = 'chair visitor · preview';
@@ -223,7 +276,8 @@ export function createControlPreview(publish: (data: BoardData) => void,
         movement: { from, to, waypoints, startedAt, arrivesAt: startedAt + routeDistance(from, waypoints, to) / 80 * 1000 } };
     }
     connection(connected()); update(); scenarioChanged(next, data());
-    const panel = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (panel) panel.open = next !== 'activity';
+    const panel = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (panel) panel.open = !['activity', 'spawn', 'tickets', 'room-life'].includes(next);
+    if (next === 'spawn') later(spawnAgent, 1400);
   }
   picker.addEventListener('change', () => reset(picker.value as Scenario), events);
   tools.querySelector('.preview-reset')!.addEventListener('click', () => reset(scenario), events);

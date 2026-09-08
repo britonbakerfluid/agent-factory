@@ -88,10 +88,13 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
       const mine = [...agents.entries.values()].filter(entry => entry.session.ownerId === context.ownerId);
       const entry = mine.find(entry => entry.session.sessionId === selected()) ?? mine[0];
       targetId = entry?.session.sessionId;
+      if (entry) agents.finishArrival?.(entry.session.sessionId);
       targetScene = entry?.mesh.parent === garage ? garage : entry?.mesh.parent === patio ? patio : factory;
       stageRoom = targetScene === garage ? 'garage' : targetScene === patio ? 'patio' : 'factory';
       anchor.copy(entry?.mesh.position ?? new THREE.Vector3(1.65, .45, 7.8));
-      floor = entry ? anchor.y - entry.baseHeight : .018;
+      // The sprite may be arriving, jumping or sitting above its support. Only
+      // the room floor is a stable origin for the separate editor draft.
+      floor = floorAt(factoryWorldPoint(anchor, stageRoom));
       anchor.y = floor;
       const origin = factoryWorldPoint(anchor, stageRoom);
       const path = avatarClearanceRoute(targetScene, stageRoom, origin, (entry?.seatBlend ?? 0) > .01, floorAt);

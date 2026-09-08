@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
+import { AVATAR_ANIMATIONS } from '../client/prototypes/factory25dAvatar';
 import { AVATAR_EYES, avatarEyePose } from '../client/prototypes/factory25dAvatarEyes';
 import { avatarBodyFrame, avatarTexture, setAvatarTextureFrame } from '../client/prototypes/factory25dAvatarTexture';
 import { drawCharacter, hexToInt, resolveAvatar, type AvatarEyes } from '../client/rendering/avatarPainter';
@@ -76,8 +77,9 @@ it('caches expression artwork without repainting each frame or changing the lega
   const look={...DEFAULT_AVATAR,shirtColor:'#85a171'};
   const a=avatarTexture(look,undefined,true), b=avatarTexture(look,undefined,true);
   expect(a.sheet).toBe(b.sheet);expect(a.texture).not.toBe(b.texture);
-  expect(a.sheet.canvas.width).toBe(640);expect(paints).toBe(160);
+  const paintedFrames = AVATAR_ANIMATIONS.length * 4 * AVATAR_EYES.length;
+  expect(a.sheet.canvas.width).toBe(640);expect(paints).toBe(paintedFrames);
   for(let i=0;i<100;i++) setAvatarTextureFrame(a.texture,0,i%4,AVATAR_EYES[i%5]);
-  expect(paints).toBe(160);expect(b.texture.offset.toArray()).toEqual([0,0]);
+  expect(paints).toBe(paintedFrames);expect(b.texture.offset.toArray()).toEqual([0,0]);
   const portrait=avatarTexture(look,['idle']);expect(portrait.sheet.canvas.width).toBe(128);
 });

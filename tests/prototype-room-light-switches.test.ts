@@ -6,6 +6,7 @@ import { readLightPreferences } from '../client/prototypes/factory25dLightSwitch
 import type { BoardData } from '../client/prototypes/factory25dBoardData';
 
 vi.mock('../client/prototypes/factory25dLoungeChat', () => ({ createLoungeChat: () => ({ update() {} }) }));
+vi.mock('../client/prototypes/factory25dSoccer', () => ({ createSoccerInteraction: () => ({ update() {}, dispose() {} }) }));
 afterEach(() => vi.unstubAllGlobals());
 
 it('keeps manual ceiling choices through day/night changes without changing the sky', () => {

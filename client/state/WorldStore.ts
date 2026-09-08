@@ -26,9 +26,13 @@ export class WorldStore {
     const tombstones = new Map(this.current.tombstones.map(tombstone => [tombstone.sessionId, tombstone]));
     const events = new Map(this.current.events.map(event => [event.id, event]));
     const chat = [...this.current.chat];
+    let stationTickets = this.current.stationTickets;
 
     for (const change of delta.changes) {
       switch (change.kind) {
+        case 'station_tickets':
+          stationTickets = clone(change.tickets);
+          break;
         case 'agent_upsert':
           agents.set(change.agent.sessionId, clone(change.agent));
           break;
@@ -56,6 +60,7 @@ export class WorldStore {
 
     this.current = {
       ...this.current,
+      stationTickets,
       revision: delta.revision,
       serverTime: delta.serverTime,
       agents: Array.from(agents.values()),

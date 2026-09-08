@@ -46,13 +46,47 @@ describe('garage panorama windows', () => {
     windows.dispose();
   });
 
-  it('keeps live terrain, sky and cloud textures and disposes only its owned geometry/materials, once', () => {
+  it('layers outside rain, refracting glass and surface weather over the same cropped panorama, behind the reveals', () => {
+    const room = new THREE.Group(), source = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
+    const windows = createGarageWindows(room, source, source, 3.598, source, {
+      outsideMaterial: source, glassMaterial: source, surfaceMaterial: source,
+    });
+    room.updateMatrixWorld(true);
+    for (const pane of windows.group.children) {
+      const terrain = pane.getObjectByName('window-terrain') as THREE.Mesh<THREE.PlaneGeometry>;
+      const weatherNames = ['window-surface-weather', 'window-refracting-glass', 'window-outside-rain'];
+      for (const name of weatherNames) {
+        const mesh = pane.getObjectByName(name) as THREE.Mesh<THREE.PlaneGeometry>;
+        expect(mesh.geometry).toBe(terrain.geometry);
+        expect(mesh.geometry.getAttribute('uv')).toBe(terrain.geometry.getAttribute('uv'));
+        expect(mesh.position.z).toBeGreaterThan(terrain.position.z);
+        // Each reveal is .10 deep, centered at -4.34.
+        for (const reveal of pane.children.filter(child => child.name === 'window-jamb' || child.name === 'window-lintel')) {
+          expect(mesh.position.z).toBeLessThan(reveal.position.z + .05);
+        }
+      }
+      const target = terrain.getWorldPosition(new THREE.Vector3()), origin = target.clone().add(new THREE.Vector3(0, 6, 10));
+      const hits = new THREE.Raycaster(origin, target.clone().sub(origin).normalize()).intersectObject(pane, true);
+      expect(hits.map(hit => hit.object.name)).toEqual([
+        ...weatherNames, 'window-terrain', 'window-clouds', 'window-sky', 'window-backing',
+      ]);
+    }
+    windows.dispose(); source.dispose();
+  });
+
+  it('keeps live panorama and weather textures/uniforms and disposes only its owned geometry/materials, once', () => {
     const room = new THREE.Group(), terrainTexture = new THREE.Texture(), skyTexture = new THREE.Texture(), cloudTexture = new THREE.Texture();
     const terrain = new THREE.MeshBasicMaterial({ map: terrainTexture }), sky = new THREE.MeshBasicMaterial({ map: skyTexture });
     const clouds = new THREE.MeshBasicMaterial({ map: cloudTexture, transparent: true, depthWrite: false });
-    const windows = createGarageWindows(room, terrain, sky, 3.598, clouds);
-    const protectedDisposals = [terrainTexture, skyTexture, cloudTexture, terrain, sky, clouds].map(resource => vi.spyOn(resource, 'dispose'));
+    const rainTexture = new THREE.Texture(), glassTexture = new THREE.Texture(), surfaceTexture = new THREE.Texture();
+    const outsideMaterial = new THREE.MeshBasicMaterial({ map: rainTexture, opacity: 0, transparent: true, depthWrite: false });
+    const glassMaterial = new THREE.ShaderMaterial({ uniforms: { panorama: { value: glassTexture }, time: { value: 0 }, wetness: { value: 0 } }, transparent: true, depthWrite: false });
+    const surfaceMaterial = new THREE.ShaderMaterial({ uniforms: { drops: { value: surfaceTexture }, time: { value: 0 }, wetness: { value: 0 } }, transparent: true, depthWrite: false });
+    const weather = { outsideMaterial, glassMaterial, surfaceMaterial };
+    const windows = createGarageWindows(room, terrain, sky, 3.598, clouds, weather);
+    const protectedDisposals = [terrainTexture, skyTexture, cloudTexture, rainTexture, glassTexture, surfaceTexture, terrain, sky, clouds, ...Object.values(weather)].map(resource => vi.spyOn(resource, 'dispose'));
     const owned = new Set<THREE.BufferGeometry | THREE.Material>();
+    const sharedWeather = new Map<string, THREE.Material>();
     windows.group.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
       owned.add(object.geometry); owned.add(object.material);
@@ -61,6 +95,30 @@ describe('garage panorama windows', () => {
       if (object.name === 'window-clouds') {
         expect(object.material).not.toBe(clouds); expect(object.material.map).toBe(cloudTexture);
         expect(object.material.transparent).toBe(true); expect(object.material.depthWrite).toBe(false);
+      }
+      if (object.name === 'window-outside-rain') {
+        expect(object.material).not.toBe(outsideMaterial); expect(object.material.map).toBe(rainTexture);
+        outsideMaterial.opacity = .65;
+        object.onBeforeRender({} as THREE.WebGLRenderer, new THREE.Scene(), new THREE.Camera(), object.geometry, object.material, null!);
+        expect(object.material.opacity).toBe(.65);
+        outsideMaterial.opacity = 0;
+        object.onBeforeRender({} as THREE.WebGLRenderer, new THREE.Scene(), new THREE.Camera(), object.geometry, object.material, null!);
+        expect(object.material.opacity).toBe(0); expect(object.visible).toBe(true);
+      }
+      const shaderSource = object.name === 'window-refracting-glass' ? glassMaterial : object.name === 'window-surface-weather' ? surfaceMaterial : undefined;
+      if (shaderSource) {
+        expect(object.material).not.toBe(shaderSource); expect(object.material.uniforms).toBe(shaderSource.uniforms);
+        shaderSource.uniforms.time.value = 4.2; shaderSource.uniforms.wetness.value = .7;
+        expect(object.material.uniforms.time.value).toBe(4.2); expect(object.material.uniforms.wetness.value).toBe(.7);
+        const textureUniform = object.name === 'window-refracting-glass' ? 'panorama' : 'drops';
+        expect(object.material.uniforms[textureUniform].value).toBe(shaderSource.uniforms[textureUniform].value);
+        shaderSource.uniforms.wetness.value = 0;
+        expect(object.material.uniforms.wetness.value).toBe(0); expect(object.visible).toBe(true);
+      }
+      if (object.name === 'window-outside-rain' || shaderSource) {
+        expect(object.material.transparent).toBe(true); expect(object.material.depthWrite).toBe(false);
+        if (sharedWeather.has(object.name)) expect(object.material).toBe(sharedWeather.get(object.name));
+        else sharedWeather.set(object.name, object.material);
       }
     });
     room.updateMatrixWorld(true);

@@ -19,6 +19,9 @@ import type { WeatherVisualState } from './weather';
 
 const TAU = Math.PI * 2;
 const MAX_STEP_S = 0.1;
+/** Falling streaks are kinematic and can follow slower frames without slowing the weather. */
+const MAX_OUTSIDE_STEP_S = 0.25;
+export const OUTSIDE_RAIN_SPEED_MULTIPLIER = 1.85;
 
 /** Below this the sky is treated as dry: nothing spawns, existing rain runs out. */
 export const RAIN_THRESHOLD = 0.02;
@@ -30,7 +33,7 @@ export const OUTSIDE_RAIN_DEPTH_OFFSET = 0.2;
 export interface GlassDrop {
   x: number;
   y: number;
-  /** 1 to 3, in glass pixels. Bigger beads let go sooner and run faster. */
+  /** Water-area scale; glassDropRadius gives its visible radius in glass pixels. */
   size: number;
   vy: number;
   /** Seconds since impact. */
@@ -41,12 +44,16 @@ export interface GlassDrop {
 }
 
 export const MAX_GLASS_DROPS = 96;
+/** Size squared represents water area. Merges above this limit remain separate. */
+export const MAX_GLASS_SIZE = 6;
+/** Shared by the wet-glass painter and contact detection, so touching beads join. */
+export function glassDropRadius(size: number): number { return 0.45 + size * 0.43; }
 /** Drops spawned per second per 100px of glass at full rain. */
 const GLASS_SPAWN_PER_100PX = 3.8;
 const GLASS_SPAWN_FLOOR = 0.5;
 /** px/s^2: beads accelerate slowly down glass, well below free fall. */
 export const GLASS_GRAVITY = 40;
-/** Seconds for a trail to fade to about a third. */
+/** Seconds for a trail to fade to about a third on dry glass. */
 export const GLASS_TRAIL_DECAY_S = 1.8;
 /** Seconds the impact splat is drawn for. */
 export const GLASS_SPLAT_S = 0.09;
@@ -58,7 +65,7 @@ export class GlassRainSim {
   private spawnCarry = 0;
   private readonly random: () => number;
 
-  constructor(readonly width: number, readonly height: number, seed = 0x5a1c) {
+  constructor(readonly width: number, readonly height: number, seed = 0x5a1c, readonly rasterScale = 1) {
     this.wet = new Float32Array(width * height);
     this.random = createSeededRandom(seed + 41);
   }
@@ -71,18 +78,21 @@ export class GlassRainSim {
   }
 
   step(dtSeconds: number, weather: WeatherVisualState): void {
+    if (!Number.isFinite(dtSeconds)) return;
     const dt = Math.min(Math.max(dtSeconds, 0), MAX_STEP_S);
     if (dt <= 0) return;
 
-    const decay = Math.exp(-dt / GLASS_TRAIL_DECAY_S);
+    const rain = weather.rain01 > RAIN_THRESHOLD ? clamp01(weather.rain01) : 0;
+    // Fresh rain sustains channels; residual dampness dries more slowly than clear glass.
+    const drying = rain > 0 ? 2.6 + clamp01(weather.wet01) * 0.8 : 1 + clamp01(weather.wet01) * 0.5;
+    const decay = Math.exp(-dt / (GLASS_TRAIL_DECAY_S * drying));
     for (let i = 0; i < this.wet.length; i++) {
       const value = this.wet[i] * decay;
       this.wet[i] = value < 0.02 ? 0 : value;
     }
 
-    const rain = weather.rain01 > RAIN_THRESHOLD ? clamp01(weather.rain01) : 0;
     if (rain > 0) {
-      const rate = (this.width / 100) * (GLASS_SPAWN_FLOOR + rain * GLASS_SPAWN_PER_100PX);
+      const rate = (this.width / (100 * this.rasterScale)) * (GLASS_SPAWN_FLOOR + rain * GLASS_SPAWN_PER_100PX);
       this.spawnCarry += rate * dt;
       while (this.spawnCarry >= 1 && this.drops.length < MAX_GLASS_DROPS) {
         this.spawnCarry -= 1;
@@ -93,7 +103,8 @@ export class GlassRainSim {
       this.spawnCarry = 0;
     }
 
-    const wind = (weather.wind01 - 0.15) * 6; // px/s sideways push on running beads
+    this.mergeDrops();
+    const wind = (weather.wind01 - 0.15) * 6 * this.rasterScale; // px/s sideways push on running beads
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const drop = this.drops[i];
       drop.age += dt;
@@ -101,15 +112,78 @@ export class GlassRainSim {
 
       const prevX = drop.x;
       const prevY = drop.y;
-      drop.vy = Math.min(drop.vy + GLASS_GRAVITY * (0.55 + drop.size * 0.3) * dt, 34 + drop.size * 15);
+      drop.vy = Math.min(drop.vy + GLASS_GRAVITY * this.rasterScale * (0.55 + drop.size * 0.3) * dt,
+        (34 + drop.size * 15) * this.rasterScale);
       drop.y += drop.vy * dt;
-      drop.x += (Math.sin(drop.age * 7 + drop.wobble) * 5 + wind) * dt;
+      const route = this.trailRoute(drop.x, drop.y);
+      const wander = Math.sin(drop.age * 7 + drop.wobble) * 5 * this.rasterScale / Math.max(1, drop.size / 2);
+      drop.x += ((wander + wind) * (1 - route.capture * 0.85) + route.pull) * dt;
       this.markTrail(prevX, prevY, drop.x, drop.y, drop.size);
 
       if (drop.y > this.height + 2 || drop.x < -2 || drop.x > this.width + 2) {
         this.drops.splice(i, 1);
       }
     }
+    this.mergeDrops();
+  }
+
+  /** At most 96 beads: a bounded pair scan keeps merging deterministic without a second grid. */
+  private mergeDrops(): void {
+    for (let i = 0; i < this.drops.length; i++) {
+      const a = this.drops[i];
+      for (let j = i + 1; j < this.drops.length; j++) {
+        const b = this.drops[j];
+        const reach = glassDropRadius(a.size) + glassDropRadius(b.size);
+        if ((a.x - b.x) ** 2 + (a.y - b.y) ** 2 > reach * reach) continue;
+        const areaA = a.size * a.size, areaB = b.size * b.size;
+        const area = areaA + areaB;
+        if (area > MAX_GLASS_SIZE * MAX_GLASS_SIZE) continue;
+        const size = Math.sqrt(area);
+        const x = (a.x * areaA + b.x * areaB) / area;
+        const y = (a.y * areaA + b.y * areaB) / area;
+        const age = Math.max(a.age, b.age);
+        const remaining = Math.max(0, Math.min(a.dwell - a.age, b.dwell - b.age));
+        // A growing bead lets go earlier; a large merged bead starts running immediately.
+        const dwell = age + (size >= 3 ? 0 : remaining * Math.max(a.size, b.size) / size);
+        this.markTrail(a.x, a.y, x, y, a.size);
+        this.markTrail(b.x, b.y, x, y, b.size);
+        a.vy = (a.vy * areaA + b.vy * areaB) / area;
+        Object.assign(a, { x, y, size, age, dwell });
+        this.drops.splice(j--, 1);
+      }
+    }
+  }
+
+  /** Choose one continuous channel, rather than a dry midpoint between neighboring streams. */
+  private trailRoute(x: number, y: number): { pull: number; capture: number } {
+    const cx = Math.round(x), cy = Math.round(y);
+    let bestScore = 0, routeX = x, strength = 0;
+    const reach = Math.ceil(8 * this.rasterScale);
+    for (let dx = -reach; dx <= reach; dx++) {
+      const column = cx + dx;
+      if (column < 0 || column >= this.width) continue;
+      let water = 0, connected = 0, rows = 0;
+      for (let dy = 2; dy <= 10; dy++) {
+        const row = cy + Math.round(dy * this.rasterScale);
+        if (row < 0 || row >= this.height) continue;
+        const value = this.wet[row * this.width + column];
+        water += value;
+        if (value > 0.06) connected++;
+        rows++;
+      }
+      if (rows < 3 || connected < rows * 0.5) continue;
+      const continuity = connected / rows;
+      const mean = water / rows;
+      const score = mean * continuity * continuity / (1 + Math.abs(column - x) * 0.22 / this.rasterScale);
+      if (score <= bestScore) continue;
+      bestScore = score; routeX = column; strength = Math.min(1, mean * 2);
+    }
+    const offset = routeX - x;
+    return {
+      // Bounded velocity eases into the chosen route without snapping position.
+      pull: Math.max(-18 * this.rasterScale, Math.min(18 * this.rasterScale, offset * 9)) * strength,
+      capture: strength * Math.max(0, 1 - Math.abs(offset) / (3 * this.rasterScale)),
+    };
   }
 
   private spawn(): void {
@@ -121,21 +195,28 @@ export class GlassRainSim {
       size,
       vy: 0,
       age: 0,
-      dwell: (0.35 + this.random() * 1.5) / (0.6 + size * 0.4),
+      dwell: size === 1 ? 1.2 + this.random() * 3.8
+        : size === 2 ? 0.6 + this.random() * 1.8 : 0.25 + this.random() * 0.9,
       wobble: this.random() * TAU,
     });
   }
 
   /** Lay wetness along the segment a running drop just covered so trails have no gaps. */
   private markTrail(x0: number, y0: number, x1: number, y1: number, size: number): void {
-    const steps = Math.max(1, Math.ceil(Math.abs(y1 - y0)));
-    const strength = size >= 3 ? 1 : size === 2 ? 0.8 : 0.55;
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0))));
+    const strength = Math.min(1, 0.3 + size * 0.25);
+    // Most runners leave a hairline path; only the largest merged beads widen it.
+    const radius = size >= 5 ? 1 : 0;
     for (let s = 0; s <= steps; s++) {
       const t = s / steps;
       const x = Math.round(x0 + (x1 - x0) * t);
       const y = Math.round(y0 + (y1 - y0) * t);
       this.mark(x, y, strength);
-      if (size >= 3) this.mark(x + 1, y, strength * 0.6);
+      for (let side = 1; side <= radius; side++) {
+        const edge = strength * (1 - side / (radius + 1));
+        this.mark(x - side, y, edge);
+        this.mark(x + side, y, edge);
+      }
     }
   }
 
@@ -174,11 +255,11 @@ export function paintGlassRain(pixels: PixelBuffer, sim: GlassRainSim, palette: 
       pixels.set(cx, cy + 1, body, 120);
       continue;
     }
-    if (drop.size === 1) {
+    if (drop.size < 1.5) {
       pixels.set(cx, cy, body, 210);
       continue;
     }
-    if (drop.size === 2) {
+    if (drop.size < 2.5) {
       pixels.set(cx, cy, body, 225);
       pixels.set(cx + 1, cy, body, 225);
       pixels.set(cx, cy + 1, shade, 205);
@@ -219,7 +300,7 @@ export class BackRainSim {
   readonly streaks: BackStreak[] = [];
   private readonly random: () => number;
 
-  constructor(readonly width: number, readonly height: number, seed = 0x5a1c) {
+  constructor(readonly width: number, readonly height: number, seed = 0x5a1c, readonly rasterScale = 1) {
     this.random = createSeededRandom(seed + 43);
   }
 
@@ -229,38 +310,34 @@ export class BackRainSim {
   }
 
   step(dtSeconds: number, weather: WeatherVisualState): void {
-    const dt = Math.min(Math.max(dtSeconds, 0), MAX_STEP_S);
+    if (!Number.isFinite(dtSeconds)) return;
+    const dt = Math.min(Math.max(dtSeconds, 0), MAX_OUTSIDE_STEP_S);
     const rain = weather.rain01 > RAIN_THRESHOLD ? clamp01(weather.rain01) : 0;
-    const target = rain > 0 ? Math.round(this.width * (BACK_DENSITY_FLOOR + rain * BACK_DENSITY_PER_PX)) : 0;
+    const target = rain > 0 ? Math.round(this.width / this.rasterScale * (BACK_DENSITY_FLOOR + rain * BACK_DENSITY_PER_PX)) : 0;
 
     while (this.streaks.length < target) this.streaks.push(this.spawn(true));
     if (this.streaks.length > target) this.streaks.length = target;
     if (dt <= 0) return;
 
-    const windX = weather.wind01 * BACK_WIND_PX_S;
-    const tempo = 0.62 + rain * 0.28;
+    const windX = weather.wind01 * BACK_WIND_PX_S * this.rasterScale * OUTSIDE_RAIN_SPEED_MULTIPLIER;
+    const tempo = (0.62 + rain * 0.28) * OUTSIDE_RAIN_SPEED_MULTIPLIER;
     for (const streak of this.streaks) {
       streak.y += streak.speed * tempo * dt;
       streak.x += windX * dt;
       if (streak.x >= this.width) streak.x -= this.width;
       if (streak.y - streak.length > this.height) {
-        const fresh = this.spawn(false);
-        streak.x = fresh.x;
-        streak.y = fresh.y;
-        streak.length = fresh.length;
-        streak.speed = fresh.speed;
+        this.spawn(false, streak);
       }
     }
   }
 
-  private spawn(anywhere: boolean): BackStreak {
+  private spawn(anywhere: boolean, streak: BackStreak = { x: 0, y: 0, length: 0, speed: 0 }): BackStreak {
     const length = 3 + Math.floor(this.random() * 4);
-    return {
-      x: this.random() * this.width,
-      y: anywhere ? this.random() * this.height : -length - this.random() * 6,
-      length,
-      speed: 95 + this.random() * 55,
-    };
+    streak.x = this.random() * this.width;
+    streak.y = anywhere ? this.random() * this.height : -length - this.random() * 6;
+    streak.length = length;
+    streak.speed = (95 + this.random() * 55) * this.rasterScale;
+    return streak;
   }
 }
 

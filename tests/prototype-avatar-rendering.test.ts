@@ -26,13 +26,13 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('shared avatar artwork', () => {
   it('reuses identical resolved looks, but repaints changed appearances and animation sets', async () => {
-    const { avatarSheet } = await import('../client/prototypes/factory25dAvatar');
+    const { avatarSheet, AVATAR_ANIMATIONS } = await import('../client/prototypes/factory25dAvatar');
     const { drawCharacter } = await import('../client/rendering/avatarPainter');
     vi.mocked(drawCharacter).mockClear();
     const avatar = { ...DEFAULT_AVATAR }, sheet = avatarSheet(avatar);
-    expect(drawCharacter).toHaveBeenCalledTimes(32);
+    expect(drawCharacter).toHaveBeenCalledTimes(AVATAR_ANIMATIONS.length * 4);
     expect(avatarSheet({ ...avatar })).toBe(sheet);
-    expect(drawCharacter).toHaveBeenCalledTimes(32);
+    expect(drawCharacter).toHaveBeenCalledTimes(AVATAR_ANIMATIONS.length * 4);
     expect(sheet.feet.every(row => row.join() === '26,27,28,29')).toBe(true);
     avatar.shirtColor = '#abcdef'; expect(avatarSheet(avatar)).not.toBe(sheet);
     const portrait = avatarSheet(DEFAULT_AVATAR, ['idle']);

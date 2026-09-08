@@ -1,5 +1,7 @@
+import { createStationTickets } from './factory25dStationTickets';
 import {createGarage} from './factory25dGarage';
 import { createVendingMachine } from './factory25dVendingMachine';
+import { createConsoleCandidate, CONSOLE_CANDIDATES } from './factory25dConsoleCandidates';
 import { createSnackCarry } from './factory25dSnackCarry';
 import { createLightInteractions } from './factory25dLightSwitches';
 import { createThunderstorm } from './factory25dThunderstorm';
@@ -272,7 +274,8 @@ const mountainWindow = new THREE.Mesh(
 );
 mountainWindow.position.set(0, glassCenterY, -4.55);
 scene.add(mountainWindow);
-const windowWeather = createWindowWeather(scene, renderer, 15.84, glassHeight, glassCenterY);
+const windowWeather = createWindowWeather(scene, renderer, 15.84, glassHeight, glassCenterY,
+  [{ mesh: backdrop, garageDepth: -4.35 }, { mesh: sun }, { mesh: mountainWindow, garageDepth: -4.33 }]);
 for (const source of [backdrop, sun, mountainWindow]) {
   const copy = source.clone(); copy.position.x += 16; sideRoomScene.add(copy);
   if (source === sun) copy.name = 'patio-sun';
@@ -383,8 +386,15 @@ const workstationScale = 0.66;
 const machinePositions = INDOOR_COLUMNS;
 
 const stationVisuals = new Map<string, { setFeedback(state?: StationFeedback): void }>();
-function workstation(x: number, z: number, active: boolean): void {
+const consoleDisposals: Array<() => void> = [];
+function workstation(x: number, z: number, active: boolean, contender?: number): void {
   const cabinet = new THREE.Group();
+  const screenMaterial = screenMaterials[Number(active)].clone();
+  const marqueeMaterial = (active ? activeMarquee : idleMarquee).clone();
+  if (contender !== undefined) {
+    const candidate = createConsoleCandidate(cabinet, contender, screenMaterial, marqueeMaterial);
+    consoleDisposals.push(() => { candidate.dispose(); screenMaterial.dispose(); marqueeMaterial.dispose(); });
+  } else {
   propPart(cabinet, [0.88, 0.13, 0.56], [0, 0.12, 0.015], cabinetFoot);
   propPart(cabinet, [0.84, 0.37, 0.48], [0, 0.35, 0.02], cabinetBody);
   propPart(cabinet, [0.86, 0.55, 0.4], [0, 0.84, -0.055], cabinetBody);
@@ -393,12 +403,10 @@ function workstation(x: number, z: number, active: boolean): void {
     propPart(cabinet, [0.12, 0.08, 0.14], [side * 0.33, 0.04, 0.18], cabinetFoot);
   }
   propPart(cabinet, [0.84, 0.47, 0.08], [0, 0.85, 0.175], cabinetBezel);
-  const screenMaterial = screenMaterials[Number(active)].clone();
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.34), screenMaterial);
   screen.position.set(0, 0.86, 0.221);
   cabinet.add(screen);
   propPart(cabinet, [1.02, 0.095, 0.54], [0, 1.145, -0.015], cabinetSide);
-  const marqueeMaterial = (active ? activeMarquee : idleMarquee).clone();
   propPart(cabinet, [0.86, 0.065, 0.035], [0, 1.145, 0.274], marqueeMaterial);
   propPart(cabinet, [0.86, 0.018, 0.15], [0, 1.202, 0.18], marqueeMaterial);
   const deck = propPart(cabinet, [0.98, 0.09, 0.33], [0, 0.565, 0.24], cabinetDeck);
@@ -408,6 +416,7 @@ function workstation(x: number, z: number, active: boolean): void {
   propPart(cabinet, [0.07, 0.03, 0.075], [0.1, 0.628, 0.29], standard('#56a889', 0.8));
   propPart(cabinet, [0.07, 0.03, 0.075], [0.25, 0.628, 0.29], standard('#ac8c52', 0.8));
   propPart(cabinet, [0.08, 0.025, 0.012], [0, 0.37, 0.267], cabinetFoot);
+  }
   cabinet.scale.setScalar(workstationScale);
   cabinet.position.set(x, 0, z);
   interior.add(cabinet);
@@ -424,22 +433,25 @@ function workstation(x: number, z: number, active: boolean): void {
       screenMaterial.map = screenMaterial.emissiveMap = on ? activeScreenTexture : idleScreenTexture;
       screenMaterial.emissive.set(on || error ? color : '#263455');
       screenMaterial.emissiveIntensity = on ? 0.9 + heat * 0.15 + pulse * 0.15 : 0.15;
-      marqueeMaterial.color.set(on || error ? color : '#592563');
-      marqueeMaterial.emissive.set(on || error ? color : '#160720');
-      marqueeMaterial.emissiveIntensity = on ? 0.35 + pulse * 0.15 : error * 0.4;
+      const idleAccent = contender === undefined ? '#592563' : CONSOLE_CANDIDATES[contender].color;
+      marqueeMaterial.color.set(on || error ? color : idleAccent);
+      marqueeMaterial.emissive.set(on || error ? color : contender === undefined ? '#160720' : idleAccent);
+      marqueeMaterial.emissiveIntensity = on ? 0.35 + pulse * 0.15 : error * 0.4 + (contender === undefined ? 0 : .2);
       glow.color.set(color); glow.intensity = on ? 1.1 + heat * 0.2 + pulse * 0.2 : error * 0.4;
     } });
   }
 }
 
-for (const x of machinePositions) workstation(x, INDOOR_ROWS[0], false);
-for (const x of machinePositions) workstation(x, INDOOR_ROWS[1], false);
+for (const [column, x] of machinePositions.entries()) workstation(x, INDOOR_ROWS[0], false, column + 5);
+for (const [column, x] of machinePositions.entries()) workstation(x, INDOOR_ROWS[1], false, column > 0 ? column - 1 : undefined);
+if (import.meta.hot) import.meta.hot.dispose(() => consoleDisposals.forEach(dispose => dispose()));
 const ceilingLights = createCeilingLights(interior, isNight);
 
 const liveAgents = createLiveAgents(scene, sideRoomScene, canvas);
-const garage = createGarage(scene,canvas,camera,mountainWindow.material,backdrop.material,windowWeather.cloudMaterial);
+const garage = createGarage(scene,canvas,camera,mountainWindow.material,backdrop.material,windowWeather.cloudMaterial,windowWeather.windowMaterials);
 liveAgents.configureGarage({scene:garage.scene,isVisible:()=>garage.isActive() || garage.isTransitioning()});
 garage.carAnimation.configure(liveAgents);
+const stationTickets = createStationTickets({ factory: scene, patio: sideRoomScene, garage: garage.scene }, canvas);
 garage.miniWork.configure(liveAgents);
 
 const activityFeedback = createActivityFeedback(canvas.parentElement!);
@@ -527,7 +539,7 @@ vendingMachine.root.position.set(FRONT_VENDING.x,0,FRONT_VENDING.z-INTERIOR_Z);
 // Front desk room, beside its right divider; the display faces left into the room.
 vendingMachine.root.rotation.y=FRONT_VENDING.rotationY;
 const teamDesk = createTeamDesk(interior, canvas, camera, renderer, () => factoryControls.state.stop(), mountainView.setVisitors, liveAgents.contributionFor);
-const brandLibrary = createBrandLibrary(interior, canvas, () => factoryControls.state.stop());
+const brandLibrary = createBrandLibrary(interior, canvas, () => factoryControls.state.stop(), camera, renderer);
 brandLibrary.addTrigger(brandFlag.target, 'patio', 'Open the WE flag and brand shelf');
 
 function cornerCouch(x: number, z: number): void {
@@ -620,6 +632,7 @@ const lightInteractions = createLightInteractions(canvas, [
     && (room === 'garage' ? garage.isActive() : room === 'patio' ? sideRoom.isActive() && !garage.isActive()
       : !garage.isActive() && !sideRoom.isActive()),
   sound: (kind, on) => kind === 'candle' ? sceneAudio.candle(on) : sceneAudio.lampSwitch(on),
+  onCleanup: job => roomStaff.enqueueCleanup(job),
 });
 const basketball = createBasketball(interior, canvas, [], {
   tap: () => sceneAudio.ballTap(), swish: () => sceneAudio.ballSwish(), bounce: energy => sceneAudio.ballBounce(energy),
@@ -815,7 +828,8 @@ const studyFocusPoint = new THREE.Vector3();
 
 function animate(): void {
   const elapsed = (performance.now() - startedAt) / 1000;
-  const dt = Math.min(elapsed - previousElapsed, 0.1);
+  const frameDt = Math.max(0, elapsed - previousElapsed);
+  const dt = Math.min(frameDt, 0.1);
   previousElapsed = elapsed;
   const now = performance.now();
   wallClock.update(now);
@@ -843,6 +857,7 @@ function animate(): void {
   activeScreenTexture.offset.x = (Math.floor(elapsed * 4) % 4) * 0.25;
   const factoryData = whiteboardInteraction.getData();
   liveAgents.sync(factoryData.world); factoryControls.sync(factoryData);
+  teamDesk.setTickets(factoryData.world?.stationTickets);
   activityFeedback.sync(factoryData.world, liveAgents.entries.values());
   const eligible = [...liveAgents.entries.values()].filter(entry => entry.session.activity === 'idle' && !entry.session.manualControl && entry.seatBlend < .01
     && !liveAgents.isPerforming(entry.session.sessionId) && entry.mesh.userData.room === 'factory').slice(0, 2);
@@ -869,15 +884,16 @@ function animate(): void {
   indoorPlants.update(elapsed, reducedSceneMotion.matches);
   vendingMachine.update(elapsed,reducedSceneMotion.matches,dt);
   loungeDetails.update(elapsed, reducedSceneMotion.matches, factoryData, camera, mainRoomVisible);
-  const baseCamera = avatarStage.isActive() ? avatarStage.camera : (garage.isActive() || garage.isTransitioning()) ? garage.camera : teamDesk.isActive() ? teamDesk.camera : loungeDetails.chat.isActive() ? loungeDetails.chat.camera : windowInteraction.isOpen() ? windowInteraction.camera : sideRoom.isActive() ? sideRoom.camera : camera;
+  brandLibrary.update(now, currentViewCamera as THREE.OrthographicCamera, roomNavigationAvailable && !garage.isActive() && !garage.isTransitioning()
+    ? sideRoom.isActive() && !sideRoom.showsFactory() ? 'patio' : mainRoomVisible ? 'factory' : undefined : undefined);
+  const baseCamera = avatarStage.isActive() ? avatarStage.camera : brandLibrary.isActive() ? brandLibrary.camera : (garage.isActive() || garage.isTransitioning()) ? garage.camera : teamDesk.isActive() ? teamDesk.camera : loungeDetails.chat.isActive() ? loungeDetails.chat.camera : windowInteraction.isOpen() ? windowInteraction.camera : sideRoom.isActive() ? sideRoom.camera : camera;
   const viewCamera = avatarStage.isActive() ? baseCamera : pointerZoom.cameraFor(baseCamera, now);
   viewCamera.updateMatrixWorld(); currentViewCamera = viewCamera;
-  brandLibrary.update(viewCamera, roomNavigationAvailable && !garage.isActive() && !garage.isTransitioning()
-    ? sideRoom.isActive() && !sideRoom.showsFactory() ? 'patio' : mainRoomVisible ? 'factory' : undefined : undefined);
   if (sideRoom.isActive() && !document.hidden) brandFlag.update(elapsed, weather.wind01, reducedSceneMotion.matches);
   mistFlag.update(elapsed, dt, weather.wind01, viewCamera,
     sideRoom.isActive() && !sideRoom.showsFactory() && !garage.isTransitioning() && !garage.isActive()
       && !avatarStage.isActive() && !brandLibrary.isActive() && !teamDesk.isActive() && !loungeDetails.chat.isActive(), reducedSceneMotion.matches);
+  stationTickets.update(factoryData.world, liveAgents.serverNow(), viewCamera, room => roomNavigationAvailable && !garage.isTransitioning() && (room === 'garage' ? garage.isActive() : room === 'patio' ? sideRoom.isActive() && !garage.isActive() : mainRoomVisible), reducedSceneMotion.matches);
   roomStaff.update(now, viewCamera, mainRoomVisible, reducedSceneMotion.matches, factoryData, whiteboardInteraction.managerTask());
   liveAgents.update(elapsed, viewCamera, mainRoomVisible || garage.isTransitioning(), sideRoom.isActive(), point => floorKeyboard.floorHeight(point), whiteboard);
   if (basketball.active) {
@@ -902,7 +918,7 @@ function animate(): void {
   const sceneryVisible = showGarage || showPatio || (showFactory && viewFrustum.intersectsBox(sceneryBounds));
   const lightning=thunderstorm.update(dt,weather,reducedSceneMotion.matches,!document.hidden);
   canvas.dataset.lightning=lightning.toFixed(3);
-  windowWeather.update(dt, weather, currentPalette, sunArc, isNight, sceneryVisible,lightning);
+  windowWeather.update(frameDt, weather, currentPalette, sunArc, isNight, sceneryVisible,lightning);
   mountainView.setLightning(lightning);
   mountainView.setDepthOfField(displayStudy.depthOfField);
   mountainView.render(elapsed, sceneryVisible);
@@ -912,6 +928,7 @@ function animate(): void {
   // Keep a square sky image in both the tilted room view and the straight-on window view.
   // Its plane stays behind mountains/clouds instead of rotating through those layers.
   sun.scale.y = 1 / Math.max(0.5, Math.abs(viewCamera.matrixWorldInverse.elements[5]));
+  windowWeather.renderRefraction(viewCamera, showFactory && !document.hidden, showGarage && !document.hidden);
   if (showPatio) {
     sideRoomAmbient.color.copy(ambient.color);
     sideRoomAmbient.groundColor.set(isNight ? '#363453' : '#665b4f');
@@ -922,8 +939,9 @@ function animate(): void {
       (viewCamera.right - viewCamera.left) / viewCamera.zoom);
     patioSun.position.copy(sun.position).x += 16; patioSun.scale.copy(sun.scale);
   }
-  const boardCloseUp = avatarStage.isActive() || !whiteboardInteraction.isRoomView() || loungeDetails.chat.isActive() || teamDesk.isActive();
+  const boardCloseUp = brandLibrary.isActive() || avatarStage.isActive() || !whiteboardInteraction.isRoomView() || loungeDetails.chat.isActive() || teamDesk.isActive();
   if (avatarStage.isActive()) studyFocusPoint.copy(avatarStage.focusPoint());
+  else if (brandLibrary.isActive()) studyFocusPoint.copy(brandLibrary.focusPoint());
   else if (garage.isActive()) studyFocusPoint.set(0,-11.5,3);
   else if (teamDesk.isActive()) studyFocusPoint.copy(teamDesk.focusPoint());
   else if (loungeDetails.chat.isActive()) studyFocusPoint.copy(loungeDetails.chat.focusPoint());
@@ -931,7 +949,7 @@ function animate(): void {
   else if (sideRoom.isActive()) studyFocusPoint.set(16, 0.7, 0);
   else studyFocusPoint.set(0, 0.5, 0);
   studyFocusPoint.copy(pointerZoom.focusPoint(garage.isActive() ? garage.scene : sideRoom.isActive() ? sideRoomScene : scene, studyFocusPoint));
-  lightInteractions.update();
+  lightInteractions.update(dt, reducedSceneMotion.matches);
   // Keep both floors sharp during travel instead of focusing on only one room.
   displayStudy.begin(viewCamera, studyFocusPoint, boardCloseUp, windowInteraction.isOpen() || floorSection);
   if (floorSection) {
@@ -958,4 +976,4 @@ function animate(): void {
 
 animate();
 
-if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; roomStaff.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.chat.dispose(); teamDesk.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); });

@@ -31,8 +31,8 @@ export function snackHandPose(texture: THREE.Texture, target = new THREE.Vector3
   // Palm centers from the current painter: side forearms swing horizontally,
   // front/back hands move only a pixel, and both working hands remain visible.
   const handX = side ? (row === 2 ? -1 : 1) * (3.5 - stride) : row === 5 ? 7.5 : 9.5;
-  const handY = side ? 24 + bounce : walking ? 23 + bounce - swing : row === 5 ? 22 - frame % 2 : 22;
-  return target.set(handX * pixel, (16 - handY) * pixel, row === 4 || row === 5 || row === 7 ? -.012 : .012);
+  const handY = row === 8 ? 13.5 : side ? 24 + bounce : walking ? 23 + bounce - swing : row === 5 ? 22 - frame % 2 : 22;
+  return target.set(handX * pixel, (16 - handY) * pixel, row === 4 || row === 5 || row === 7 || row === 8 ? -.012 : .012);
 }
 
 /** Browser-local prop ownership. Observes routes; never moves an agent or sends a command. */

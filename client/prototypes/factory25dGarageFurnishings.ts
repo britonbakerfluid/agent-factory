@@ -186,6 +186,7 @@ export function furnishGarage(room: THREE.Group) {
   const readingLight = new THREE.PointLight('#ffbc70', 3, 3.5, 2); readingLight.position.set(7.25, loungeY + 1.15, 12); zone.add(readingLight);
   let readingOn = true;
   lightSwitches.push({ id: 'garage-reading-lamp', label: 'Garage reading lamp', kind: 'lamp', target: shade, hitTargets: [readingFixture],
+    motionTargets: [readingFixture],
     isOn: () => readingOn, setOn(on) { readingOn = on; readingLight.intensity = on ? 3 : 0; readingGlow.emissiveIntensity = on ? .8 : 0; readingGlow.color.set(on ? '#eed3a0' : '#736c60'); } });
   zone = room;
   const plants = createIndoorPlants(room);

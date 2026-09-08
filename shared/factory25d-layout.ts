@@ -24,8 +24,9 @@ export const FRONT_COUNTER = { x: -2.42, z: 6.65, width: 3.36, depth: .42, topY:
 export const BRAND_SHELF = { x: -4.84, z: 6.61, width: 1.48, depth: .5, height: 1.18, rotationY: 0 } as const;
 export const FRONT_VENDING = { x: -1, z: 9.65, rotationY: -Math.PI / 3, halfWidth: .54, halfDepth: .59 } as const;
 export type Workstation = { id: string; room: FactoryRoom; x: number; z: number; label: string; halfWidth?: number };
+export const INDOOR_STATION_LABELS = ['skee-ball', 'pinball', 'claw machine', 'rhythm cabinet', 'rally cabinet', 'retro terminal', 'classic arcade', 'Candy cabinet', 'Vector cabinet', 'Orbit cabinet', 'Stereo cabinet', 'Twin cabinet'] as const;
 export const INDOOR_STATIONS: Workstation[] = INDOOR_ROWS.flatMap((z, row) =>
-  INDOOR_COLUMNS.map((x, column) => ({ id: `inside-${row * 6 + column}`, room: 'factory', x, z: z + INTERIOR_Z, label: 'arcade station' })),
+  INDOOR_COLUMNS.map((x, column) => ({ id: `inside-${row * 6 + column}`, room: 'factory', x, z: z + INTERIOR_Z, label: INDOOR_STATION_LABELS[row * 6 + column] })),
 );
 export const PATIO_STATIONS: Workstation[] = [
   { id: 'patio-0', room: 'patio', x: 11, z: -1.2, label: 'railing desk' },

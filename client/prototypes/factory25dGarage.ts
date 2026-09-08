@@ -16,10 +16,10 @@ import { createGarageCarAnimation } from './factory25dGarageCarAnimation';
 import { createMiniWorkstation } from './factory25dMiniWork';
 import { createGarageLighting } from './factory25dGarageLighting';
 import type { SceneLightSwitch } from './factory25dLightSwitches';
-import { createGarageWindows } from './factory25dGarageWindows';
+import { createGarageWindows, type GarageWindowWeather } from './factory25dGarageWindows';
 
 const LEVEL=-12;
-export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:THREE.OrthographicCamera,windowMaterial:THREE.Material,skyMaterial?:THREE.Material,cloudMaterial?:THREE.Material){
+export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:THREE.OrthographicCamera,windowMaterial:THREE.Material,skyMaterial?:THREE.Material,cloudMaterial?:THREE.Material,windowWeather?:GarageWindowWeather){
  const scene=new THREE.Scene();scene.background=new THREE.Color('#08091a');
  const travelBackground=new THREE.Color();
  const room=new THREE.Group();room.position.y=LEVEL;scene.add(room);
@@ -42,7 +42,7 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
   return new THREE.Mesh(new THREE.PlaneGeometry(width,height),new THREE.MeshBasicMaterial({map:texture}));
  }
  const sign=label('FLUID GARAGE',3.6,.42,'#ee95ed');sign.position.set(0,3.22,-4.02);room.add(sign);
- const windows=createGarageWindows(room,windowMaterial,skyMaterial,3.598,cloudMaterial);
+ const windows=createGarageWindows(room,windowMaterial,skyMaterial,3.598,cloudMaterial,windowWeather);
  const wallFixtures=new THREE.Group();room.add(wallFixtures);
  for(const x of [-6.25,0,6.25])box([.65,.045,.12],[x,2.96,-4.23],lit,wallFixtures);
  // Matching wall-mounted lifts connect the two floors.

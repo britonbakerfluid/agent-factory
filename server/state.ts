@@ -1,3 +1,4 @@
+import { StationTickets } from './station-tickets.js';
 import { FACTORY25D_BOUNDS, constrainFactoryStep, toFactoryWorld, factory25dWaypoints, factoryMovementIsClear, recoverFactoryPosition, factoryElevatorTripAt, fromFactoryWorld, clearFactorySegment, GARAGE_MINI_LOOKOUTS, WORKSTATIONS, MINI_WORKSTATION_SLOT, MINI_WORKSTATION_USERNAME, MINI_WORK_PACK_MS, MINI_WORK_RETRIEVAL_MS, factoryRoomAt } from '../shared/factory25d-layout.js';
 import { GARAGE_CAR_VISIT_MS, garageCarLookout, isGarageCarId, type GarageCarId } from '../shared/factory25d-garage.js';
 import { manualElevatorEntry, manualElevatorLanding } from '../shared/factory25d-manual-travel.js';
@@ -80,6 +81,7 @@ function clone<T>(value: T): T {
 
 function restoreSession(stored: WorldAgent): WorldAgent {
   const session = scrubLegacyAgentFields(clone(stored));
+  session.ticketHookAt = Number.isFinite(session.ticketHookAt) ? session.ticketHookAt : session.lastEventAt;
   const attention = session.attention;
   if (!attention) { delete session.attention; return session; }
   const agreesWithActivity = (attention.kind === 'input' || attention.kind === 'permission')
@@ -96,6 +98,9 @@ function restoreSession(stored: WorldAgent): WorldAgent {
 
 export class StateManager {
   private sessions = new Map<string, WorldAgent>();
+  private stationTickets = new StationTickets();
+  private ticketVersion = 0;
+  private ticketCheckpointAt = 0;
   private tombstones = new Map<string, TombstoneState>();
   private chat: ChatMessage[] = [];
   private events = new Map<string, TimedWorldEvent>();
@@ -346,6 +351,7 @@ export class StateManager {
     const timestamp = this.now();
     return clone({
       schemaVersion: WORLD_SCHEMA_VERSION,
+      stationTickets: this.stationTickets.snapshot(),
       workstationCount: WORLD_LAYOUTS[this.environment].workSlots.length,
       ...(this.environment === 'factory25d' ? { garageCars: true as const } : {}),
       ...(this.garageDriving ? { garageDriving: true as const } : {}),
@@ -361,6 +367,8 @@ export class StateManager {
 
   restoreWorld(snapshot: WorldSnapshot): void {
     this.revision = snapshot.revision;
+    this.stationTickets.restore(snapshot.stationTickets);
+    this.ticketVersion = this.stationTickets.version;
     this.chat = snapshot.chat.slice(-CHAT_HISTORY_LIMIT).map(clone);
     this.tombstones = new Map(snapshot.tombstones.map(tombstone => [tombstone.sessionId, clone(tombstone)]));
     if (this.environment === 'factory25d') for (const stone of this.tombstones.values()) {
@@ -409,6 +417,8 @@ export class StateManager {
       this.syncWorld(session, timestamp);
     }
     this.restoringWorkReservations.clear();
+    for (const session of this.sessions.values()) this.stationTickets.track(session, timestamp);
+    for (const visit of this.stationTickets.snapshot().visits) if (!this.sessions.has(visit.sessionId)) this.stationTickets.forget(visit.sessionId, timestamp);
     this.pruneWorld(timestamp, false);
   }
 
@@ -594,7 +604,34 @@ export class StateManager {
     return clone(event);
   }
 
+  private observeTickets(session: WorldAgent, timestamp: number) {
+    if (this.environment !== 'factory25d') return false;
+    const payout = this.stationTickets.observe(session, timestamp, this.grabbedSession(session.sessionId) || this.garageDrivers.has(session.sessionId) || this.garageYielding.has(session.sessionId));
+    if (payout) session.ticketPayout = payout;
+    return !!payout;
+  }
+
+  private advanceTickets(timestamp: number) {
+    if (this.environment !== 'factory25d') return;
+    const changes: WorldChange[] = [];
+    for (const session of this.sessions.values()) {
+      let changed = this.observeTickets(session, timestamp);
+      const payout = session.ticketPayout;
+      if (payout && timestamp >= payout.collectAt) {
+        // Attention was published at once; only the departure waits for collection.
+        if (session.world.zone === 'work' && zoneForActivity(session.activity) !== 'work') { this.syncWorld(session, timestamp); changed = true; }
+        if (timestamp > payout.collectAt + 1000) { delete session.ticketPayout; changed = true; }
+      }
+      if (changed) changes.push({ kind: 'agent_upsert', agent: clone(session) });
+    }
+    // Persist unfinished work periodically, without a new broadcast every rendered frame.
+    if (changes.length || timestamp - this.ticketCheckpointAt >= 30_000) {
+      this.ticketCheckpointAt = timestamp; this.commit(changes, !!changes.length, timestamp);
+    }
+  }
+
   advanceWorld(timestamp = this.now()): void {
+    this.advanceTickets(timestamp);
     this.pruneWorld(timestamp, true);
     if (this.environment === 'factory25d') { this.advanceFactoryRoaming(timestamp); return; }
     if (this.environment !== 'arcade') return;
@@ -753,6 +790,12 @@ export class StateManager {
     const savedAvatar = payload.ownerId && this.avatarResolver?.(payload.ownerId);
     if (savedAvatar) payload = { ...payload, avatar: clone(savedAvatar) };
     const { hook_event_name, session_id } = payload;
+    const ticketAgent = this.sessions.get(session_id);
+    if (ticketAgent && (!payload.agent_id || hook_event_name === 'SubagentStart'
+      || ticketAgent.subagents.some(child => child.agentId === payload.agent_id))) {
+      ticketAgent.ticketHookAt ??= ticketAgent.lastEventAt;
+      if (['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'PreCompact', 'PostCompact', 'ElicitationResult', 'SubagentStart', 'SubagentStop'].includes(hook_event_name)) ticketAgent.ticketHookAt = this.now();
+    }
 
     // Codex tags child work with agent_id while retaining the parent session_id.
     // A child's progress cannot answer the parent's question or finish its turn.
@@ -1045,6 +1088,8 @@ export class StateManager {
     if (occupiedByAgent || occupiedByTombstone) return false;
 
     const timestamp = this.now();
+    this.observeTickets(session, timestamp);
+    const payout = this.stationTickets.collect(sessionId, timestamp); if (payout) session.ticketPayout = payout;
     this.idleRoamAt.delete(sessionId);
     session.world = {
       zone: 'work',
@@ -1124,7 +1169,8 @@ export class StateManager {
       if (now - session.lastEventAt > STALE_SESSION_TIMEOUT_MS) {
         // Don't reap sessions that are still alive in Claude's session registry
         if (this.sessionAliveCheck?.(id)) {
-          // Touch to prevent checking every reaper cycle
+          // Touch liveness without extending station reward eligibility.
+          session.ticketHookAt ??= session.lastEventAt;
           session.lastEventAt = now;
           continue;
         }
@@ -1481,6 +1527,13 @@ export class StateManager {
   }
 
   private syncWorld(session: WorldAgent, timestamp = this.now()): void {
+    this.observeTickets(session, timestamp);
+    const payout = session.ticketPayout;
+    if (payout && timestamp < payout.collectAt && session.world.zone === 'work'
+      && session.world.slotIndex === payout.slotIndex && !session.manualControl && !this.grabbedSession(session.sessionId)) {
+      session.world.position = this.currentWorldPosition(session, timestamp); delete session.world.movement;
+      session.world.facing = 'up'; return;
+    }
     // Work begins immediately as data; the seated person finishes the safe car
     // return before walking to their workstation. Manual/grab/stopped overrides win.
     if (this.garageDrivers.has(session.sessionId) && !session.manualControl && session.activity !== 'stopped' && !this.grabbedSession(session.sessionId)) return;
@@ -1694,6 +1747,17 @@ export class StateManager {
   }
 
   private commit(changes: WorldChange[], immediatePersistence: boolean, timestamp = this.now()): void {
+    if (this.environment === 'factory25d') {
+      for (const change of changes) if (change.kind === 'agent_upsert') {
+        const current = this.sessions.get(change.agent.sessionId);
+        if (current) { this.observeTickets(current, timestamp); change.agent = clone(current); }
+        this.stationTickets.track(change.agent, timestamp, this.grabbedSession(change.agent.sessionId) || this.garageDrivers.has(change.agent.sessionId) || this.garageYielding.has(change.agent.sessionId));
+      }
+      if (this.ticketVersion !== this.stationTickets.version) {
+        changes.push({ kind: 'station_tickets', tickets: this.stationTickets.snapshot() });
+        this.ticketVersion = this.stationTickets.version;
+      }
+    }
     if (changes.length === 0) return;
     const previousRevision = this.revision;
     this.revision++;
@@ -1738,6 +1802,7 @@ export class StateManager {
     }
 
     if (type === 'remove' && data.sessionId) {
+      this.stationTickets.forget(data.sessionId, this.now());
       const changes: WorldChange[] = [{ kind: 'agent_remove', sessionId: data.sessionId }];
       if (data.agent) {
         const tombstone = this.createTombstone(data.agent, this.now());
