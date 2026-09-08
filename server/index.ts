@@ -27,6 +27,7 @@ import {
 import { isSameHostOrigin } from './request-security.js';
 import { startStaleReaper } from './cleanup.js';
 import { SessionRegistryWatcher } from './session-registry.js';
+import { RemoteSessionRegistry } from './remote-registry.js';
 import { AuthService, loadOrCreateSecret } from './auth.js';
 import { AuthHandoffManager } from './auth-handoff.js';
 import { ControlManager } from './control-manager.js';
@@ -134,7 +135,7 @@ async function main() {
   const github = githubConfig?.appId ? new GitHubApp(githubConfig) : undefined;
   const contributionScope = githubConfig ? contributionCacheScope(githubConfig) : undefined;
   const contributions = new ContributionService({
-    repository: githubConfig?.repository,
+    repositories: githubConfig?.repositories,
     baseBranch: githubConfig?.baseBranch,
     identities: githubConfig?.identities,
     tokenProvider: github,
@@ -156,7 +157,8 @@ async function main() {
   const garageDriving = new GarageDrivingManager(state, broadcast);
 
   // HTTP routes
-  registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status());
+  const remoteRegistry = new RemoteSessionRegistry();
+  registerHookRoutes(app, state, broadcast, serverConfig, auth, () => persistence.status(), remoteRegistry);
   registerAuthRoutes(app, auth, authHandoffs);
   registerAvatarRoutes(app, auth, avatarProfiles);
   registerTeamRoutes(app, team);
@@ -330,6 +332,13 @@ async function main() {
   });
   state.setSessionNameLookup((id) => registry.getSessionName(id));
   state.setSessionAliveCheck((id) => registry.isSessionAlive(id));
+  state.setSessionKeepAliveCheck((id, ownerId) => remoteRegistry.isAlive(id, ownerId) || remoteRegistry.warmingUp());
+  // Only sessions this server already has, reported by the installation that
+  // owns them. An id naming nothing here is refused rather than stored.
+  remoteRegistry.setAdmissionCheck((id, ownerId) => {
+    const session = state.get(id);
+    return !!session && session.ownerId === ownerId;
+  });
 
   // Await first poll so the cache is populated before we restore sessions
   await registry.start();

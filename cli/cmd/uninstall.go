@@ -9,6 +9,7 @@ import (
 	"github.com/wolzey/agent-factory/cli/internal/config"
 	"github.com/wolzey/agent-factory/cli/internal/hooks"
 	"github.com/wolzey/agent-factory/cli/internal/identity"
+	"github.com/wolzey/agent-factory/cli/internal/service"
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 )
 
@@ -37,8 +38,11 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	hasHooks := len(installedTargets) > 0
 	hasConfig := config.Exists()
 	hasIdentity := identity.Exists()
+	// A heartbeat service outlives a hand-deleted config, and launchd would keep
+	// restarting a daemon that now fails immediately.
+	hasService := service.Installed()
 
-	if !hasHooks && !hasConfig && !(flagPurgeIdentity && hasIdentity) {
+	if !hasHooks && !hasConfig && !hasService && !(flagPurgeIdentity && hasIdentity) {
 		ui.Success("Agent Factory is not installed. Nothing to do.")
 		return nil
 	}
@@ -55,6 +59,9 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	}
 	if hasConfig {
 		fmt.Printf("    - Delete %s\n", ui.DimStyle.Render("~/.config/agent-factory/config.json and hooks/"))
+	}
+	if hasService {
+		fmt.Printf("    - Stop and remove the %s\n", ui.DimStyle.Render("background heartbeat service"))
 	}
 	if hasIdentity {
 		if flagPurgeIdentity {
@@ -100,6 +107,20 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		case hooks.TargetCodex:
 			ui.Success("Removed hooks from ~/.codex/hooks.json")
 		}
+	}
+
+	// A background heartbeat left running would report to a server this machine
+	// no longer has a config for, from a binary that may be gone.
+	if hasService {
+		if _, err := service.Uninstall(); err != nil {
+			// Stopping first, and stopping before the config goes, is the point:
+			// a service still loaded would keep relaunching a reporter whose
+			// configuration this command is about to delete.
+			ui.Error("Could not remove the heartbeat service: " + err.Error())
+			ui.Info("Nothing else was removed. Stop it yourself, then run uninstall again.")
+			return err
+		}
+		ui.Success("Removed the background heartbeat service")
 	}
 
 	// Remove mutable config and generated hooks while preserving installation identity by default.
