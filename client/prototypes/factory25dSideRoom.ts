@@ -151,6 +151,7 @@ export function createSideRoom(scene: THREE.Scene) {
     far: 70,
   });
   sun.shadow.bias = -0.001;
+  sun.shadow.radius = 0;
   sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
   const seeds = Float32Array.from({ length: 180 * 3 }, (_, i) => {

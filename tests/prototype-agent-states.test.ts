@@ -4,6 +4,11 @@ import { AGENT_VISUAL_STATES, DEFAULT_AGENT_STYLES, AgentPresentationMachine, ac
 
 afterEach(() => AGENT_VISUAL_STATES.forEach(resetAgentStateStyle));
 describe('shared agent presentation states', () => {
+  it('keeps review completion quiet while input and permission requests stay visible', () => {
+    expect(DEFAULT_AGENT_STYLES.ready.bubble).toBe('hidden');
+    expect(DEFAULT_AGENT_STYLES.input.bubble).not.toBe('hidden');
+    expect(DEFAULT_AGENT_STYLES.permission.bubble).not.toBe('hidden');
+  });
   it('faces the scenery only for a quiet break, retaining attention poses when ready or blocked', () => {
     expect(stationaryAgentAnimation('idle', true)).toBe('walk_up');
     for (const state of ['input', 'permission', 'ready', 'error'] as const)

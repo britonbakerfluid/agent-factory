@@ -216,7 +216,7 @@ export class GarageDrivingSimulation {
         const d = this.donuts.get(car.id)!; d.startedAt ??= now;
         if (car.z >= 7.8) d.circleAt ??= now;
         if (now - d.startedAt > 20_000 || d.circleAt !== undefined && now - d.circleAt > 6_500) { this.release(car.id); continue; }
-        input = d.circleAt === undefined ? { throttle: -.72, steer: 0, drift: false } : { throttle: .6, steer: 1, drift: true };
+        input = d.circleAt === undefined ? { throttle: -.72, steer: 0, drift: false } : { throttle: .6, steer: -1, drift: true };
       }
       this.driveStep(car, input, h, now);
     }
@@ -235,7 +235,8 @@ export class GarageDrivingSimulation {
     // Smaller steering angles at speed keep a key press from snapping the car
     // sideways. Tire grip, rather than a rotation tween, catches the body.
     const steeringLimit = p.steering / (1 + (autonomous ? 0 : speed * speed * .022));
-    car.steer += (input.steer * steeringLimit - car.steer) * (1 - Math.exp(-(autonomous ? 9 : 7) * dt));
+    // The cars face local +Z: a driver's right turn is negative world yaw.
+    car.steer += (-input.steer * steeringLimit - car.steer) * (1 - Math.exp(-(autonomous ? 9 : 7) * dt));
     const braking = input.throttle * forward < -.1;
     const acceleration = autonomous ? IDLE_ACCELERATION[car.id] : p.acceleration * (1 - .35 * clamp(speed / topSpeed, 0, 1));
     forward += input.throttle * (braking ? autonomous ? IDLE_BRAKING[car.id] : p.braking : acceleration * (1 - car.damage * .55)) * dt;

@@ -43,3 +43,31 @@ it('hones in on the shelf along one screen-space path and can reverse midflight'
   blendCamera(camera, interruption, from, 1, 1440 / 900, focus);
   expect(camera.position.distanceTo(from.position)).toBeLessThan(1e-8);
 });
+
+
+it('preserves on-screen proportions when a centered room viewport expands for a close-up', () => {
+  const camera = new THREE.OrthographicCamera(-10,10,7.05,-7.05,.01,100);
+  camera.position.set(0,12,18);camera.lookAt(0,0,0);camera.updateMatrixWorld();
+  const source=cameraPose(camera), oldWidth=1000, oldHeight=705, newHeight=1500;
+  const a=new THREE.Vector3(-3,1,6), b=new THREE.Vector3(-2,2,6);
+  const oldA=a.clone().project(camera),oldB=b.clone().project(camera);
+  const resized={...source,height:source.height*newHeight/oldHeight};
+  blendCamera(camera,resized,resized,0,oldWidth/newHeight);
+  const newA=a.clone().project(camera),newB=b.clone().project(camera);
+  expect((newB.x-newA.x)*oldWidth).toBeCloseTo((oldB.x-oldA.x)*oldWidth);
+  expect((newB.y-newA.y)*newHeight).toBeCloseTo((oldB.y-oldA.y)*oldHeight);
+});
+
+
+it('keeps foreground floor intersections in front of the close-up camera', () => {
+  const focus=new THREE.Vector3(-4.84,.6,10.5);
+  const pose=brandClosePose(focus,new THREE.Quaternion(),new THREE.Vector3(1.48,1.18,.5),1033,1500);
+  const camera=new THREE.OrthographicCamera(-1,1,1,-1,.01,100);
+  blendCamera(camera,pose,pose,1,1033/1500,focus);
+  const ray=new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(-.5,-.98),camera);
+  const hit=ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0),new THREE.Vector3());
+  expect(hit).not.toBeNull();
+  expect(hit!.clone().project(camera).z).toBeGreaterThan(-1);
+  expect(hit!.clone().project(camera).z).toBeLessThan(1);
+});

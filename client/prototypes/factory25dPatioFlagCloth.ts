@@ -11,15 +11,15 @@ export const PATIO_FLAG = {
 export function patioFlagVertex(u: number, v: number, elapsed: number, wind01: number, reduced: boolean) {
   const wind = reduced ? .25 : THREE.MathUtils.clamp(Number.isFinite(wind01) ? wind01 : 0, 0, 1);
   const t = reduced ? 0 : Math.floor((Number.isFinite(elapsed) ? elapsed : 0) * PATIO_FLAG.fps) / PATIO_FLAG.fps;
-  const phase = t * (1.5 + wind * .8);
+  const phase = t * (.85 + wind * .35);
   const segments = Math.max(1, Math.ceil(u * PATIO_FLAG.columns));
   const length = u * PATIO_FLAG.width / segments;
   let x = -PATIO_FLAG.width / 2, z = 0;
   for (let i = 0; i < segments; i++) {
     const s = u * (i + .5) / segments;
-    const bend = (1 - Math.exp(-s * 7)) * (.55 + wind * .32);
-    const angle = bend * Math.sin(s * 8.4 - phase + (v - .5) * .8)
-      + s * .13 * Math.sin(phase * .43);
+    const bend = (1 - Math.exp(-s * 7)) * (.32 + wind * .22);
+    const angle = bend * Math.sin(s * 6.2 - phase + (v - .5) * .8)
+      + s * .07 * Math.sin(phase * .43);
     x += Math.cos(angle) * length; z += Math.sin(angle) * length;
   }
   const scale = PATIO_FLAG.width / 1.75;
