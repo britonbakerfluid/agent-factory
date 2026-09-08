@@ -44,6 +44,8 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=build /app/dist ./dist
+# Public deployment configuration; credentials are supplied through runtime secrets.
+COPY config/ ./config/
 
 RUN chown -R appuser:appgroup /app
 

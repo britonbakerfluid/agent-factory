@@ -3,13 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
-  CONTRIBUTION_REPOSITORY as REPOSITORY,
-  CONTRIBUTION_BRANCH as BASE_BRANCH,
-  readContribution,
+  readContribution, readContributionIdentities, validContributionScope, type ContributionIdentity,
   type ContributionRecord,
   type ContributionSnapshot,
 } from '../shared/factory-contributions.js';
-import { CONTRIBUTION_IDENTITIES, CONTRIBUTION_SEED } from '../shared/factory-contribution-seed.js';
+import type { InstallationTokenProvider } from './github/app.js';
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1_000;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -21,7 +19,10 @@ export interface ContributionPersistence {
 }
 
 export interface ContributionServiceOptions {
-  identities?: readonly { githubLogin: string }[];
+  identities?: readonly { githubLogin: string; factoryUsernames?: string[] }[];
+  repository?: string;
+  baseBranch?: string;
+  tokenProvider?: InstallationTokenProvider;
   seed?: readonly ContributionRecord[];
   token?: string;
   fetch?: typeof globalThis.fetch;
@@ -72,6 +73,10 @@ export class ContributionService {
   private readonly records = new Map<string, ContributionRecord>();
   private readonly logins: string[];
   private readonly token: string;
+  private readonly tokenProvider?: InstallationTokenProvider;
+  private readonly repository: string;
+  private readonly baseBranch: string;
+  private readonly identities: ContributionIdentity[];
   private readonly read: typeof globalThis.fetch;
   private readonly now: () => number;
   private readonly persistence?: ContributionPersistence;
@@ -83,23 +88,32 @@ export class ContributionService {
   private disposed = false;
 
   constructor(options: ContributionServiceOptions = {}) {
-    this.logins = [...new Set((options.identities ?? CONTRIBUTION_IDENTITIES).map(identity => identity.githubLogin.toLowerCase()))];
+    this.repository = options.repository ?? '';
+    this.baseBranch = options.baseBranch ?? 'main';
+    if (this.repository && !validContributionScope(this.repository, this.baseBranch)) throw new TypeError('Invalid contribution scope');
+    const identities = readContributionIdentities((options.identities ?? []).map(identity => ({ ...identity, factoryUsernames: identity.factoryUsernames ?? [] })));
+    if (!identities) throw new TypeError('Invalid contribution identity');
+    this.identities = identities;
+    this.logins = identities.map(identity => identity.githubLogin);
+    if (this.logins.length && !this.repository) throw new TypeError('Contribution repository is required');
+    this.tokenProvider = options.tokenProvider;
     if (this.logins.some(login => !LOGIN.test(login))) throw new TypeError('Invalid contribution identity');
-    for (const record of recordsFromUnknown(options.seed ?? CONTRIBUTION_SEED)) {
+    for (const record of recordsFromUnknown(options.seed ?? [])) {
       if (this.logins.includes(record.githubLogin)) this.records.set(record.githubLogin, record);
     }
     this.token = options.token?.trim() ?? '';
     this.read = options.fetch ?? globalThis.fetch;
     this.now = options.now ?? Date.now;
     this.persistence = options.persistence;
-    this.refreshState = this.token ? 'configured' : 'unconfigured';
+    this.refreshState = this.token || this.tokenProvider ? 'configured' : 'unconfigured';
     this.ready = this.loadCache();
   }
 
   snapshot(): ContributionSnapshot {
     return {
-      repository: REPOSITORY,
-      baseBranch: BASE_BRANCH,
+      repository: this.repository,
+      baseBranch: this.baseBranch,
+      identities: this.identities.map(identity => ({ ...identity, factoryUsernames: [...identity.factoryUsernames] })),
       contributors: this.logins.flatMap(login => {
         const record = this.records.get(login);
         return record ? [{ ...record }] : [];
@@ -122,7 +136,7 @@ export class ContributionService {
   start(): void {
     if (this.disposed || this.interval) return;
     void this.refresh();
-    if (!this.token) return;
+    if (!this.token && !this.tokenProvider) return;
     this.interval = setInterval(() => { void this.refresh(); }, REFRESH_INTERVAL_MS);
     this.interval.unref?.();
   }
@@ -153,7 +167,7 @@ export class ContributionService {
 
   private async refreshCounts(): Promise<ContributionSnapshot> {
     await this.ready;
-    if (this.disposed || !this.token) return this.snapshot();
+    if (this.disposed || (!this.token && !this.tokenProvider)) return this.snapshot();
     let failed = false;
     let changed = false;
     // Sequential reads stay well within GitHub's search limit for the small known roster.
@@ -199,18 +213,23 @@ export class ContributionService {
 
   private async readCountResponse(login: string, signal: AbortSignal): Promise<{ count?: number; stop?: boolean }> {
     const url = new URL('https://api.github.com/search/issues');
-    url.searchParams.set('q', `repo:${REPOSITORY} is:pr is:merged base:${BASE_BRANCH} author:${login}`);
+    url.searchParams.set('q', `repo:${this.repository} is:pr is:merged base:${this.baseBranch} author:${login}`);
     url.searchParams.set('per_page', '1');
+    let token: string;
+    try { token = this.tokenProvider ? await this.tokenProvider.token(signal) : this.token; }
+    catch { return { stop: true }; }
+    if (signal.aborted) return {};
     const response = await this.read(url, {
       method: 'GET',
       headers: {
         Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${this.token}`,
+        Authorization: `Bearer ${token}`,
         'X-GitHub-Api-Version': '2022-11-28',
       },
       redirect: 'error',
       signal,
     });
+    if (response.status === 401) this.tokenProvider?.invalidate();
     if (!response.ok) return { stop: [401, 403, 429].includes(response.status) };
     const body: unknown = await response.json();
     if (!body || typeof body !== 'object') return {};

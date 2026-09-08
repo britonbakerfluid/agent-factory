@@ -7,6 +7,7 @@ export interface ContributionSnapshot {
   repository: string;
   baseBranch: string;
   contributors: ContributionRecord[];
+  identities?: ContributionIdentity[];
   refresh: 'configured' | 'unconfigured' | 'unavailable';
 }
 export interface ContributionIdentity { githubLogin: string; factoryUsernames: string[] }
@@ -37,4 +38,28 @@ export function contributionFor(username: string, identities: readonly Contribut
     .some(name => name.toLowerCase() === key));
   if (matches.length !== 1) return;
   return records.find(record => record.githubLogin.toLowerCase() === matches[0].githubLogin.toLowerCase());
+}
+
+/** Bounded, explicit aliases; never infer account ownership from display names. */
+export function readContributionIdentities(value: unknown): ContributionIdentity[] | undefined {
+  if (!Array.isArray(value) || value.length > 25) return;
+  const names = new Set<string>();
+  const identities: ContributionIdentity[] = [];
+  for (const row of value) {
+    if (!row || typeof row.githubLogin !== 'string' || !/^[a-z\d][a-z\d-]{0,38}$/i.test(row.githubLogin)
+      || !Array.isArray(row.factoryUsernames) || row.factoryUsernames.length > 20) return;
+    const aliases = [row.githubLogin, ...row.factoryUsernames];
+    if (aliases.some(name => typeof name !== 'string' || !name.trim() || name.length > 100 || name !== name.trim())) return;
+    const normalized = [...new Set(aliases.map(name => name.toLowerCase()))];
+    if (normalized.some(name => names.has(name))) return;
+    normalized.forEach(name => names.add(name));
+    identities.push({ githubLogin: row.githubLogin.toLowerCase(), factoryUsernames: [...row.factoryUsernames] });
+  }
+  return identities;
+}
+
+export function validContributionScope(repository: unknown, branch: unknown): boolean {
+  return typeof repository === 'string' && /^[a-z\d][a-z\d-]{0,38}\/[a-z\d_.-]{1,100}$/i.test(repository)
+    && typeof branch === 'string' && /^[a-z\d_./-]{1,200}$/i.test(branch)
+    && !branch.startsWith('-');
 }

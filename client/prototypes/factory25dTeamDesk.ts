@@ -80,7 +80,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
           const level = contributionLevel(contribution.mergedPullRequests).level;
           const badge = document.createElement('span'); badge.className = 'agent-level';
           badge.textContent = `LV ${level}`; badge.setAttribute('aria-label', `level ${level}`);
-          badge.title = `${contribution.mergedPullRequests} PRs merged into fluid/main · @${contribution.githubLogin}`;
+          badge.title = `${contribution.mergedPullRequests} merged PRs · @${contribution.githubLogin}`;
           heading.append(badge);
         }
         seen.textContent = unavailable ? 'connection unavailable' : member.online

@@ -1,3 +1,5 @@
+import { GitHubApp, registerGitHubRoutes } from './github/app.js';
+import { loadGitHubConfig, contributionCacheScope } from './github/config.js';
 import { TeamRoster } from './team-roster.js';
 import { VisitorBasketball } from './visitor-basketball.js';
 import { GarageDrivingManager } from './garage-driving.js';
@@ -127,12 +129,22 @@ async function main() {
     const profile = avatarProfiles.get(ownerId); return profile.saved ? profile.avatar : undefined;
   });
   await team.initialize();
+  const githubConfig = loadGitHubConfig();
+  const github = githubConfig?.appId ? new GitHubApp(githubConfig) : undefined;
+  const contributionScope = githubConfig ? contributionCacheScope(githubConfig) : undefined;
   const contributions = new ContributionService({
-    token: process.env.AF_CONTRIBUTIONS_GITHUB_TOKEN,
-    persistence: process.env.AF_CONTRIBUTIONS_CACHE_PATH
-      ? createContributionFilePersistence(process.env.AF_CONTRIBUTIONS_CACHE_PATH)
-      : { load: () => repository.loadContributionRecords(), save: records => repository.saveContributionRecords(records) },
+    repository: githubConfig?.repository,
+    baseBranch: githubConfig?.baseBranch,
+    identities: githubConfig?.identities,
+    tokenProvider: github,
+    persistence: contributionScope
+      ? (process.env.AF_CONTRIBUTIONS_CACHE_PATH
+        ? createContributionFilePersistence(`${process.env.AF_CONTRIBUTIONS_CACHE_PATH}.${contributionScope}.json`)
+        : { load: () => repository.loadContributionRecords(contributionScope),
+          save: records => repository.saveContributionRecords(records, contributionScope) })
+      : undefined,
   });
+  registerGitHubRoutes(app, githubConfig);
   const persistence = new WorldPersistence(repository);
   const broadcast = new BroadcastManager();
   const controls = new ControlManager(state, broadcast);

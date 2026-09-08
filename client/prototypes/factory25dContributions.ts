@@ -1,10 +1,9 @@
-import { CONTRIBUTION_IDENTITIES, CONTRIBUTION_SEED } from '@shared/factory-contribution-seed';
-import { contributionFor, readContribution, CONTRIBUTION_REPOSITORY, CONTRIBUTION_BRANCH, type ContributionRecord } from '@shared/factory-contributions';
+import { contributionFor, readContribution, readContributionIdentities, validContributionScope, type ContributionIdentity, type ContributionRecord } from '@shared/factory-contributions';
 import { factoryHost, isControlPreview } from './factory25dBoardData';
 
 /** One small roster request, shared by every nameplate. Never send private-repo credentials to a browser. */
 export function watchContributions(changed: () => void) {
-  let records = CONTRIBUTION_SEED.map(record => ({ ...record })), stopped = false;
+  let records: ContributionRecord[] = [], identities: ContributionIdentity[] = [], scope = '', stopped = false;
   let request: AbortController | undefined;
   const refresh = async () => {
     if (stopped || document.hidden || request) return;
@@ -14,10 +13,16 @@ export function watchContributions(changed: () => void) {
       const response = await fetch('/api/contributions', { signal: controller.signal, credentials: 'omit', cache: 'no-store' });
       if (!response.ok) return;
       const data = await response.json();
-      if (stopped || data.repository !== CONTRIBUTION_REPOSITORY || data.baseBranch !== CONTRIBUTION_BRANCH || !Array.isArray(data.contributors)) return;
+      if (stopped || !data || !Array.isArray(data.contributors)) return;
+      const nextIdentities = readContributionIdentities(data.identities);
+      if (!nextIdentities || (!validContributionScope(data.repository, data.baseBranch)
+        && !(data.repository === '' && data.contributors.length === 0 && nextIdentities.length === 0))) return;
+      const nextScope = JSON.stringify([data.repository, data.baseBranch, nextIdentities]);
+      const scopeChanged = scope !== nextScope;
+      if (scopeChanged) { records = []; identities = nextIdentities; scope = nextScope; }
       const candidates: ContributionRecord[] = data.contributors.map(readContribution).filter((value: ContributionRecord | undefined): value is ContributionRecord => !!value);
-      let updated = false;
-      for (const identity of CONTRIBUTION_IDENTITIES) {
+      let updated = scopeChanged;
+      for (const identity of identities) {
         const matches = candidates.filter(record => record.githubLogin.toLowerCase() === identity.githubLogin.toLowerCase());
         if (matches.length !== 1) continue;
         const record = matches[0], index = records.findIndex(old => old.githubLogin.toLowerCase() === record.githubLogin.toLowerCase());
@@ -29,13 +34,12 @@ export function watchContributions(changed: () => void) {
     } catch { /* Keep the last verified total; unavailable never means level one. */ }
     finally { clearTimeout(timeout); if (request === controller) request = undefined; }
   };
-  // This isolated frontend usually watches the old production world. Its bundled
-  // totals are real, but the new API belongs to the matching server update.
+  // Isolated previews must not contact another deployment for contribution data.
   const enabled = !isControlPreview() && (!import.meta.env.DEV || factoryHost() === location.origin);
   const timer = enabled ? setInterval(() => void refresh(), 5 * 60_000) : undefined;
   if (enabled) { void refresh(); document.addEventListener('visibilitychange', refresh); }
   return {
-    forUser(username: string) { return contributionFor(username, CONTRIBUTION_IDENTITIES, records); },
+    forUser(username: string) { return contributionFor(username, identities, records); },
     dispose() { stopped = true; clearInterval(timer); request?.abort(); document.removeEventListener('visibilitychange', refresh); },
   };
 }

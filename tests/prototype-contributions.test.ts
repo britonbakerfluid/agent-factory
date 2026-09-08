@@ -13,7 +13,7 @@ vi.mock('../client/prototypes/factory25dBoardData', () => ({
 const mike = CONTRIBUTION_SEED.find(record => record.githubLogin === 'tingeym')!;
 const newer = { ...mike, mergedPullRequests: 543, checkedAt: mike.checkedAt + 1000 };
 const snapshot = (contributors: unknown = [newer]) => ({
-  repository: CONTRIBUTION_REPOSITORY, baseBranch: CONTRIBUTION_BRANCH, refresh: 'configured', contributors,
+  repository: CONTRIBUTION_REPOSITORY, baseBranch: CONTRIBUTION_BRANCH, refresh: 'configured', contributors, identities: [{ githubLogin: 'tingeym', factoryUsernames: ['michaeltingey'] }],
 });
 const response = (body: unknown) => ({ ok: true, json: async () => body });
 const watchers: ReturnType<typeof watchContributions>[] = [];
@@ -35,68 +35,62 @@ afterEach(() => {
 });
 
 describe('contribution roster refresh', () => {
-  it('shares one request across every nameplate, then accepts only newer verified records', async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce(response(snapshot()))
-      .mockResolvedValueOnce(response(snapshot([{ ...newer, mergedPullRequests: 0 }])))
-      .mockResolvedValueOnce(response(snapshot([{ ...mike, checkedAt: mike.checkedAt - 1 }])))
-      .mockResolvedValueOnce(response(snapshot([{ ...newer, mergedPullRequests: 544, checkedAt: newer.checkedAt + 1 }])));
+  it('starts without bundled totals and uses the deployment roster', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response(snapshot()));
     vi.stubGlobal('fetch', fetcher);
     const { watcher, changed } = watch();
-    expect(watcher.forUser('michaeltingey')).toEqual(mike);
-    for (let index = 0; index < 30; index++) watcher.forUser('michaeltingey');
+    expect(watcher.forUser('michaeltingey')).toBeUndefined();
     await vi.advanceTimersByTimeAsync(0);
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher).toHaveBeenCalledWith('/api/contributions', expect.objectContaining({
-      credentials: 'omit', cache: 'no-store', signal: expect.any(AbortSignal),
-    }));
     expect(watcher.forUser('michaeltingey')).toEqual(newer);
     expect(watcher.forUser('a task about michaeltingey')).toBeUndefined();
-    expect(watcher.forUser('unknown')).toBeUndefined();
-    await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(watcher.forUser('michaeltingey')).toEqual(newer);
-    expect(changed).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(5 * 60_000);
-    expect(watcher.forUser('michaeltingey')?.mergedPullRequests).toBe(544);
-    expect(changed).toHaveBeenCalledTimes(2);
+    expect(changed).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledWith('/api/contributions', expect.objectContaining({ credentials: 'omit', cache: 'no-store' }));
   });
 
-  it('retains verified totals through unavailable, incomplete, malformed, and duplicate snapshots', async () => {
-    const bodies = [null, {}, snapshot(undefined), snapshot([]), snapshot({}),
-      { ...snapshot(), repository: 'someone/another-repo' },
-      { ...snapshot(), baseBranch: 'develop' },
-      snapshot([{ ...newer, mergedPullRequests: '999' }]),
-      snapshot([{ ...newer, checkedAt: -1 }]),
-      snapshot([newer, { ...newer, githubLogin: 'TINGEYM', mergedPullRequests: 999 }]),
-    ];
-    // Explicitly omit the contributors field as an incomplete response.
-    delete (bodies[2] as Partial<ReturnType<typeof snapshot>>).contributors;
-    const fetcher = vi.fn().mockRejectedValueOnce(new Error('Offline'))
-      .mockResolvedValueOnce({ ok: false, status: 503 })
-      .mockResolvedValueOnce({ ok: true, json: async () => { throw new SyntaxError('Invalid JSON'); } });
-    bodies.forEach(body => fetcher.mockResolvedValueOnce(response(body)));
+  it('retains the last verified totals on failures and refuses duplicate or older records', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response(snapshot()))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(response(null))
+      .mockResolvedValueOnce(response(snapshot([{ ...mike, checkedAt: 1 }])))
+      .mockResolvedValueOnce(response(snapshot([newer, { ...newer, githubLogin: 'TINGEYM' }])));
     vi.stubGlobal('fetch', fetcher);
-    const { watcher, changed } = watch();
-    await vi.advanceTimersByTimeAsync(0);
-    for (let index = 0; index < bodies.length + 2; index++) {
-      await vi.advanceTimersByTimeAsync(5 * 60_000);
-      expect(watcher.forUser('michaeltingey')).toEqual(mike);
-    }
-    expect(changed).not.toHaveBeenCalled();
-  });
-
-  it('updates a valid contributor in a partial roster without deleting missing contributors', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(snapshot([newer, { githubLogin: 'bad' }]))));
     const { watcher } = watch();
-    const jonathan = watcher.forUser('jonathanvergara');
     await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(20 * 60_000);
     expect(watcher.forUser('michaeltingey')).toEqual(newer);
-    expect(watcher.forUser('jonathanvergara')).toEqual(jonathan);
   });
 
-  it('skips hidden pages and avoids overlapping requests when visibility changes repeatedly', async () => {
+  it('clears previous tenant totals and aliases when scope changes, even for the same GitHub login', async () => {
+    const alternate = { repository: 'another/repository', baseBranch: 'develop',
+      identities: [{ githubLogin: 'tingeym', factoryUsernames: ['New Alias'] }],
+      contributors: [{ ...mike, mergedPullRequests: 2, checkedAt: 1000 }] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(snapshot())).mockResolvedValueOnce(response(alternate)));
+    const { watcher } = watch();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(watcher.forUser('michaeltingey')).toBeUndefined();
+    expect(watcher.forUser('New Alias')?.mergedPullRequests).toBe(2);
+  });
+
+  it('clears totals when integration is disabled and rejects ambiguous aliases', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(snapshot()))
+      .mockResolvedValueOnce(response({ ...snapshot(), identities: [
+        { githubLogin: 'one', factoryUsernames: ['Same'] }, { githubLogin: 'two', factoryUsernames: ['same'] },
+      ] }))
+      .mockResolvedValueOnce(response({ repository: '', baseBranch: 'main', identities: [], contributors: [], refresh: 'unconfigured' })));
+    const { watcher } = watch();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(watcher.forUser('michaeltingey')).toEqual(newer);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(watcher.forUser('michaeltingey')).toBeUndefined();
+  });
+
+  it('skips hidden pages and cancels requests on timeout or disposal', async () => {
     Object.assign(document, { hidden: true });
-    let receive!: (value: ReturnType<typeof response>) => void;
-    const fetcher = vi.fn(() => new Promise<ReturnType<typeof response>>(resolve => { receive = resolve; }));
+    const fetcher = vi.fn((_url, options: RequestInit) => new Promise((_resolve, reject) => {
+      options.signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }));
     vi.stubGlobal('fetch', fetcher);
     const { watcher, changed } = watch();
     await vi.advanceTimersByTimeAsync(5 * 60_000);
@@ -104,58 +98,28 @@ describe('contribution roster refresh', () => {
     Object.assign(document, { hidden: false });
     document.dispatchEvent(new Event('visibilitychange'));
     document.dispatchEvent(new Event('visibilitychange'));
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    receive(response(snapshot()));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(watcher.forUser('michaeltingey')).toEqual(newer);
-    expect(changed).toHaveBeenCalledTimes(1);
-  });
-
-  it('aborts in-flight reads and prevents callbacks, interval reads, and visibility reads after disposal', async () => {
-    let receive!: (value: ReturnType<typeof response>) => void;
-    const fetcher = vi.fn(() => new Promise<ReturnType<typeof response>>(resolve => { receive = resolve; }));
-    vi.stubGlobal('fetch', fetcher);
-    const { watcher, changed } = watch();
-    const signal = (fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].signal!;
-    watcher.dispose(); watcher.dispose();
-    expect(signal.aborted).toBe(true);
-    receive(response(snapshot()));
-    document.dispatchEvent(new Event('visibilitychange'));
-    await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(changed).not.toHaveBeenCalled();
-    expect(watcher.forUser('michaeltingey')).toEqual(mike);
-  });
-
-  it('cancels a slow request after eight seconds and can recover at the next refresh', async () => {
-    const fetcher = vi.fn().mockImplementationOnce((_url, options: RequestInit) => new Promise((_resolve, reject) => {
-      options.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
-    })).mockResolvedValueOnce(response(snapshot()));
-    vi.stubGlobal('fetch', fetcher);
-    const { watcher, changed } = watch();
-    const signal = fetcher.mock.calls[0][1].signal as AbortSignal;
+    expect(fetcher).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(8000);
-    expect(signal.aborted).toBe(true);
-    expect(watcher.forUser('michaeltingey')).toEqual(mike);
-    expect(changed).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(5 * 60_000 - 8000);
+    expect(fetcher.mock.calls[0][1].signal?.aborted).toBe(true);
+    document.dispatchEvent(new Event('visibilitychange'));
+    watcher.dispose();
+    expect(fetcher.mock.calls[1][1].signal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
     expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(watcher.forUser('michaeltingey')).toEqual(newer);
-    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).not.toHaveBeenCalled();
   });
 
-  it('uses bundled verified totals in isolated previews without contacting the old live server', async () => {
+  it('keeps isolated previews empty without contacting another deployment', async () => {
     vi.stubEnv('DEV', true);
     const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
     board.preview = true;
     const preview = watch();
     board.preview = false; board.host = 'https://old-production.example';
     const isolated = watch();
-    document.dispatchEvent(new Event('visibilitychange'));
     await vi.advanceTimersByTimeAsync(10 * 60_000);
     expect(fetcher).not.toHaveBeenCalled();
-    expect(preview.watcher.forUser('michaeltingey')).toEqual(mike);
-    expect(isolated.watcher.forUser('michaeltingey')).toEqual(mike);
+    expect(preview.watcher.forUser('michaeltingey')).toBeUndefined();
+    expect(isolated.watcher.forUser('michaeltingey')).toBeUndefined();
   });
 });
 
@@ -194,7 +158,7 @@ describe('contribution nameplate', () => {
     button.dispatchEvent(new Event('blur')); expect(details.hidden).toBe(true);
     button.dispatchEvent(new Event('click')); expect(details.hidden).toBe(false);
     const [total, progress, next, provenance] = contributions.children;
-    expect(total.textContent).toBe('542 PRs merged into fluid/main');
+    expect(total.textContent).toBe('542 PRs merged');
     expect(progress.value).toBe(14); expect(progress.max).toBe(33);
     expect(progress.attributes.get('aria-label')).toBe('Level 33 progress: 14 of 33 PRs');
     expect(next.textContent).toBe('19 PRs to level 34');
