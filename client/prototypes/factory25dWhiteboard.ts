@@ -529,6 +529,7 @@ export function createWhiteboardInteraction({
     managerTask: artwork.managerTask,
     boardMotion: boardDragging,
     isRoomView: () => view === 'room',
+    isTransitioning: () => !!transition,
     update(now: number) {
       if (artwork.update(now, reducedMotion.matches)) layoutDirty = true;
       boardDragging.update(now);

@@ -19,10 +19,23 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
   indoorFloor: (point: RoomPoint) => number = () => .018) {
   const camera = currentCamera().clone(), targetCamera = camera.clone();
   const destination = cameraPose(targetCamera), returning = cameraPose(camera);
-  const material = new THREE.MeshStandardMaterial({ alphaTest: .08, side: THREE.DoubleSide, roughness: 1,
+  const material = new THREE.MeshStandardMaterial({ alphaTest: .08, transparent: true, side: THREE.DoubleSide, roughness: 1,
     emissive: '#101126', emissiveIntensity: .6 });
   const model = new THREE.Mesh(new THREE.PlaneGeometry(.86, .86), material); model.name = 'avatar-edit-draft';
   model.castShadow = true;
+  // Dim the whole rendered room, then draw the draft at its normal brightness.
+  // Keep depth testing on the draft so it still walks around actual furniture.
+  const dimMaterial = new THREE.ShaderMaterial({
+    uniforms: { amount: { value: 0 } }, transparent: true, depthTest: false, depthWrite: false,
+    vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform float amount; void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, amount); }',
+  });
+  const dim = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), dimMaterial);
+  dim.name = 'avatar-edit-room-dim'; dim.frustumCulled = false;
+  dim.renderOrder = 10000; model.renderOrder = 10001;
+  let dimAmount = 0;
+  // Offscreen window/reflection passes should keep the original room lighting.
+  dim.onBeforeRender = (_renderer, _scene, view) => { dimMaterial.uniforms.amount.value = view === camera ? dimAmount : 0; };
   const key = new THREE.PointLight('#ffe7d1', 0, 3.5, 2), fill = new THREE.PointLight('#c8dfef', 0, 3, 2);
   key.name = 'avatar-edit-key'; fill.name = 'avatar-edit-fill';
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -73,7 +86,7 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
     }
   }
   function finish() {
-    active = false; restore(); model.removeFromParent(); key.removeFromParent(); fill.removeFromParent();
+    active = false; restore(); model.removeFromParent(); dim.removeFromParent(); key.removeFromParent(); fill.removeFromParent();
     document.body.classList.remove('avatar-stage-open'); renderer.setSize(800, 564, false);
     if (!document.querySelector('dialog[open]')) document.querySelector<HTMLButtonElement>('.factory-edit-avatar')?.focus({ preventScroll: true });
   }
@@ -100,7 +113,7 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
       const path = avatarClearanceRoute(targetScene, stageRoom, origin, (entry?.seatBlend ?? 0) > .01, floorAt);
       startWalk([anchor.clone(), ...path.map(floorPoint)]);
       if (entry) hide(entry);
-      model.position.copy(anchor); targetScene.add(model, key, fill);
+      model.position.copy(anchor); dimAmount = 0; targetScene.add(model, dim, key, fill);
       model.userData.sessionId = targetId;
       setAvatar(entry?.session.avatar ?? DEFAULT_AVATAR);
       room = cameraPose(currentCamera()); from = room;
@@ -172,6 +185,7 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
       if (resized || progress !== lastProgress) blendCamera(camera, from, entering ? destination : returning, progress, aspect, focus);
       lastProgress = progress;
       const brightness = entering ? Math.min(1, (now - started) / 600) : 1 - progress;
+      dimAmount = .62 * (reduced.matches ? entering ? 1 : 0 : brightness);
       key.intensity = brightness * 3.2; fill.intensity = brightness * 1.3;
       const facing = travelling ? travelDirection : direction;
       const row = !travelling && !walking && facing === 0 ? 0 : AVATAR_ANIMATIONS.indexOf(`walk_${['down', 'right', 'up', 'left'][facing]}`);
@@ -183,6 +197,6 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
       model.position.y = floor + (sheet.feet[row][frame] / 32 - .5) * .86 + .004;
       if (!entering && progress === 1 && !travelling) finish();
     },
-    dispose() { finish(); model.geometry.dispose(); material.dispose(); texture?.dispose(); },
+    dispose() { finish(); model.geometry.dispose(); material.dispose(); texture?.dispose(); dim.geometry.dispose(); dimMaterial.dispose(); },
   };
 }

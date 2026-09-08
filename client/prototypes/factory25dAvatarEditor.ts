@@ -187,6 +187,15 @@ export function createAvatarEditor(getContext: () => Context | undefined, onOpen
       }
       controls();
     },
+    requestClose() {
+      if (!dialog.open) return true;
+      if (saving) return false;
+      if (draft && JSON.stringify(draft) !== baseline) {
+        status.textContent = 'save or cancel your changes before switching views.';
+        save.focus(); return false;
+      }
+      close(); return true;
+    },
     invalidate() { if (dialog.open) { saving = false; dialog.close(); } },
     dispose() { if (dialog.open) dialog.close(); finish(); abort.abort(); dialog.remove(); },
   };

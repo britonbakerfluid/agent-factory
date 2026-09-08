@@ -1,6 +1,7 @@
 import { GitHubApp, registerGitHubRoutes } from './github/app.js';
 import { loadGitHubConfig, contributionCacheScope } from './github/config.js';
 import { TeamRoster } from './team-roster.js';
+import { LoungeRadio } from './lounge-radio.js';
 import { VisitorBasketball } from './visitor-basketball.js';
 import { GarageDrivingManager } from './garage-driving.js';
 import { registerTeamRoutes } from './routes/team.js';
@@ -151,6 +152,7 @@ async function main() {
   const controls = new ControlManager(state, broadcast);
   const grabs = new GrabManager(state, broadcast);
   state.setGrabbedSessionCheck(sessionId => grabs.activeGrabs().some(grab => grab.sessionId === sessionId));
+  const loungeRadio = new LoungeRadio(broadcast);
   const visitorBalls = new VisitorBasketball(broadcast);
   const garageDriving = new GarageDrivingManager(state, broadcast);
 
@@ -180,6 +182,7 @@ async function main() {
     broadcast.sendWorldSnapshot(socket, state.getSnapshot());
     grabs.sendActive(socket);
     visitorBalls.sendActive(socket);
+    loungeRadio.sendActive(socket);
     garageDriving.sendActive(socket);
     if (principal) {
       broadcast.sendTo(socket, {
@@ -204,6 +207,9 @@ async function main() {
       try {
         const msg = JSON.parse(String(raw));
         switch (msg.type) {
+          case 'radio_queue':
+            if (!request.headers.origin || isSameHostOrigin(request.headers.origin, request.headers.host)) loungeRadio.receive(socket, msg);
+            break;
           case 'garage_drive':
             if (!request.headers.origin || isSameHostOrigin(request.headers.origin, request.headers.host)) garageDriving.receive(socket, msg);
             break;
@@ -213,6 +219,7 @@ async function main() {
           case 'request_state':
             broadcast.sendWorldSnapshot(socket, state.getSnapshot());
             garageDriving.sendActive(socket);
+            loungeRadio.sendActive(socket);
             break;
 
 
@@ -376,7 +383,7 @@ async function main() {
   // Start stale cleanup, lifecycle pruning, and manual-control simulation.
   const staleTimer = startStaleReaper(state);
   const teamTimer = setInterval(() => void team.flush(), 5_000);
-  const worldTimer = setInterval(() => { state.advanceWorld(); visitorBalls.expire(); }, 1_000);
+  const worldTimer = setInterval(() => { state.advanceWorld(); visitorBalls.expire(); loungeRadio.tick(); }, 1_000);
   controls.start();
   grabs.start();
   garageDriving.start();

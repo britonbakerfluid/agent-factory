@@ -105,7 +105,7 @@ export function createBasketball(
     spare = miniBall(parent);
   spare.position.set(2.55, BALL_RADIUS, -5.72);
   ball.position.set(0.7, BALL_RADIUS, -5.65);
-  contactShadow(parent, {
+  const spareShadow = contactShadow(parent, {
     x: 2.55,
     z: -5.72,
     width: 0.12,
@@ -232,6 +232,7 @@ export function createBasketball(
   }
   return {
     pickups: [ball, spare],
+    pickupShadows: [ballShadow, spareShadow],
     setPlayers(next: Player[]) {
       active = -1; queued = false; wait = 38; jump = 0; time = 0;
       ball.position.set(0.7, BALL_RADIUS, -5.65);

@@ -55,22 +55,61 @@ export class PhoneMessageArrivals {
 }
 
 export const PHONE_NOTIFICATION_MS = 1450;
+export const PHONE_NOTIFICATION_COOLDOWN_MS = 8000;
+export const PHONE_REMINDER_DELAYS_MS = [45_000, 90_000, 150_000] as const;
+
+/** Only actual unread arrivals earn reminders. Pause away from the phone,
+ * space reminders further apart, and never replay missed intervals. */
+export class PhoneUnreadReminders {
+  unread = false;
+  private count = 0;
+  private next = Infinity;
+  private eligible = false;
+  arrive(now: number, eligible: boolean) {
+    if (!Number.isFinite(now)) return;
+    this.unread = true; this.count = 0; this.eligible = eligible;
+    this.next = now + PHONE_REMINDER_DELAYS_MS[0];
+  }
+  read() { this.unread = false; this.count = 0; this.next = Infinity; this.eligible = false; }
+  pause() { this.eligible = false; }
+  update(now: number, eligible: boolean) {
+    if (!Number.isFinite(now) || !this.unread) return false;
+    if (!eligible) { this.pause(); return false; }
+    if (this.count >= PHONE_REMINDER_DELAYS_MS.length) return false;
+    if (!this.eligible) {
+      this.eligible = true; this.next = now + PHONE_REMINDER_DELAYS_MS[this.count];
+      return false;
+    }
+    if (now < this.next) return false;
+    this.count++;
+    this.next = now + (PHONE_REMINDER_DELAYS_MS[this.count] ?? Infinity);
+    return true;
+  }
+}
+
 const ease = (t: number) => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
+const rattle = (elapsed: number, start: number) => {
+  const t = (elapsed - start) / 250;
+  return t > 0 && t < 1 ? Math.sin(Math.PI * t) ** .7 : 0;
+};
 
 /** One finite pulse; a burst is coalesced while it is playing, without a queue. */
 export class PhoneNotificationPulse {
   private started = -Infinity;
   trigger(now: number) {
-    if (!Number.isFinite(now) || now - this.started < PHONE_NOTIFICATION_MS) return false;
+    if (!Number.isFinite(now) || now - this.started < PHONE_NOTIFICATION_COOLDOWN_MS) return false;
     this.started = now; return true;
   }
   cancel() { this.started = -Infinity; }
   sample(now: number, reduced: boolean) {
     const elapsed = now - this.started;
     if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= PHONE_NOTIFICATION_MS)
-      return { glow: 0, offset: 0, twist: 0, active: false };
+      return { glow: 0, offset: 0, twist: 0, rock: 0, lift: 0, marks: 0, active: false };
     const glow = ease(elapsed / 120) * (1 - ease((elapsed - 300) / (PHONE_NOTIFICATION_MS - 300)));
-    const vibration = reduced || elapsed > 220 ? 0 : Math.sin(elapsed / 1000 * Math.PI * 2 * 31) * (1 - elapsed / 220);
-    return { glow, offset: vibration * .003, twist: vibration * .01, active: true };
+    const energy = reduced ? 0 : rattle(elapsed, 0) + rattle(elapsed, 360) * .8;
+    const vibration = energy ? Math.sin(elapsed / 1000 * Math.PI * 2 * 11) * energy : 0;
+    const rock = vibration * .11;
+    return { glow, offset: vibration * .021, twist: vibration * .07, rock,
+      lift: energy * .012 + Math.abs(rock) * .14, marks: energy, active: true };
   }
 }

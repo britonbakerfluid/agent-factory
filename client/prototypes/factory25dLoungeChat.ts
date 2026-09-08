@@ -8,7 +8,7 @@ import { blendCamera, cameraPose, type CameraPose } from './factory25dCameraMoti
 import { createPhoneMessage } from './factory25dPhoneMessages';
 import { avatarPortrait, createProfilePortrait } from './factory25dPortrait';
 import { createLoungePhone, phoneCameraPose, PHONE } from './factory25dLoungePhone';
-import { PhoneMessageArrivals } from './factory25dPhoneNotifications';
+import { PhoneMessageArrivals, PhoneUnreadReminders } from './factory25dPhoneNotifications';
 import './factory25dLoungePhone.css';
 
 export interface LoungeChatCommands {
@@ -175,6 +175,7 @@ export function createLoungeChat(
   let layoutWidth = 360;
   const focus = new THREE.Vector3();
   const arrivals = new PhoneMessageArrivals();
+  const reminders = new PhoneUnreadReminders();
   let notificationSounds: PhoneNotificationSounds = {};
   let notificationPlaying = false;
   function cancelNotification() {
@@ -182,19 +183,20 @@ export function createLoungeChat(
     if (notificationPlaying) notificationSounds.stop?.();
     notificationPlaying = false; button.dataset.notification = 'false';
   }
+  function notify(now: number) {
+    if (handset.notify(now)) { notificationPlaying = true; notificationSounds.buzz?.(); }
+  }
   const stopMessages = onFactoryMessage(message => {
     const incoming = arrivals.receive(message);
-    // Consume unseen arrivals even while elsewhere or reading; returning to the
-    // lounge must never play a backlog of notification animations or sounds.
-    if (!incoming || active || !canOpen || document.hidden) return;
-    if (handset.notify(performance.now())) {
-      notificationPlaying = true; notificationSounds.buzz?.();
-    }
+    if (!incoming || active) return;
+    const now = performance.now(), eligible = canOpen && !document.hidden;
+    reminders.arrive(now, eligible);
+    if (eligible) notify(now);
   });
   const stopConnection = onFactoryConnection(connected => {
-    if (!connected) { arrivals.disconnect(); cancelNotification(); }
+    if (!connected) { arrivals.disconnect(); reminders.pause(); cancelNotification(); }
   });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelNotification(); }, options);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { reminders.pause(); cancelNotification(); } }, options);
 
   function fit() {
     const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
@@ -208,7 +210,7 @@ export function createLoungeChat(
   }
   function enter() {
     if (active || !canOpen) return;
-    cancelNotification();
+    reminders.read(); cancelNotification();
     room = cameraPose(roomCamera); from = cameraPose(roomCamera);
     const previousHeight = canvas.clientHeight;
     open = active = moving = true; started = performance.now();
@@ -259,7 +261,8 @@ export function createLoungeChat(
     if (event.key === 'Escape') { event.preventDefault(); exit(); }
     if (event.key === 'Tab') {
       const soundControls = [...document.querySelectorAll<HTMLElement>('#scene-sound-toggle, #scene-volume, #scene-sound-credits')];
-      const controls = [list, back, input, send, login, ...soundControls].filter(el => !el.closest('[hidden], [inert]') && !(el instanceof HTMLInputElement && el.disabled) && !(el instanceof HTMLButtonElement && el.disabled));
+      const toolbarControls = [...document.querySelectorAll<HTMLButtonElement>('.factory-toolbar-actions button')];
+      const controls = [list, input, send, login, ...soundControls, ...toolbarControls].filter(el => !el.closest('[hidden], [inert]') && !(el instanceof HTMLInputElement && el.disabled) && !(el instanceof HTMLButtonElement && el.disabled));
       const index = controls.indexOf(document.activeElement as typeof controls[number]);
       if (index < 0 || (event.shiftKey && index === 0) || (!event.shiftKey && index === controls.length - 1)) {
         event.preventDefault(); controls[event.shiftKey ? controls.length - 1 : 0]?.focus();
@@ -331,8 +334,11 @@ export function createLoungeChat(
       if (data !== lastData || members !== lastMembers) { lastData = data; lastMembers = members; refresh(data); }
       canOpen = visible && !document.body.classList.contains('inspect-open');
       if (notificationPlaying && (active || !canOpen || document.hidden)) cancelNotification();
+      if (reminders.update(now, data.connected && canOpen && !active && !document.hidden)) notify(now);
       notificationPlaying = handset.updateNotification(now, reduced.matches, canOpen && !active && !document.hidden);
       button.dataset.notification = String(notificationPlaying);
+      button.dataset.unread = String(reminders.unread);
+      button.title = reminders.unread ? 'New lounge messages · open the phone (C)' : 'Open the lounge phone (C)';
       if (queuedEntry && document.body.matches('.board-open, .weather-open, .inspect-open')) { queuedEntry = false; focusComposer = false; }
       if (queuedEntry && canOpen) { queuedEntry = false; enter(); }
       button.hidden = active || !canOpen;

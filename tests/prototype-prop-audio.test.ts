@@ -19,13 +19,20 @@ it('makes short quiet action sounds with softened edges and no downloaded sample
   const prints = new Set<string>();
   for (const kind of Object.keys(PROP_SOUND_SPECS) as PropSoundKind[]) {
     const samples = propSoundSamples(kind, 48000);
-    expect(samples.length / 48000).toBeLessThanOrEqual(.32);
+    expect(samples.length / 48000).toBeLessThanOrEqual(kind === 'phone-buzz' ? .61 : .32);
     expect(samples[0]).toBe(0); expect(Math.abs(samples.at(-1)!)).toBeLessThan(.002);
     expect(samples.some(sample => Math.abs(sample) > .03)).toBe(true);
     expect(samples.every(sample => Number.isFinite(sample) && Math.abs(sample) <= .75)).toBe(true);
     prints.add(String(samples.slice(50, 60)));
   }
   expect(prints.size).toBe(Object.keys(PROP_SOUND_SPECS).length);
+});
+
+it('leaves silence between the phone motor rattles', () => {
+  const samples = propSoundSamples('phone-buzz', 48000);
+  expect(samples.slice(0, 12000).some(sample => Math.abs(sample) > .03)).toBe(true);
+  expect(samples.slice(12001, 17280).every(sample => sample === 0)).toBe(true);
+  expect(samples.slice(17280).some(sample => Math.abs(sample) > .03)).toBe(true);
 });
 
 it('caps overlapping voices and repeat clicks, reuses buffers, and cancels all tails without replay', () => {

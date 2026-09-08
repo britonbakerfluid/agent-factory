@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatMessage, WSMessageToClient, WorldSnapshot } from '../shared/types';
-import { PhoneMessageArrivals, PhoneNotificationPulse, PHONE_NOTIFICATION_MS } from '../client/prototypes/factory25dPhoneNotifications';
+import { PhoneMessageArrivals, PhoneNotificationPulse, PhoneUnreadReminders, PHONE_NOTIFICATION_MS } from '../client/prototypes/factory25dPhoneNotifications';
 
 const chat = (message: string, timestamp: number, username = 'Ada'): ChatMessage => ({ message, timestamp, username });
 const snapshot = (revision: number, messages: ChatMessage[] = []): WSMessageToClient => ({
@@ -62,19 +62,26 @@ describe('phone message arrival detection', () => {
 });
 
 describe('phone notification motion', () => {
-  it('has one short buzz and one finite glow, coalescing bursts without a repeating queue', () => {
+  it('has two bounded rattles, rests between them, and coalesces message bursts', () => {
     const pulse = new PhoneNotificationPulse();
     expect(pulse.trigger(1000)).toBe(true); expect(pulse.trigger(1100)).toBe(false);
     let vibration = false;
     for (let elapsed = 0; elapsed < PHONE_NOTIFICATION_MS; elapsed += 10) {
       const state = pulse.sample(1000 + elapsed, false);
       expect(state.glow).toBeGreaterThanOrEqual(0); expect(state.glow).toBeLessThanOrEqual(1);
-      expect(Math.abs(state.offset)).toBeLessThanOrEqual(.003); expect(Math.abs(state.twist)).toBeLessThanOrEqual(.01);
-      if (elapsed > 220) expect(state.offset).toBe(0);
+      expect(Math.abs(state.offset)).toBeLessThanOrEqual(.021); expect(Math.abs(state.twist)).toBeLessThanOrEqual(.07);
+      expect(Math.abs(state.rock)).toBeLessThanOrEqual(.11);
+      expect(state.lift).toBeGreaterThanOrEqual(0); expect(state.lift).toBeLessThan(.028);
+      if ((elapsed >= 250 && elapsed <= 360) || elapsed >= 610) {
+        expect(state.offset).toBe(0); expect(state.lift).toBe(0); expect(state.marks).toBe(0);
+      }
       if (state.offset !== 0) vibration = true;
     }
     expect(vibration).toBe(true);
-    expect(pulse.sample(1000 + PHONE_NOTIFICATION_MS, false)).toEqual({ glow: 0, offset: 0, twist: 0, active: false });
+    expect(pulse.sample(1120, false).lift).toBeGreaterThan(.01);
+    expect(pulse.sample(1480, false).lift).toBeGreaterThan(.01);
+    expect(pulse.sample(1000 + PHONE_NOTIFICATION_MS, false)).toEqual({ glow: 0, offset: 0, twist: 0, rock: 0, lift: 0, marks: 0, active: false });
+    expect(pulse.trigger(3000)).toBe(false); // Busy chat never rattles continuously.
     expect(pulse.sample(9000, false).active).toBe(false);
     expect(pulse.trigger(9000)).toBe(true);
   });
@@ -84,9 +91,60 @@ describe('phone notification motion', () => {
     for (let elapsed = 0; elapsed < PHONE_NOTIFICATION_MS; elapsed += 20) {
       const state = pulse.sample(100 + elapsed, true);
       expect(state.offset).toBe(0); expect(state.twist).toBe(0);
+      expect(state.rock).toBe(0); expect(state.lift).toBe(0); expect(state.marks).toBe(0);
     }
     expect(pulse.sample(400, true).glow).toBe(1);
     pulse.cancel(); expect(pulse.sample(401, false).active).toBe(false);
     expect(pulse.sample(401, false).glow).toBe(0);
+  });
+});
+
+describe('occasional unread phone reminders', () => {
+  it('stays quiet without a new arrival, then spaces out only three reminders', () => {
+    const reminders = new PhoneUnreadReminders();
+    expect(reminders.update(1_000_000, true)).toBe(false);
+    reminders.arrive(1000, true);
+    expect(reminders.unread).toBe(true);
+    expect(reminders.update(45_999, true)).toBe(false);
+    expect(reminders.update(46_000, true)).toBe(true);
+    expect(reminders.update(135_999, true)).toBe(false);
+    expect(reminders.update(136_000, true)).toBe(true);
+    expect(reminders.update(286_000, true)).toBe(true);
+    expect(reminders.update(9_000_000, true)).toBe(false);
+  });
+
+  it('clears reminders on read and starts a fresh cycle for a later message', () => {
+    const reminders = new PhoneUnreadReminders(); reminders.arrive(0, true);
+    reminders.read();
+    expect(reminders.unread).toBe(false);
+    expect(reminders.update(100_000, true)).toBe(false);
+    reminders.arrive(100_000, true);
+    expect(reminders.update(145_000, true)).toBe(true);
+  });
+
+  it('waits a full interval after returning to the room or reconnecting', () => {
+    const reminders = new PhoneUnreadReminders(); reminders.arrive(0, true);
+    expect(reminders.update(1000, false)).toBe(false);
+    expect(reminders.update(500_000, true)).toBe(false);
+    expect(reminders.update(544_999, true)).toBe(false);
+    expect(reminders.update(545_000, true)).toBe(true);
+    reminders.pause();
+    expect(reminders.update(1_000_000, true)).toBe(false);
+    expect(reminders.update(1_090_000, true)).toBe(true);
+  });
+
+  it('remembers an offscreen arrival without replaying a backlog on return', () => {
+    const reminders = new PhoneUnreadReminders(); reminders.arrive(0, false);
+    expect(reminders.update(500_000, true)).toBe(false);
+    expect(reminders.update(600_000, true)).toBe(true);
+    expect(reminders.update(600_001, true)).toBe(false);
+  });
+
+  it('new messages postpone reminders and malformed times do not poison the schedule', () => {
+    const reminders = new PhoneUnreadReminders(); reminders.arrive(0, true);
+    reminders.arrive(40_000, true); reminders.arrive(NaN, true);
+    expect(reminders.update(45_000, true)).toBe(false);
+    expect(reminders.update(Infinity, true)).toBe(false);
+    expect(reminders.update(85_000, true)).toBe(true);
   });
 });

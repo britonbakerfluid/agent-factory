@@ -5,7 +5,7 @@ export const PROP_SOUND_SPECS = {
   'lamp-switch': { seconds: .055, cooldown: .085, gain: .4 },
   'candle-on': { seconds: .23, cooldown: .18, gain: .42 },
   'candle-off': { seconds: .18, cooldown: .18, gain: .38 },
-  'phone-buzz': { seconds: .24, cooldown: 1.45, gain: .62 },
+  'phone-buzz': { seconds: .61, cooldown: 1.45, gain: .62 },
 } as const;
 export type PropSoundKind = keyof typeof PROP_SOUND_SPECS;
 export const PROP_SOUND_VOICE_LIMIT = 6;
@@ -43,8 +43,10 @@ export function propSoundSamples(kind: PropSoundKind, sampleRate: number): Float
       const scrape = Math.exp(-t * 29), flare = Math.sin(Math.PI * t / duration) ** 2;
       sample = noise * .17 * scrape + brown * .6 * flare;
     } else if (kind === 'phone-buzz') {
-      // One brief motor vibration against the tabletop, rather than a ringtone.
-      const envelope = Math.sin(Math.PI * t / duration) ** .7;
+      // Two short motor rattles, synchronized with the handset's two nudges.
+      const packetTime = t < .25 ? t : t - .36;
+      const envelope = packetTime >= 0 && packetTime <= .25
+        ? Math.sin(Math.PI * packetTime / .25) ** .7 * (t < .25 ? 1 : .8) : 0;
       sample = (sine(137, t) * .24 + sine(274, t) * .035 + brown * .12) * envelope;
     } else {
       sample = brown * .85 * Math.sin(Math.PI * t / duration) ** 2;
