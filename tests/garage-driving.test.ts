@@ -475,3 +475,16 @@ describe('public garage control ownership', () => {
     expect(f.state.getAll()).toHaveLength(1); expect(f.state.get('jonathan')!.activity).toBe('reading');
   });
 });
+
+describe('driver-relative steering', () => {
+  it.each(GARAGE_CAR_IDS)('%s turns right for positive input in its own forward-facing frame', id => {
+    const sim = new GarageDrivingSimulation(); sim.claim(id, 'owner'); step(sim, 1.2); const car = sim.car(id);
+    Object.assign(car, { x: 0, z: 7, yaw: 0, vx: 0, vz: 3 });
+    sim.setInput(id, { throttle: 0, steer: 1, drift: false }); step(sim, .3);
+    expect(car.yaw).toBeLessThan(0); expect(car.steer).toBeLessThan(0); expect(car.x).toBeLessThan(0);
+    if (id !== 'delorean') {
+      Object.assign(car, { x: 0, z: 7, yaw: 0, steer: 0, vx: 0, vz: -3 }); step(sim, .3);
+      expect(car.yaw).toBeGreaterThan(0); expect(car.steer).toBeLessThan(0);
+    }
+  });
+});

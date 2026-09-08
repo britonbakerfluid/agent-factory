@@ -1,3 +1,4 @@
+import { createAmbientBackdrop } from './factory25dAmbientBackdrop';
 import { createStationTickets } from './factory25dStationTickets';
 import {createGarage} from './factory25dGarage';
 import { createVendingMachine } from './factory25dVendingMachine';
@@ -98,8 +99,10 @@ renderer.setPixelRatio(1);
 renderer.setSize(800, 564, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.BasicShadowMap;
+// Hardware depth filtering smooths single-texel crawl without a larger shadow map.
+renderer.shadowMap.type = THREE.PCFShadowMap;
 const displayStudy = createDisplayStudy(renderer);
+const ambientBackdrop = createAmbientBackdrop(canvas);
 RectAreaLightUniformsLib.init();
 
 const camera = new THREE.OrthographicCamera(-8, 8, 5.64, -5.64, 0.1, 50);
@@ -193,6 +196,19 @@ function floorZone(width: number, depth: number, x: number, z: number, color: st
 
 floorZone(7.8, 8, -4.08, 7.6, '#292113');
 floorZone(8.2, 8, 3.92, 7.6, '#29173d');
+// The diorama's front edge is outside the normal framing. Close-ups can see
+// past it, so continue the same floor under the camera instead of exposing sky.
+const closeUpFloor = new THREE.Group(); closeUpFloor.name = 'close-up-floor-continuation';
+scene.add(closeUpFloor); closeUpFloor.visible = false;
+const continuedBase = new THREE.Mesh(new THREE.PlaneGeometry(16.4, 80), mainFloorMaterial);
+continuedBase.rotation.x = -Math.PI / 2; continuedBase.position.z = 13.9 + 40;
+continuedBase.receiveShadow = true; closeUpFloor.add(continuedBase);
+for (const [w,x,color] of [[7.8,-4.08,'#292113'],[8.2,3.92,'#29173d']] as const) {
+  const extension = floorZone(w,80,x,11.6+40,color);
+  // Preserve world position when moving out of the translated interior group.
+  extension.position.z += interior.position.z; closeUpFloor.add(extension);
+}
+
 
 // Floor-to-ceiling glass with a narrow header, side jambs and floor track.
 // The real header and uprights share a depth and meeting edge, so their shadows join.
@@ -602,7 +618,6 @@ const factoryControls = createFactoryControls(canvas, liveAgents, () => currentV
   () => !carDrivingActive() && !garage.isTransitioning() && !avatarStage.isActive() && !whiteboardInteraction.isTransitioning() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive() && !document.body.classList.contains('inspect-open'),
   room => roomNavigation.request(room), avatarStage,
   () => garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory');
-garage.setWorkAction(() => factoryControls.openGarageStations());
 const garageDriving = createGarageDriving(garage.room, garage.cars, liveAgents, canvas, () => {
   factoryControls.state.stop(); if (factoryControls.state.active) factoryControls.state.release();
 });
@@ -676,6 +691,7 @@ windowLight.shadow.camera.bottom = -11;
 windowLight.shadow.camera.near = 0.5;
 windowLight.shadow.camera.far = 70;
 windowLight.shadow.bias = -0.0001;
+windowLight.shadow.radius = 0;
 windowLight.target.position.set(0, 0, 1.6 + interior.position.z);
 scene.add(windowLight, windowLight.target);
 
@@ -838,7 +854,8 @@ function animate(): void {
   previousElapsed = elapsed;
   const now = performance.now();
   wallClock.update(now);
-  if (liveTime && now - lastSunUpdate >= 1000) { const sun = liveSunAt(skyClock()); isNight = sun.night; setLightX(sun.arc); lastSunUpdate = now; }
+  // Sun direction changes slowly; avoid rebuilding the sky palette every second.
+  if (liveTime && now - lastSunUpdate >= 10000) { const sun = liveSunAt(skyClock()); isNight = sun.night; setLightX(sun.arc); lastSunUpdate = now; }
   whiteboardInteraction.update(now);
   const roomNavigationAvailable = !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive() && !document.body.classList.contains('inspect-open');
   garage.update(now, roomNavigationAvailable && !sideRoom.isActive() && !carDrivingActive(), currentViewCamera, factoryControls.controlledAgent(), factoryControls.serverNow(), roomNavigationAvailable && carDrivingActive(), whiteboardInteraction.getData().world?.environment === 'factory25d' ? whiteboardInteraction.getData().world?.agents : []);
@@ -915,6 +932,7 @@ function animate(): void {
   sceneAudio.garageEngine(garageDriving.engine() ?? garage.carAnimation.engine());
   avatarStage.update(now);
   const editingAvatar = avatarStage.isActive();
+  closeUpFloor.visible = brandLibrary.isActive() || teamDesk.isActive() || loungeDetails.chat.isActive() || editingAvatar;
   const floorSection = !editingAvatar && garage.isCrossSection();
   const showFactory = editingAvatar ? avatarStage.scene() === scene : floorSection || !garage.isActive() && sideRoom.showsFactory();
   const showGarage = editingAvatar ? avatarStage.scene() === garage.scene : floorSection || garage.isActive();
@@ -978,9 +996,10 @@ function animate(): void {
   }
   renderer.autoClear = true;
   displayStudy.finish();
+  ambientBackdrop.update(now);
   requestAnimationFrame(animate);
 }
 
 animate();
 
-if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); });

@@ -48,6 +48,7 @@ export function createGarageLighting(room: THREE.Group) {
     light.shadow.mapSize.set(1024, 1024);
     Object.assign(light.shadow.camera, { left: -17, right: 17, top: 17, bottom: -17, near: .1, far: 75 });
     light.shadow.bias = -.00015;
+    light.shadow.radius = 0;
     lights.add(light, light.target); return light;
   }
   const daylight = shadowLight('garage-window-sun', '#e5edfa', .75);

@@ -198,6 +198,7 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement) {
       }
       wasActive = round.active;
       play.textContent = round.active ? "end round" : "duck hunt";
+      if (play.dataset.gameActive !== String(round.active)) play.dataset.gameActive = String(round.active);
       reload.hidden = !round.active;
       if (enabled) announce();
       if (round.active && enabled) {

@@ -47,8 +47,8 @@ describe('Mist cloth', () => {
 
   it('matches crop orientation and CSS sizing without changing the mark aspect', () => {
     const rect = { left: 10, top: 20, width: 512, height: 288 }, top = mistCanvasPoint({ x: 0, y: 1 }, rect), bottom = mistCanvasPoint({ x: 1, y: 0 }, rect);
-    expect(top).toEqual({ x: 70, y: 71 });
-    expect(bottom.x - top.x).toBe(340); expect(bottom.y - top.y).toBe(191.25);
+    expect(top).toEqual({ x: 104.5, y: 99 });
+    expect(bottom.x - top.x).toBe(240); expect(bottom.y - top.y).toBe(135);
     expect(MIST_INK_WINDOW.width / MIST_INK_WINDOW.height).toBe(1024 / 576);
   });
 });

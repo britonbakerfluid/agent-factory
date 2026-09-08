@@ -1,6 +1,14 @@
+import { createProfileMenu } from './factory25dProfileMenu';
+import { createToolbarElement } from './factory25dToolbarElement';
 import * as THREE from 'three';
 import type { GarageCarId } from '@shared/factory25d-garage';
 import { intersectFactoryFloor } from './factory25dPatioPicking';
+import { createRoomMenu } from './factory25dRoomMenu';
+import { createToolbarTooltip } from './factory25dToolbarTooltip';
+import { createToolbarMotion } from './factory25dToolbarMotion';
+import { factoryToolbarState } from './factory25dToolbarState';
+import { createProfilePortrait } from './factory25dPortrait';
+import { parseAvatarConfig } from '@shared/avatar-customization';
 import type { Position, WSMessageToServer } from '@shared/types';
 import { toFactoryWorld, fromFactoryWorld, WORKSTATIONS, factoryWorldPoint, factoryRoomAt, GARAGE_LEVEL, MINI_WORKSTATION_ID, MINI_WORKSTATION_USERNAME, type FactoryRoom } from '@shared/factory25d-layout';
 import { nearestWorkstationSlot, slotPosition } from '@shared/world-layouts';
@@ -33,7 +41,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   panel.id = 'factory-agent-controls';
   panel.innerHTML = `<summary role="button" aria-label="Agent controls" aria-describedby="factory-attention-count"><span class="factory-controls-heading">agents</span> <span class="factory-connection">connecting</span><span class="factory-attention-count" id="factory-attention-count" hidden></span></summary>
     <div class="factory-control-content"><section class="factory-attention" aria-label="Your agent updates" hidden><p class="factory-attention-heading">your agent updates</p><ul class="factory-attention-list"></ul><p class="factory-attention-help">Reply in the app or terminal running your agent.</p></section><p class="factory-auth"></p><p class="factory-step-help"></p><div class="factory-session-actions"></div>
-    <section class="factory-connect-guide" hidden aria-label="Connect to customize your avatar"><p>on the computer running your agents, run:</p><code>agent-factory login</code><button class="factory-copy-login">copy login command</button><p>this opens a connected browser. choose <strong>my avatar</strong> there to edit.</p><details><summary>login command not found?</summary><p>run <code>agent-factory update</code> first, then try login again.</p></details><p>each browser connects separately. no active agent needed.</p></section>
+    <section class="factory-connect-guide" hidden aria-label="Connect to customize your avatar"><p>on the computer running your agents, run:</p><code>agent-factory login</code><button class="factory-copy-login">copy login command</button><p>this opens a connected browser. click <strong>your circular portrait</strong> there to edit.</p><details><summary>login command not found?</summary><p>run <code>agent-factory update</code> first, then try login again.</p></details><p>each browser connects separately. no active agent needed.</p></section>
     <section class="factory-agent-section" hidden><label>your agent <select aria-label="Choose your agent"></select></label>
     <div class="factory-action-row"><button class="factory-claim">take control</button><button class="factory-release" hidden>release</button><button class="factory-visit">find agent</button></div>
     <details class="factory-station-section"><summary>move to a workstation</summary><label>workstation <select class="factory-station" aria-label="Choose a workstation"></select></label><button class="factory-place">place at station</button></details>
@@ -41,13 +49,25 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     <div class="factory-action-row factory-play-actions"><button class="factory-shoot">shoot</button><button class="factory-open-emotes">emotes · B</button></div>
     <p class="factory-key-help">W A S D to walk · space to shoot<br>B for emotes · escape to release<br>walk into the lift or through the patio doorway</p></section><p class="factory-control-status" role="status" aria-live="polite"></p></div>`;
   document.body.append(panel);
-  const toolbar = document.createElement('div'); toolbar.className = 'factory-toolbar pixel-island';
-  toolbar.innerHTML = `<div class="factory-toolbar-context"></div><nav class="factory-toolbar-actions" aria-label="Factory controls"><button type="button" class="factory-avatar-shortcut" aria-haspopup="dialog">my avatar</button><button type="button" class="factory-agents-shortcut" aria-controls="factory-agent-controls" aria-expanded="false">agents <span class="factory-toolbar-count" hidden></span></button><button type="button" class="factory-context-action">connect</button></nav>`;
-  const context = toolbar.querySelector('.factory-toolbar-context')!;
-  // Keep the existing room actions and their handlers, in one shared dock.
-  const docked = [...document.querySelectorAll<HTMLElement>('#room-navigation, .garage-nav, .mobile-explore')].map(element => {
-    const anchor = document.createComment('factory room controls'); element.before(anchor); context.append(element);
-    return { element, anchor };
+  const {toolbar,contextIcons,personIcon} = createToolbarElement();
+  const roomPicker = toolbar.querySelector<HTMLButtonElement>('.factory-room-picker')!;
+  const viewTools = toolbar.querySelector<HTMLElement>('.factory-view-tools')!;
+  const focusTitle = toolbar.querySelector<HTMLElement>('.factory-focus-title')!;
+  // Move the actual controls, preserving handlers and the whiteboard footer bounds.
+  // Each view owns its buttons; this dock owns where that view's tools appear.
+  const docked = [
+    { selector: '.window-navigation', view: 'window' },
+    { selector: '#window-controls', view: 'window' },
+    { selector: '#board-navigation', view: 'whiteboard' },
+    { selector: '#room-navigation', view: 'patio' },
+    { selector: '.garage-nav', view: 'garage' },
+  ].flatMap(({ selector, view }) => {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (!element) return [];
+    const anchor = document.createComment('factory view controls'); element.before(anchor);
+    const group = document.createElement('div'); group.className = 'factory-view-group'; group.hidden = true;
+    group.append(element); viewTools.append(group);
+    return [{ element, anchor, group, view }];
   });
   document.body.append(toolbar); document.body.classList.add('factory-toolbar-ready');
   const sizeToolbar = new ResizeObserver(() => {
@@ -55,6 +75,23 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   });
   sizeToolbar.observe(toolbar);
   const avatarShortcut = toolbar.querySelector<HTMLButtonElement>('.factory-avatar-shortcut')!;
+  const portraitSlot = toolbar.querySelector<HTMLElement>('.factory-nav-portrait')!;
+  let portraitOwner = '', portraitGeneration = 0;
+  async function refreshPortrait(force = false) {
+    const owner = data.principal?.ownerId ?? '';
+    if (!force && portraitOwner === owner) return;
+    portraitOwner = owner; const generation = ++portraitGeneration;
+    portraitSlot.innerHTML = personIcon;
+    if (!owner) return;
+    const fallback = data.agents.find(agent => agent.owner === data.principal?.username)?.avatar;
+    if (fallback) portraitSlot.replaceChildren(createProfilePortrait(fallback));
+    if (!preview && factoryHost() !== location.origin) return;
+    try {
+      const result = preview ? await previewAvatar('GET', abort.signal) : await fetch('/api/avatar', { credentials: 'same-origin', headers: { 'X-Avatar-Owner': owner }, signal: AbortSignal.any([abort.signal, AbortSignal.timeout(12000)]) }).then(response => response.ok ? response.json() : undefined);
+      const avatar = parseAvatarConfig(result?.avatar);
+      if (avatar && generation === portraitGeneration && !abort.signal.aborted) portraitSlot.replaceChildren(createProfilePortrait(avatar));
+    } catch { /* Keep the agent portrait or guest icon if offline. */ }
+  }
   const agentsShortcut = toolbar.querySelector<HTMLButtonElement>('.factory-agents-shortcut')!;
   agentsShortcut.addEventListener('click', () => toolbarFocus.run(() => { panel.open = !panel.open; }), options);
   panel.addEventListener('toggle', () => agentsShortcut.setAttribute('aria-expanded', String(panel.open)), options);
@@ -62,7 +99,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     if (panel.open && !panel.contains(event.target as Node) && !toolbar.contains(event.target as Node)) panel.open = false;
   }, options);
   panel.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !state.active) { event.preventDefault(); event.stopPropagation(); state.release(); panel.open = false; agentsShortcut.focus(); }
+    if (event.key === 'Escape' && !state.active) { event.preventDefault(); event.stopPropagation(); state.release(); panel.open = false; roomPicker.focus(); }
   }, options);
   const attentionEpisodes = new AgentAttentionEpisodes();
   const attentionSection = panel.querySelector<HTMLElement>('.factory-attention')!;
@@ -77,6 +114,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const release = panel.querySelector<HTMLButtonElement>('.factory-release')!;
   const status = panel.querySelector<HTMLElement>('.factory-control-status')!;
   const emoteBar = createEmoteBar(emote => { state.emote(emote); }, () => { state.stop(); panel.open = false; });
+  toolbar.querySelector('.factory-toolbar-actions')!.insertBefore(emoteBar.element, toolbar.querySelector('.factory-context-action'));
   const auth = new AuthManager();
   let signature = '', connectionError = '', avatarNotice = '', placementNotice = '', connecting = false, avatarRequested = false;
   let placement: { sessionId: string; x: number; y: number; workstationSlot: number } | undefined;
@@ -105,16 +143,17 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const avatarEditor = createAvatarEditor(
     () => preview || factoryHost() === location.origin ? data.principal : undefined,
     () => { state.release(); grab.release(); panel.open = false; avatarRequested = false; avatarNotice = ''; paint(); },
-    () => { avatarNotice = preview ? 'avatar saved in this playground' : 'avatar saved for your agents'; paint(); },
+    () => { avatarNotice = preview ? 'avatar saved in this playground' : 'avatar saved for your agents'; void refreshPortrait(true); paint(); },
     avatarScene, preview ? previewAvatar : undefined);
   const toolbarFocus = createToolbarFocus(toolbar, available, () => avatarEditor.requestClose());
+  const controlIdentity = toolbar.querySelector<HTMLElement>('.factory-control-identity')!;
   const contextAction = toolbar.querySelector<HTMLButtonElement>('.factory-context-action')!;
   contextAction.addEventListener('click', () => {
     if (toolbarFocus.name()) { toolbarFocus.back(); return; }
     if (state.active || state.pending) { state.release(); paint(); return; }
     if (!data.principal) { showConnectionGuide(); return; }
     if (state.owned().length) { findAgent(); panel.open = true; }
-    else panel.open = !panel.open;
+    else openAvatar();
   }, options);
   const editAvatar = document.createElement('button'); editAvatar.textContent = 'edit avatar';
   editAvatar.className = 'factory-edit-avatar';
@@ -124,13 +163,20 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     avatarRequested = true; showConnectionGuide();
   }
   editAvatar.addEventListener('click', openAvatar, options);
-  avatarShortcut.addEventListener('click', () => {
-    if (toolbarFocus.name() !== 'avatar') toolbarFocus.run(openAvatar);
-  }, options);
+  const profileMenu=createProfileMenu(toolbar,avatarShortcut,{
+    edit:()=>toolbarFocus.run(openAvatar),
+    go:id=>{if(!available()||!state.owned().some(a=>a.sessionId===id))return;picker.value=id;panel.open=false;goToAgent(id);},
+    control:id=>{if(!available()||!data.connected||!state.owned().some(a=>a.sessionId===id))return;picker.value=id;state.claim(id);goToAgent(id);panel.open=!!state.error;paint();},
+  });
+  function goToAgent(id:string){
+    const entry=agents.entries.get(id);if(!entry)return;
+    visit((entry.mesh.userData.room as FactoryRoom|undefined)??factoryRoomAt({x:entry.lastX,z:entry.lastZ}));
+  }
+
   function paintAttention() {
     const items = personalAgentAttention(data), summary = agentAttentionSummary(items);
     attentionCount.hidden = !summary; attentionCount.textContent = summary;
-    const toolbarCount = toolbar.querySelector<HTMLElement>('.factory-toolbar-count')!;
+    const toolbarCount = agentsShortcut.querySelector<HTMLElement>('.factory-toolbar-count')!;
     toolbarCount.hidden = !items.length; toolbarCount.textContent = String(items.length);
     agentsShortcut.setAttribute('aria-label', summary ? `Agents: ${summary}` : 'Agents');
     attentionCount.dataset.kind = items.some(item => item.kind === 'input' || item.kind === 'permission')
@@ -164,6 +210,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     else if (!data.connected || !items.length) attentionAnnouncer.textContent = '';
   }
   function paint() {
+    nextProfileUpdate=0;
     const phase = factoryControlPhase(state, data.connected, connecting, connectionError);
     if (panel.dataset.state !== phase) panel.dataset.state = phase;
     panel.querySelector('.factory-connection')!.textContent = state.active ? 'you’re in control' : data.connected ? `${data.agents.length} ${preview ? 'sample' : 'live'}` : 'reconnecting';
@@ -221,22 +268,77 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     panel.classList.toggle('is-controlling', !!state.active);
     editAvatar.hidden = !data.principal;
     editAvatar.title = 'Customize the look of your agents';
-    avatarShortcut.title = data.principal ? 'Customize the look of your agents' : 'Connect this browser to customize your avatar';
+    avatarShortcut.dataset.tooltip = 'your agents & avatar';
     if (avatarNotice && !connectionError && !state.error) status.textContent = avatarNotice;
     emoteBar.sync(!!state.active, movementAvailable());
   }
+  let toolbarSignature = '';
+  const toolbarMotion = createToolbarMotion(toolbar);
+  const toolbarTooltip = createToolbarTooltip(toolbar);
+  const roomMenu = createRoomMenu(toolbar, roomPicker, destination => {
+    toolbarFocus.run(() => { state.stop(); panel.open = false; visit(destination); });
+  }, agentsShortcut);
+  let nextRoomCount = 0, nextProfileUpdate = 0;
+  let roomCounts = {factory:0,patio:0,garage:0};
   function paintToolbar() {
     const focused = toolbarFocus.name();
+    const now = performance.now();
+    if(now >= nextRoomCount) {
+      nextRoomCount = now + 500; roomCounts = {factory:0,patio:0,garage:0};
+      for(const entry of agents.entries.values()) roomCounts[(entry.mesh.userData.room as FactoryRoom) ?? factoryRoomAt({x:entry.lastX,z:entry.lastZ})]++;
+    }
     if (focused && panel.open) panel.open = false;
-    const blocked = !focused && !available();
-    avatarShortcut.disabled = agentsShortcut.disabled = blocked;
-    contextAction.disabled = blocked && !state.active && !state.pending;
-    const text = focused ? '← back' : state.active ? 'release' : state.pending ? 'cancel' : !data.principal ? 'connect' : state.owned().length ? 'find mine' : 'help';
-    if (contextAction.textContent !== text) contextAction.textContent = text;
-    contextAction.title = focused ? `Return from ${focused}` : state.active ? 'Release your agent' : !data.principal ? 'Connect this browser' : 'Find your agent and open their controls';
-    const pressed = String(focused === 'avatar');
-    if (avatarShortcut.getAttribute('aria-pressed') !== pressed) avatarShortcut.setAttribute('aria-pressed', pressed);
+    const model = factoryToolbarState({ connected:data.connected, signedIn:!!data.principal,
+      owned:state.owned().length, active:!!state.active, pending:!!state.pending,
+      controlName:(()=>{const agent=state.agents.find(agent=>agent.sessionId===(state.active||state.pending)); return agent?.sessionName||agent?.cwd.split('/').filter(Boolean).at(-1)||agent?.username;})(),
+      focused, blocked:!available(), room:currentRoom() });
+    if(now>=nextProfileUpdate) { nextProfileUpdate=now+500;
+    profileMenu.update(state.owned().map(agent=>{
+      const entry=agents.entries.get(agent.sessionId);
+      const room=entry?((entry.mesh.userData.room as FactoryRoom)??factoryRoomAt({x:entry.lastX,z:entry.lastZ})):'factory';
+      return {id:agent.sessionId,name:agent.sessionName||agent.cwd.split('/').filter(Boolean).at(-1)||agent.username,
+        detail:`${room==='factory'?'workspace':room} · ${agent.activity}`,controlled:state.active===agent.sessionId,
+        pending:state.pending===agent.sessionId,unavailable:!!agent.manualControl&&state.active!==agent.sessionId};
+    }),data.connected,available(),state.error);
+    }
+    // This runs with the scene. Only mutate the DOM when the visible state changes.
+    const signature = JSON.stringify(model);
+    if (signature === toolbarSignature) { roomMenu.update(currentRoom(),roomCounts,data.connected,!!focused || !available()); return; }
+    const finishMotion = toolbarMotion.capture(!!toolbarSignature);
+    roomMenu.update(currentRoom(),roomCounts,data.connected,!!focused || !available());
+    toolbarSignature = signature;
+    toolbar.dataset.identity = model.identity; toolbar.dataset.view = model.view; toolbar.dataset.control = model.controlMode; toolbar.dataset.reconnecting = String(model.reconnecting);
+    controlIdentity.hidden = !model.controlStatus;
+    controlIdentity.querySelector('.factory-control-caption')!.textContent = model.controlStatus;
+    controlIdentity.querySelector('.factory-control-name')!.textContent = model.controlName;
+    controlIdentity.setAttribute('aria-label', `${model.controlStatus} ${model.controlName}`);
+    // Keep keyboard order aligned with the visible Back-first layout.
+    if (focused) viewTools.before(contextAction); else { avatarShortcut.before(controlIdentity); avatarShortcut.before(contextAction); }
+    roomPicker.disabled = model.navigationDisabled;
+    avatarShortcut.hidden = !model.showProfile;
+    roomPicker.hidden = !model.showRoomTools;
+    agentsShortcut.hidden = !model.showRoomTools;
+    for (const item of docked) item.group.hidden = item.view !== model.tools;
+    viewTools.hidden = !docked.some(item => !item.group.hidden);
+    focusTitle.textContent = focused ?? '';
+    focusTitle.hidden = !focused || focused === 'window' || focused === 'whiteboard';
+    avatarShortcut.disabled = agentsShortcut.disabled = model.navigationDisabled;
+    avatarShortcut.setAttribute('aria-label', model.profileLabel);
+    avatarShortcut.setAttribute('aria-pressed', String(model.profileSelected));
+    contextAction.hidden = !model.showPrimary;
+    contextAction.disabled = model.primaryDisabled;
+    contextAction.setAttribute('aria-busy',String(model.action==='reconnect'));
+    contextAction.dataset.action = model.action;
+    contextAction.setAttribute('aria-label', model.label);
+    contextAction.querySelector('.factory-nav-label')!.textContent = model.label;
+    contextAction.querySelector('.factory-nav-icon')!.innerHTML = contextIcons[model.action === 'release' || model.action === 'cancel' ? 'stop'
+      : model.action === 'customize' ? 'help' : model.action];
+    contextAction.dataset.tooltip = focused ? `Return from ${focused}` : model.action === 'connect' ? 'Connect this browser to customize your character'
+      : model.action === 'customize' ? 'Customize your avatar, even without an active agent'
+      : model.action === 'find' ? 'Find your agent and open their controls' : model.action === 'release' ? 'Stop controlling this agent' : model.label;
+    finishMotion();
   }
+
   function selectAgent(sessionId: string) {
     if (!available() || !state.owned().some(agent => agent.sessionId === sessionId)) return;
     picker.value = sessionId; placementNotice = ''; avatarRequested = false;
@@ -302,7 +404,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       if (message.success && message.action === 'start') sendFactoryCommand({ type: 'grab_end', ...placement });
       else { if (!message.success) state.error = message.error || 'That station is unavailable.'; else visit(WORKSTATIONS[placement.workstationSlot].room); placement = undefined; }
     }
-    state.handle(message); grab.handleMessage(message); paint(); });
+    state.handle(message); grab.handleMessage(message); if(state.error)panel.open=true; paint(); });
   const stopConnection = onFactoryConnection(connected => { placement = undefined; state.reset(); grab.handleConnected(); if (!connected) held.clear(); data = { ...data, connected }; paint(); });
   const ray = new THREE.Raycaster(), point = new THREE.Vector3(), garageFloor = new THREE.Plane(new THREE.Vector3(0,1,0),-GARAGE_LEVEL);
   function pointer(event: PointerEvent) {
@@ -411,7 +513,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   function syncData(next: BoardData) {
     if (data.principal?.ownerId !== next.principal?.ownerId) { avatarNotice = ''; if (next.principal) { connecting = false; connectionError = ''; state.error = ''; } }
     if (next.world && next.world !== data.world) clockOffset = next.world.serverTime - Date.now();
-    data = next; state.sync(next.world?.agents ?? [], next.principal?.ownerId); avatarEditor.sync();
+    data = next; void refreshPortrait(); state.sync(next.world?.agents ?? [], next.principal?.ownerId); avatarEditor.sync();
     login.hidden = !!next.principal; login.disabled = !next.connected;
     logout.hidden = !next.principal; paint();
     if (avatarRequested && next.principal && panel.open && (preview || factoryHost() === location.origin)) openAvatar();
@@ -437,17 +539,6 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       if (!sendFactoryCommand({type:'garage_car',sessionId:agent.sessionId,car})) return {message:'Connection lost. Try again when the factory reconnects.'};
       panel.open = false;
       return {message:'calling your agent…',sessionId:agent.sessionId};
-    },
-    openGarageStations() {
-      panel.open = true; placementNotice = '';
-      panel.querySelector<HTMLDetailsElement>('.factory-station-section')!.open = true;
-      const supported = (data.world?.workstationCount ?? 18) > 18;
-      if (!supported) placementNotice = 'The garage workstations are ready here; the shared factory server still needs this update.';
-      const available = [...stationPicker.options].filter(option => WORKSTATIONS[Number(option.value)]?.room === 'garage' && !option.disabled);
-      const slot = available.find(option => WORKSTATIONS[Number(option.value)]?.id === MINI_WORKSTATION_ID) ?? available[0];
-      if (slot) stationPicker.value = slot.value;
-      paint(); stationPicker.focus();
-      return supported;
     },
     getTargetSessionId() {
       const target = state.active ?? picker.value;
@@ -478,6 +569,6 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
         const target = fromFactoryWorld(pointer); agents.placeOverride(id, target);
       }
     },
-    dispose() { toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
+    dispose() { profileMenu.dispose(); roomMenu.dispose(); toolbarTooltip.dispose(); toolbarMotion.dispose(); toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
   };
 }

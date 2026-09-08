@@ -7,7 +7,7 @@ export const MIST_FLAG = {
 
 // Trim the original presentation canvas's empty margin, preserving its aspect
 // ratio and the exact pixel geometry. Picking uses this same ink window.
-export const MIST_INK_WINDOW = { x: 120, y: 102, width: 680, height: 382.5 } as const;
+export const MIST_INK_WINDOW = { x: 189, y: 158, width: 480, height: 270 } as const;
 
 /** CanvasTexture's top is UV v=1, including hits from the reverse face. */
 export function mistCanvasPoint(uv: { x: number; y: number }, rect: { left: number; top: number; width: number; height: number }) {

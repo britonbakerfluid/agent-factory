@@ -35,6 +35,7 @@ export function createEmoteBar(express: (emote: EmoteType) => void, stop: () => 
   }, events);
   document.body.append(bar);
   return {
+    element: bar,
     open() { if (!bar.hidden) { stop(); bar.open = true; buttons[selected].focus(); } },
     sync(active: boolean, available: boolean) {
       bar.hidden = !active || !available;

@@ -17,7 +17,7 @@ export const DEFAULT_AGENT_STYLES: Readonly<Record<AgentVisualState, AgentStateS
   waiting: style('idle', 1, '?', 'waiting', '#f7dfa3'),
   input: style('idle', 1, '?', 'needs your input', '#f7dfa3', 'text'),
   permission: style('idle', 1, '?', 'needs approval', '#f7dfa3', 'text'),
-  ready: style('idle', 1, '✓', 'ready for review', '#c7e6b6', 'text'),
+  ready: style('idle', 1, '✓', 'ready for review', '#c7e6b6', 'hidden'),
   error: style('idle', 1, '!', 'hit a problem', '#ffcabd', 'text'),
   stopped: style('idle', 0, '', 'session ended', '#a9bbc5', 'hidden'),
 };
