@@ -13,6 +13,8 @@ import type { createLiveAgents } from './factory25dLiveAgents';
 import { createAvatarEditor, type AvatarScenePreview } from './factory25dAvatarEditor';
 import { createEmoteBar } from './factory25dEmoteBar';
 import { AgentAttentionEpisodes, agentAttentionSummary, findPersonalAttentionAgent, personalAgentAttention } from './factory25dAgentAttention';
+import { createToolbarFocus } from './factory25dToolbarFocus';
+import { GRAB_DRAG_THRESHOLD } from '../grab/physics';
 import { ManualRoomFollower } from './factory25dManualTravel';
 import './factory25dControls.css';
 
@@ -28,9 +30,10 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const controlledAgent = () => state.agents.find(agent => agent.sessionId === state.active);
   const movementAvailable = () => available() && !controlledAgent()?.manualControl?.elevatorTrip;
   const panel = document.createElement('details'); panel.className = 'factory-controls pixel-island';
-  panel.innerHTML = `<summary role="button" aria-label="Agent controls" aria-describedby="factory-attention-count">agents <span class="factory-connection">connecting</span><span class="factory-attention-count" id="factory-attention-count" hidden></span></summary>
+  panel.id = 'factory-agent-controls';
+  panel.innerHTML = `<summary role="button" aria-label="Agent controls" aria-describedby="factory-attention-count"><span class="factory-controls-heading">agents</span> <span class="factory-connection">connecting</span><span class="factory-attention-count" id="factory-attention-count" hidden></span></summary>
     <div class="factory-control-content"><section class="factory-attention" aria-label="Your agent updates" hidden><p class="factory-attention-heading">your agent updates</p><ul class="factory-attention-list"></ul><p class="factory-attention-help">Reply in the app or terminal running your agent.</p></section><p class="factory-auth"></p><p class="factory-step-help"></p><div class="factory-session-actions"></div>
-    <section class="factory-connect-guide" hidden><p>on the computer running your agents:</p><code>agent-factory login</code><button class="factory-copy-login">copy command</button><p>open the connection link it gives you, then return here.</p></section>
+    <section class="factory-connect-guide" hidden aria-label="Connect to customize your avatar"><p>on the computer running your agents, run:</p><code>agent-factory login</code><button class="factory-copy-login">copy login command</button><p>this opens a connected browser. choose <strong>my avatar</strong> there to edit.</p><details><summary>login command not found?</summary><p>run <code>agent-factory update</code> first, then try login again.</p></details><p>each browser connects separately. no active agent needed.</p></section>
     <section class="factory-agent-section" hidden><label>your agent <select aria-label="Choose your agent"></select></label>
     <div class="factory-action-row"><button class="factory-claim">take control</button><button class="factory-release" hidden>release</button><button class="factory-visit">find agent</button></div>
     <details class="factory-station-section"><summary>move to a workstation</summary><label>workstation <select class="factory-station" aria-label="Choose a workstation"></select></label><button class="factory-place">place at station</button></details>
@@ -38,6 +41,29 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     <div class="factory-action-row factory-play-actions"><button class="factory-shoot">shoot</button><button class="factory-open-emotes">emotes · B</button></div>
     <p class="factory-key-help">W A S D to walk · space to shoot<br>B for emotes · escape to release<br>walk into the lift or through the patio doorway</p></section><p class="factory-control-status" role="status" aria-live="polite"></p></div>`;
   document.body.append(panel);
+  const toolbar = document.createElement('div'); toolbar.className = 'factory-toolbar pixel-island';
+  toolbar.innerHTML = `<div class="factory-toolbar-context"></div><nav class="factory-toolbar-actions" aria-label="Factory controls"><button type="button" class="factory-avatar-shortcut" aria-haspopup="dialog">my avatar</button><button type="button" class="factory-agents-shortcut" aria-controls="factory-agent-controls" aria-expanded="false">agents <span class="factory-toolbar-count" hidden></span></button><button type="button" class="factory-context-action">connect</button></nav>`;
+  const context = toolbar.querySelector('.factory-toolbar-context')!;
+  // Keep the existing room actions and their handlers, in one shared dock.
+  const docked = [...document.querySelectorAll<HTMLElement>('#room-navigation, .garage-nav, .mobile-explore')].map(element => {
+    const anchor = document.createComment('factory room controls'); element.before(anchor); context.append(element);
+    return { element, anchor };
+  });
+  document.body.append(toolbar); document.body.classList.add('factory-toolbar-ready');
+  const sizeToolbar = new ResizeObserver(() => {
+    if (toolbar.offsetHeight) document.body.style.setProperty('--factory-toolbar-height', `${toolbar.offsetHeight}px`);
+  });
+  sizeToolbar.observe(toolbar);
+  const avatarShortcut = toolbar.querySelector<HTMLButtonElement>('.factory-avatar-shortcut')!;
+  const agentsShortcut = toolbar.querySelector<HTMLButtonElement>('.factory-agents-shortcut')!;
+  agentsShortcut.addEventListener('click', () => toolbarFocus.run(() => { panel.open = !panel.open; }), options);
+  panel.addEventListener('toggle', () => agentsShortcut.setAttribute('aria-expanded', String(panel.open)), options);
+  document.addEventListener('pointerdown', event => {
+    if (panel.open && !panel.contains(event.target as Node) && !toolbar.contains(event.target as Node)) panel.open = false;
+  }, options);
+  panel.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !state.active) { event.preventDefault(); event.stopPropagation(); state.release(); panel.open = false; agentsShortcut.focus(); }
+  }, options);
   const attentionEpisodes = new AgentAttentionEpisodes();
   const attentionSection = panel.querySelector<HTMLElement>('.factory-attention')!;
   const attentionList = panel.querySelector<HTMLElement>('.factory-attention-list')!;
@@ -52,7 +78,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const status = panel.querySelector<HTMLElement>('.factory-control-status')!;
   const emoteBar = createEmoteBar(emote => { state.emote(emote); }, () => { state.stop(); panel.open = false; });
   const auth = new AuthManager();
-  let signature = '', connectionError = '', avatarNotice = '', placementNotice = '', connecting = false;
+  let signature = '', connectionError = '', avatarNotice = '', placementNotice = '', connecting = false, avatarRequested = false;
   let placement: { sessionId: string; x: number; y: number; workstationSlot: number } | undefined;
   const stationPicker = panel.querySelector<HTMLSelectElement>('.factory-station')!;
   const placeButton = panel.querySelector<HTMLButtonElement>('.factory-place')!;
@@ -78,16 +104,35 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     });
   const avatarEditor = createAvatarEditor(
     () => preview || factoryHost() === location.origin ? data.principal : undefined,
-    () => { state.release(); grab.release(); avatarNotice = ''; paint(); },
+    () => { state.release(); grab.release(); panel.open = false; avatarRequested = false; avatarNotice = ''; paint(); },
     () => { avatarNotice = preview ? 'avatar saved in this playground' : 'avatar saved for your agents'; paint(); },
     avatarScene, preview ? previewAvatar : undefined);
+  const toolbarFocus = createToolbarFocus(toolbar, available, () => avatarEditor.requestClose());
+  const contextAction = toolbar.querySelector<HTMLButtonElement>('.factory-context-action')!;
+  contextAction.addEventListener('click', () => {
+    if (toolbarFocus.name()) { toolbarFocus.back(); return; }
+    if (state.active || state.pending) { state.release(); paint(); return; }
+    if (!data.principal) { showConnectionGuide(); return; }
+    if (state.owned().length) { findAgent(); panel.open = true; }
+    else panel.open = !panel.open;
+  }, options);
   const editAvatar = document.createElement('button'); editAvatar.textContent = 'edit avatar';
   editAvatar.className = 'factory-edit-avatar';
   panel.querySelector('.factory-session-actions')!.append(editAvatar);
-  editAvatar.addEventListener('click', () => { void avatarEditor.open(); }, options);
+  function openAvatar() {
+    if (data.principal && (preview || factoryHost() === location.origin)) { void avatarEditor.open(); return; }
+    avatarRequested = true; showConnectionGuide();
+  }
+  editAvatar.addEventListener('click', openAvatar, options);
+  avatarShortcut.addEventListener('click', () => {
+    if (toolbarFocus.name() !== 'avatar') toolbarFocus.run(openAvatar);
+  }, options);
   function paintAttention() {
     const items = personalAgentAttention(data), summary = agentAttentionSummary(items);
     attentionCount.hidden = !summary; attentionCount.textContent = summary;
+    const toolbarCount = toolbar.querySelector<HTMLElement>('.factory-toolbar-count')!;
+    toolbarCount.hidden = !items.length; toolbarCount.textContent = String(items.length);
+    agentsShortcut.setAttribute('aria-label', summary ? `Agents: ${summary}` : 'Agents');
     attentionCount.dataset.kind = items.some(item => item.kind === 'input' || item.kind === 'permission')
       ? 'input' : items.some(item => item.kind === 'error') ? 'error' : 'ready';
     panel.querySelector<HTMLElement>('.factory-connection')!.hidden = !!summary;
@@ -123,11 +168,13 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     if (panel.dataset.state !== phase) panel.dataset.state = phase;
     panel.querySelector('.factory-connection')!.textContent = state.active ? 'you’re in control' : data.connected ? `${data.agents.length} ${preview ? 'sample' : 'live'}` : 'reconnecting';
     paintAttention();
+    panel.querySelector('.factory-controls-heading')!.textContent = avatarRequested ? 'my avatar' : connecting ? 'connect your browser' : 'agents';
+    if (connecting) panel.querySelector<HTMLElement>('.factory-connection')!.hidden = true;
     panel.querySelector('.factory-auth')!.textContent = data.principal ? `connected as ${data.principal.username}` : preview ? 'watching the local playground' : 'watching the shared factory';
     const help = {
-      watching: 'look around, or connect to join with your agents.',
-      connecting: 'connect once to unlock your agents in this browser.',
-      empty: 'you’re connected. your agents will appear here when you start a session.',
+      watching: 'connect this browser to customize your character and join with your agents.',
+      connecting: 'connect once to save your character.',
+      empty: 'you can customize your avatar now. start a new agent session to walk around with it.',
       ready: 'choose an agent, then take control to walk around.',
       claiming: 'waiting for the factory to hand you the controls…',
       controlling: 'you’re in. walk around or pick a reaction from the emote bar.',
@@ -135,7 +182,8 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       error: 'we couldn’t finish that step. you can try again.',
     };
     panel.querySelector('.factory-step-help')!.textContent = help[phase];
-    panel.querySelector<HTMLElement>('.factory-connect-guide')!.hidden = !connecting || !!data.principal;
+    panel.querySelector<HTMLElement>('.factory-connect-guide')!.hidden = !connecting || !!data.principal || (!preview && factoryHost() !== location.origin);
+    paintToolbar();
     const list = state.owned(), next = JSON.stringify(list.map(a => [a.sessionId, a.sessionName, a.activity]));
     if (next !== signature) {
       const selected = picker.value; picker.replaceChildren(); signature = next;
@@ -172,11 +220,33 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     status.textContent = connectionError || state.error || placementNotice || (trip ? `riding ${panel.dataset.walkRoom === 'garage' ? 'down to the garage' : 'up to the factory'}…` : '');
     panel.classList.toggle('is-controlling', !!state.active);
     editAvatar.hidden = !data.principal;
-    editAvatar.disabled = !data.principal || (!preview && factoryHost() !== location.origin);
-    editAvatar.title = editAvatar.disabled ? 'Connect this browser at the factory to edit your avatar' : 'Customize the look of your agents';
+    editAvatar.title = 'Customize the look of your agents';
+    avatarShortcut.title = data.principal ? 'Customize the look of your agents' : 'Connect this browser to customize your avatar';
     if (avatarNotice && !connectionError && !state.error) status.textContent = avatarNotice;
     emoteBar.sync(!!state.active, movementAvailable());
   }
+  function paintToolbar() {
+    const focused = toolbarFocus.name();
+    if (focused && panel.open) panel.open = false;
+    const blocked = !focused && !available();
+    avatarShortcut.disabled = agentsShortcut.disabled = blocked;
+    contextAction.disabled = blocked && !state.active && !state.pending;
+    const text = focused ? '← back' : state.active ? 'release' : state.pending ? 'cancel' : !data.principal ? 'connect' : state.owned().length ? 'find mine' : 'help';
+    if (contextAction.textContent !== text) contextAction.textContent = text;
+    contextAction.title = focused ? `Return from ${focused}` : state.active ? 'Release your agent' : !data.principal ? 'Connect this browser' : 'Find your agent and open their controls';
+    const pressed = String(focused === 'avatar');
+    if (avatarShortcut.getAttribute('aria-pressed') !== pressed) avatarShortcut.setAttribute('aria-pressed', pressed);
+  }
+  function selectAgent(sessionId: string) {
+    if (!available() || !state.owned().some(agent => agent.sessionId === sessionId)) return;
+    picker.value = sessionId; placementNotice = ''; avatarRequested = false;
+    panel.open = true; state.stop(); paint(); claim.focus({ preventScroll: true });
+  }
+  document.addEventListener('click', event => {
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>('.agent-label[data-session-id] .agent-name') : null;
+    const id = target?.closest<HTMLElement>('.agent-label')?.dataset.sessionId;
+    if (id && event.detail === 0) selectAgent(id);
+  }, options);
   function findAgent() {
     const entry = agents.entries.get(state.active ?? picker.value); if (entry) visit((entry.mesh.userData.room as FactoryRoom | undefined) ?? 'factory');
   }
@@ -242,20 +312,57 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     const world = toFactoryWorld(factoryWorldPoint(point,currentRoom())); return { id: event.pointerId, worldX: world.x, worldY: world.y };
   }
   let dragPointer: number | undefined;
+  let captureTarget: HTMLElement | undefined;
+  let agentPress: { id: string; x: number; y: number; worldX: number; worldY: number; moved: boolean } | undefined;
   const pointerOptions = { ...options, capture: true };
-  canvas.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || !available()) return;
+  function beginAgentPress(event: PointerEvent, mesh: THREE.Object3D, target: HTMLElement) {
+    if (dragPointer !== undefined) return;
     const p = pointer(event); if (!p) return;
+    agentPress = { id: mesh.userData.sessionId, x: event.clientX, y: event.clientY, worldX: p.worldX, worldY: p.worldY, moved: false };
+    dragPointer = event.pointerId; captureTarget = target;
+    event.preventDefault(); event.stopImmediatePropagation();
+    state.stop(); target.setPointerCapture(event.pointerId); emit('gameobjectdown', p, mesh);
+  }
+  canvas.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || !available() || !pointer(event)) return;
     const hit = ray.intersectObjects([...agents.entries.values()].filter(entry => entry.mesh.visible && entry.mesh.userData.room === currentRoom()).map(entry => entry.mesh), false)[0];
-    if (!hit) return;
-    dragPointer = event.pointerId; event.preventDefault(); event.stopImmediatePropagation();
-    state.stop(); canvas.setPointerCapture(event.pointerId); emit('gameobjectdown', p, hit.object);
+    if (hit) beginAgentPress(event, hit.object, canvas);
   }, pointerOptions);
-  canvas.addEventListener('pointermove', event => { if (dragPointer !== event.pointerId) return; event.stopImmediatePropagation(); const p = pointer(event); if (p) emit('pointermove', p); }, pointerOptions);
-  canvas.addEventListener('pointerup', event => { if (dragPointer !== event.pointerId) return; dragPointer = undefined; event.stopImmediatePropagation(); const p = pointer(event); if (p) emit('pointerup', p); if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId); }, pointerOptions);
-  canvas.addEventListener('pointercancel', () => { dragPointer = undefined; grab.release(); }, options);
+  // The label's hit area extends over the sprite. Route both surfaces through
+  // the same tap/drag gesture so its accessible button does not swallow grabs.
+  document.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || !available() || !(event.target instanceof Element)) return;
+    const target = event.target.closest<HTMLElement>('.agent-label[data-session-id] .agent-name');
+    const id = target?.closest<HTMLElement>('.agent-label')?.dataset.sessionId;
+    const entry = id ? agents.entries.get(id) : undefined;
+    if (target && entry?.mesh.visible && entry.mesh.userData.room === currentRoom()) beginAgentPress(event, entry.mesh, target);
+  }, pointerOptions);
+  function moveAgentPress(event: PointerEvent) {
+    if (dragPointer !== event.pointerId) return;
+    event.stopImmediatePropagation(); const p = pointer(event);
+    if (agentPress && (Math.hypot(event.clientX - agentPress.x, event.clientY - agentPress.y) >= 6
+      || p && Math.hypot(p.worldX - agentPress.worldX, p.worldY - agentPress.worldY) >= GRAB_DRAG_THRESHOLD)) agentPress.moved = true;
+    if (p) emit('pointermove', p);
+  }
+  function endAgentPress(event: PointerEvent) {
+    if (dragPointer !== event.pointerId) return;
+    dragPointer = undefined; event.stopImmediatePropagation();
+    const press = agentPress; agentPress = undefined;
+    const p = pointer(event); if (p) emit('pointerup', p); else grab.release();
+    if (captureTarget?.hasPointerCapture(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
+    captureTarget = undefined;
+    if (press && !press.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) < 6) selectAgent(press.id);
+  }
+  document.addEventListener('pointermove', moveAgentPress, pointerOptions);
+  document.addEventListener('pointerup', endAgentPress, pointerOptions);
+  function cancelAgentPress(event: PointerEvent) {
+    if (event.pointerId !== dragPointer) return;
+    dragPointer = undefined; captureTarget = undefined; agentPress = undefined; grab.release();
+  }
+  document.addEventListener('pointercancel', cancelAgentPress, options);
+  document.addEventListener('lostpointercapture', cancelAgentPress, options);
   const sessionActions = panel.querySelector('.factory-session-actions')!;
-  const login = document.createElement('button'); login.textContent = 'connect this browser'; sessionActions.append(login);
+  const login = document.createElement('button'); login.textContent = 'connect this browser'; login.className = 'factory-login'; login.dataset.preview = String(preview); sessionActions.append(login);
   const logout = document.createElement('button'); logout.textContent = 'disconnect'; logout.hidden = true; sessionActions.append(logout);
   async function logOut() {
     if (preview) { avatarEditor.invalidate(); state.release(); grab.handleLoggedOut(); held.clear(); logoutControlPreview(); return true; }
@@ -274,14 +381,17 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       return false;
     }
   }
-  login.addEventListener('click', () => {
-    connectionError = ''; state.error = ''; connecting = true;
-    if (preview) { connectControlPreview(); paint(); return; }
-    if (factoryHost() !== location.origin) {
-      const link = document.createElement('a'); link.href = new URL('/', factoryHost()).href; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'connect at the live factory ↗';
-      sessionActions.append(link); login.hidden = true;
-    }
+  const liveLink = document.createElement('a'); liveLink.href = new URL('/', factoryHost()).href;
+  liveLink.target = '_blank'; liveLink.rel = 'noopener'; liveLink.textContent = 'open the live factory to customize ↗'; liveLink.hidden = true; sessionActions.append(liveLink);
+  function showConnectionGuide() {
+    connectionError = ''; state.error = ''; connecting = true; panel.open = true;
+    liveLink.hidden = preview || factoryHost() === location.origin;
     paint();
+    (liveLink.hidden ? panel.querySelector<HTMLButtonElement>('.factory-copy-login')! : liveLink).focus({ preventScroll: true });
+  }
+  login.addEventListener('click', () => {
+    if (preview) { connectControlPreview(); paint(); return; }
+    showConnectionGuide();
   }, options);
   panel.querySelector('.factory-copy-login')!.addEventListener('click', () => {
     void navigator.clipboard.writeText('agent-factory login').then(() => {
@@ -304,9 +414,10 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     data = next; state.sync(next.world?.agents ?? [], next.principal?.ownerId); avatarEditor.sync();
     login.hidden = !!next.principal; login.disabled = !next.connected;
     logout.hidden = !next.principal; paint();
+    if (avatarRequested && next.principal && panel.open && (preview || factoryHost() === location.origin)) openAvatar();
   }
   const stopPreview = onControlPreview((scenario, next) => {
-    state.reset(); state.error = ''; connectionError = ''; connecting = scenario === 'connecting' || scenario === 'expired';
+    state.reset(); state.error = ''; connectionError = ''; avatarRequested = false; connecting = scenario === 'connecting' || scenario === 'expired';
     avatarEditor.invalidate(); visit(scenario === 'garage' || scenario === 'mini-laptop' ? 'garage' : 'factory'); syncData(next);
     panel.querySelector<HTMLDetailsElement>('.factory-station-section')!.open = false;
     if (scenario === 'expired') connectionError = 'That connection link expired. Connect again to get a fresh link.';
@@ -353,6 +464,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       syncData(next);
     },
     update() {
+      toolbarFocus.update(); paintToolbar();
       const riding = !!controlledAgent()?.manualControl?.elevatorTrip;
       if (wasRiding && !riding && state.active) { state.stop(); state.heartbeat(); }
       wasRiding = riding;
@@ -366,6 +478,6 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
         const target = fromFactoryWorld(pointer); agents.placeOverride(id, target);
       }
     },
-    dispose() { avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); panel.remove(); attentionAnnouncer.remove(); },
+    dispose() { toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
   };
 }

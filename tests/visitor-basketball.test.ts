@@ -68,3 +68,61 @@ describe('visitor shot physics', () => {
     expect(stepVisitorBall(up, .02).swish).toBe(false);
   });
 });
+
+describe('manual pull-back shots and room travel', () => {
+  it('uses pull direction and strength, with no hoop correction', async () => {
+    const { visitorPullVelocity } = await import('../shared/visitor-basketball');
+    expect(visitorPullVelocity({x:0,z:0})).toEqual({x:0,y:0,z:0});
+    const soft = visitorPullVelocity({x:0,z:-.2}), hard = visitorPullVelocity({x:0,z:-1.2});
+    expect(Math.abs(hard.z)).toBeGreaterThan(Math.abs(soft.z));
+    expect(hard.y).toBeGreaterThan(soft.y);
+    expect(visitorPullVelocity({x:1,z:0}).z).toBe(0);
+    expect(visitorPullVelocity({x:1,z:0}).x).toBeGreaterThan(0);
+    expect(validBallVector(visitorPullVelocity({x:100,z:-100}),true)).toBe(true);
+    expect(visitorPullVelocity({x:NaN,z:0})).toEqual({x:0,y:0,z:0});
+  });
+  it('rewards a well-aimed short shot and misses with the same power off-axis at slow or fast frame rates', async () => {
+    const { visitorPullVelocity } = await import('../shared/visitor-basketball');
+    for (const dt of [1/120,1/30,.1]) {
+      for (const x of [0,.18]) {
+        const ball: FlyingBall = {position:{x:1.3,y:.55,z:-5.65},velocity:visitorPullVelocity({x,z:-.11}),scored:false};
+        for(let t=0;t<3;t+=dt) stepVisitorBall(ball,dt);
+        expect(ball.scored).toBe(x===0);
+      }
+    }
+  });
+  it('allows persistent floor positions across the full factory, lower patio, and garage', () => {
+    for (const room of ['factory','patio','garage'] as const) {
+      const p = room === 'factory' ? {x:-3,y:.55,z:8.5} : room === 'patio' ? {x:15,y:.55,z:9} : {x:3,y:.55,z:8};
+      const ball: FlyingBall = {position:p,velocity:{x:0,y:0,z:0},scored:false,room};
+      for(let i=0;i<400;i++) stepVisitorBall(ball,.05);
+      expect(validBallVector(ball.position,false,room)).toBe(true);
+      expect(ball.position.x).toBeCloseTo(p.x);
+      expect(ball.position.y).toBeCloseTo(room==='patio' ? -1.12 + VISITOR_BALL_RADIUS : VISITOR_BALL_RADIUS);
+      expect(Math.hypot(ball.velocity.x,ball.velocity.y,ball.velocity.z)).toBeLessThan(.1);
+    }
+  });
+  it('connects only the elevator cabins and patio door, with valid destination positions', async () => {
+    const { visitorBallExit } = await import('../shared/visitor-ball-travel');
+    for (const [room, p, destination] of [
+      ['factory',{x:-7.1,y:.5,z:-5.2},'garage'], ['garage',{x:-10.5,y:.5,z:-3.2},'factory'],
+      ['factory',{x:7.7,y:.5,z:-4.45},'patio'], ['patio',{x:8.1,y:.5,z:-2.5},'factory'],
+    ] as const) {
+      const exit=visitorBallExit(p,room)!; expect(exit.room).toBe(destination);
+      expect(validBallVector(exit.position,false,exit.room)).toBe(true);
+    }
+    expect(visitorBallExit({x:7.7,y:.5,z:4},'factory')).toBeUndefined();
+    expect(visitorBallExit({x:-7.1,y:3,z:-5.2},'factory')).toBeUndefined();
+  });
+  it('relays room-aware public throws while rejecting forged rooms and out-of-room positions', () => {
+    const s=setup(), p={x:-10.5,y:.55,z:-3};
+    s.relay.receive(s.a,{phase:'hold',room:'garage',position:p});
+    expect(s.messages().at(-1)).toMatchObject({room:'garage',position:p});
+    s.later(100);
+    s.relay.receive(s.a,{phase:'hold',room:'admin',position:p});
+    s.relay.receive(s.a,{phase:'hold',room:'factory',position:p});
+    expect(s.messages()).toHaveLength(1);
+    s.relay.receive(s.a,{phase:'throw',room:'garage',position:p,velocity:{x:0,y:5,z:2}});
+    expect(s.messages().at(-1)).toMatchObject({phase:'throw',room:'garage'});
+  });
+});

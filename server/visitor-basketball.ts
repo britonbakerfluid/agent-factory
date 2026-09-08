@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from '@fastify/websocket';
-import { validBallVector, type BallVector, type VisitorBallUpdate } from '../shared/visitor-basketball.js';
+import { validBallVector, validBallRoom, type BallVector, type VisitorBallUpdate } from '../shared/visitor-basketball.js';
 import type { BroadcastManager } from './ws/broadcast.js';
 
 /** Public, ephemeral ghost balls. This channel never changes agents or scores. */
@@ -10,8 +10,10 @@ export class VisitorBasketball {
   receive(socket: WebSocket, value: unknown) {
     if (!value || typeof value !== 'object') return;
     const msg = value as Record<string, unknown>, now = this.now();
+    if (msg.room !== undefined && !validBallRoom(msg.room)) return;
+    const room = validBallRoom(msg.room) ? msg.room : 'factory';
     if (!['hold', 'throw', 'cancel'].includes(String(msg.phase))) return;
-    if (msg.phase !== 'cancel' && !validBallVector(msg.position)) return;
+    if (msg.phase !== 'cancel' && !validBallVector(msg.position, false, room)) return;
     if (msg.phase === 'throw' && !validBallVector(msg.velocity, true)) return;
     let peer = this.peers.get(socket);
     if (!peer) {
@@ -26,6 +28,7 @@ export class VisitorBasketball {
     const vector = (value: unknown) => { const p = value as BallVector; return { x: p.x, y: p.y, z: p.z }; };
     peer.state = { type: 'visitor_ball_update', visitorId: peer.id, serverTime: now,
       phase: msg.phase as 'hold' | 'throw', position: vector(msg.position),
+      room,
       ...(msg.phase === 'throw' ? { velocity: vector(msg.velocity) } : {}) };
     this.broadcast.broadcastVisitorBall(peer.state, socket);
   }

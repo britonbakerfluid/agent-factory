@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WebSocket } from '@fastify/websocket';
-import { GarageDrivingSimulation, GARAGE_MAX_MARKS, GARAGE_MARK_LIFETIME_MS, GARAGE_FULL_REPAIR_SECONDS, garageCarBlocksSegment } from '../shared/factory25d-driving';
+import { GarageDrivingSimulation, GARAGE_MAX_MARKS, GARAGE_MARK_LIFETIME_MS, GARAGE_FULL_REPAIR_SECONDS, GARAGE_DRIVE_PROFILES, garageCarBlocksSegment } from '../shared/factory25d-driving';
 import { GARAGE_CAR_BAYS, GARAGE_CAR_IDS, GARAGE_CAR_YAW, garageCarVisitPose } from '../shared/factory25d-garage';
 import { GarageDrivingManager, GARAGE_INPUT_STALE_MS, GARAGE_LEASE_IDLE_MS } from '../server/garage-driving';
 import { StateManager } from '../server/state';
@@ -94,7 +94,66 @@ describe('shared garage physics', () => {
     expect(car.x).toBeLessThan(11); expect(car.damage).toBeGreaterThan(0); expect(car.damage).toBeLessThanOrEqual(1);
     Object.assign(car, { x: -4.6, z: 5, yaw: Math.PI, vx: 0, vz: -6 });
     for (let i = 0; i < 120; i++) { sim.step(1 / 60, 30_000 + i * 1000 / 60); expect(sim.isClear(car)).toBe(true); }
-    expect(car.z).toBeGreaterThan(2); expect(sim.car('porsche').damage).toBeGreaterThan(0);
+    expect(car.z).toBeLessThan(2); expect(sim.car('porsche').z).toBeLessThan(GARAGE_CAR_BAYS.porsche.z);
+    expect(sim.car('porsche').damage).toBeGreaterThan(0); expect(sim.cars.every(c => sim.isClear(c))).toBe(true);
+  });
+
+  it('transfers bumper momentum by mass, moves parked cars, then lets them settle without changing ownership', () => {
+    const launch = (target: 'porsche' | 'f1') => {
+      const sim = new GarageDrivingSimulation(); sim.claim('mini', 'driver');
+      const car = sim.car('mini'), pushed = sim.car(target);
+      Object.assign(car, { x: -3, z: 7, yaw: Math.PI / 2, vx: 6 });
+      const gap = (GARAGE_DRIVE_PROFILES.mini.length + GARAGE_DRIVE_PROFILES[target].length) / 2 + .28;
+      Object.assign(pushed, { x: -3 + gap + .01, z: 7, yaw: Math.PI / 2 });
+      sim.step(1 / 120, 1000);
+      expect(car.vx).toBeGreaterThan(0); expect(car.vx).toBeLessThan(6);
+      expect(pushed.vx).toBeGreaterThan(0); expect(sim.cars.every(c => sim.isClear(c))).toBe(true);
+      const transferred = pushed.vx, oldX = pushed.x;
+      sim.setInput('mini', { throttle: -1, steer: 0, drift: false }); step(sim, .1);
+      Object.assign(car, { x: -9, z: 8, vx: 0, vz: 0 }); sim.setInput('mini', { throttle: 0, steer: 0, drift: false });
+      step(sim, 5);
+      expect(pushed.x).toBeGreaterThan(oldX + .1); expect(pushed.vx).toBe(0); expect(pushed.vz).toBe(0);
+      expect(pushed.mode).toBe('parked'); expect(pushed.driverVisitorId).toBeUndefined();
+      const settled = pushed.x; step(sim, 1); expect(pushed.x).toBe(settled);
+      return transferred;
+    };
+    expect(launch('f1')).toBeGreaterThan(launch('porsche'));
+  });
+
+  it('pushes occupied cars and chains while retaining their drivers, with all bodies bounded at a wall', () => {
+    const sim = new GarageDrivingSimulation(); sim.claim('mini', 'a'); sim.claim('porsche', 'b');
+    const a = sim.car('mini'), b = sim.car('porsche'), c = sim.car('f1');
+    Object.assign(a, { x: 3, z: 7, yaw: Math.PI / 2, vx: 7 });
+    Object.assign(b, { x: 5.17, z: 7, yaw: Math.PI / 2 });
+    Object.assign(c, { x: 7.7, z: 7, yaw: Math.PI / 2 });
+    sim.setInput('mini', { throttle: 1, steer: 0, drift: false });
+    for (let i = 0; i < 300; i++) {
+      sim.step(1 / 60, 1000 + i * 1000 / 60);
+      expect(sim.cars.every(car => sim.isClear(car))).toBe(true);
+    }
+    expect(b.x).toBeGreaterThan(5.5); expect(c.x).toBeGreaterThan(8);
+    expect(c.x).toBeLessThan(10.52);
+    expect(b).toMatchObject({ mode: 'driving', driverVisitorId: 'b' });
+    expect(a).toMatchObject({ mode: 'driving', driverVisitorId: 'a' });
+    expect(sim.claim('porsche', 'a')).toBe(false);
+  });
+
+  it('nudges a pushable pedestrian with bounded steps and keeps car power, while walls block unsafe nudges', () => {
+    const sim = new GarageDrivingSimulation(); sim.claim('mini', 'visitor');
+    const car = sim.car('mini'); Object.assign(car, { x: -3, z: 7, yaw: Math.PI / 2, vx: 5 });
+    const pedestrian = { sessionId: 'walker', x: -1.7, z: 7, radius: .32, pushable: true };
+    for (let i = 0; i < 15; i++) {
+      sim.setInput('mini', { throttle: 1, steer: 0, drift: false }); sim.step(1 / 60, 1000 + i * 1000 / 60, [pedestrian]);
+      for (const push of sim.pedestrianPushes) {
+        expect(Math.hypot(push.x - push.fromX, push.z - push.fromZ)).toBeLessThan(.3);
+        Object.assign(pedestrian, { x: push.x, z: push.z });
+      }
+      expect(sim.isClear(car)).toBe(true);
+    }
+    expect(pedestrian.x).toBeGreaterThan(-1); expect(car.vx).toBeGreaterThan(3); expect(car.damage).toBe(0);
+    Object.assign(car, { x: 10.32, z: 7, vx: 3 }); Object.assign(pedestrian, { x: 11.479, z: 7 });
+    const before = pedestrian.x; sim.step(.1, 2000, [pedestrian]);
+    expect(sim.pedestrianPushes).toHaveLength(0); expect(pedestrian.x).toBe(before); expect(sim.isClear(car)).toBe(true);
   });
 
   it('brakes for anonymous pedestrian capsules without damage or passing through them', () => {
@@ -356,6 +415,39 @@ describe('public garage control ownership', () => {
     Object.assign(f.manager.simulation.car('mini'), { z: 9 }); f.tick(2300);
     expect(agent.world.movement).toMatchObject({ from, to, startedAt: 1400, arrivesAt: 4400 });
     expect(f.state.getCurrentPosition('walker', 2300)).toEqual(held);
+  });
+
+  it.each([false, true])('authoritatively nudges people without changing identity, activity, or manual lease (manual=%s)', manual => {
+    const f = setup();
+    f.state.handleHookEvent({ hook_event_name: 'SessionStart', session_id: 'walker', username: 'walker', ownerId: 'owner', cwd: '/factory', avatar: DEFAULT_AVATAR });
+    const agent = f.state.get('walker')!;
+    const position = toFactoryWorld({ x: -1.7, z: 31 });
+    agent.world = { zone: 'idle', position, facing: 'right' };
+    if (manual) agent.manualControl = { ...position, moving: false, facing: 'right' };
+    const activity = agent.activity, lastEventAt = agent.lastEventAt, owner = agent.ownerId;
+    f.manager.receive(f.a.socket, { action: 'claim', car: 'mini' });
+    Object.assign(f.manager.simulation.car('mini'), { x: -3, z: 7, yaw: Math.PI / 2, vx: 5 });
+    f.tick(1050);
+    expect(agent.world.position.x).toBeGreaterThan(position.x);
+    expect(agent).toMatchObject({ activity, lastEventAt, ownerId: owner, sessionId: 'walker' });
+    if (manual) expect(agent.manualControl).toMatchObject({ ...agent.world.position, moving: false, facing: 'right' });
+    else expect(agent.manualControl).toBeUndefined();
+    expect(f.state.getAll()).toHaveLength(1);
+    // The public car packet cannot manufacture a displacement or acquire the person's controls.
+    const moved = { ...agent.world.position };
+    f.manager.receive(f.b.socket, { action: 'input', car: 'mini', input: { throttle: 1, steer: 0, drift: false }, sessionId: 'walker', x: 999, z: 999 });
+    expect(agent.world.position).toEqual(moved);
+  });
+
+  it('keeps a nudged automatic pedestrian destination and resumes a clear route', () => {
+    const f = setup(); f.state.handleHookEvent({ hook_event_name: 'SessionStart', session_id: 'walker', username: 'walker', cwd: '/factory', avatar: DEFAULT_AVATAR });
+    const agent = f.state.get('walker')!, from = toFactoryWorld({ x: -1.7, z: 31 }), to = toFactoryWorld({ x: -1.7, z: 33 });
+    agent.world = { zone: 'idle', position: from, facing: 'down', movement: { from, to, startedAt: 1000, arrivesAt: 11000 } };
+    f.manager.receive(f.a.socket, { action: 'claim', car: 'mini' }); Object.assign(f.manager.simulation.car('mini'), { x: -3, z: 7, yaw: Math.PI / 2, vx: 5 });
+    f.tick(1050); expect(agent.world.position.x).toBeGreaterThan(from.x);
+    Object.assign(f.manager.simulation.car('mini'), { x: -8, z: 7, vx: 0 }); f.tick(1100);
+    expect(agent.world.movement?.to).toEqual(to);
+    expect(agent.world.movement!.from.x).toBeGreaterThan(from.x);
   });
 
   it('finishes a parked idle driver with the existing exit animation and no second engine rev', () => {

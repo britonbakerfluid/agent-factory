@@ -39,11 +39,15 @@ class Context {
   createBiquadFilter() { return Object.assign(new Node(), {frequency: new Parameter(), Q: new Parameter()}); }
   createStereoPanner() { return Object.assign(new Node(), {pan: new Parameter()}); }
   createPeriodicWave() { return {}; }
-  createBuffer(_channels: number, length: number) { const data = new Float32Array(length); return {getChannelData: () => data}; }
+  createBuffer(_channels: number, length: number, rate = this.sampleRate) { const data = new Float32Array(length); return { getChannelData: () => data, copyToChannel: (samples: Float32Array) => data.set(samples), duration: length / rate }; }
   decodeAudioData = vi.fn(async () => ({duration: 6}));
 }
 class Control extends EventTarget {
   value = ''; textContent = ''; hidden = false;
+  children = new Map<string, Control>();
+  parentElement = { insertBefore: vi.fn() };
+  querySelector(selector: string) { if (!this.children.has(selector)) this.children.set(selector, new Control()); return this.children.get(selector)!; }
+  remove = vi.fn();
   setAttribute() {}
 }
 
@@ -52,7 +56,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 it('keeps engines opt-in, shares the ambient master, bounds revs and stops on leave, mute, hidden tab and disposal', async () => {
   vi.useFakeTimers();
   const controls = new Map(['scene-sound-toggle', 'scene-volume', 'scene-sound-level', 'scene-volume-value', 'scene-sound-status'].map(id => [`#${id}`, new Control()]));
-  const document = Object.assign(new EventTarget(), {hidden: false, querySelector: (selector: string) => controls.get(selector)});
+  const document = Object.assign(new EventTarget(), { createElement: () => new Control(), hidden: false, querySelector: (selector: string) => controls.get(selector)});
   const contexts: Context[] = [];
   vi.stubGlobal('document', document);
   vi.stubGlobal('window', {setTimeout});
@@ -124,7 +128,7 @@ it('keeps engines opt-in, shares the ambient master, bounds revs and stops on le
 it('keeps thunder opt-in, reuses its rumble, and drops old claps on mute or a hidden tab', async () => {
   vi.useFakeTimers();
   const controls = new Map(['scene-sound-toggle', 'scene-volume', 'scene-sound-level', 'scene-volume-value', 'scene-sound-status'].map(id => [`#${id}`, new Control()]));
-  const document = Object.assign(new EventTarget(), {hidden: false, querySelector: (selector: string) => controls.get(selector)});
+  const document = Object.assign(new EventTarget(), { createElement: () => new Control(), hidden: false, querySelector: (selector: string) => controls.get(selector)});
   const contexts: Context[] = [];
   vi.stubGlobal('document', document); vi.stubGlobal('window', {setTimeout});
   vi.stubGlobal('localStorage', {getItem: () => null, setItem() {}});
@@ -162,7 +166,7 @@ it('keeps thunder opt-in, reuses its rumble, and drops old claps on mute or a hi
 it('keeps vending and light actions in the opt-in mixer and cancels them on zero volume, hide and disposal', async () => {
   vi.useFakeTimers();
   const controls = new Map(['scene-sound-toggle', 'scene-volume', 'scene-sound-level', 'scene-volume-value', 'scene-sound-status'].map(id => [`#${id}`, new Control()]));
-  const document = Object.assign(new EventTarget(), { hidden: false, querySelector: (selector: string) => controls.get(selector) });
+  const document = Object.assign(new EventTarget(), { createElement: () => new Control(), hidden: false, querySelector: (selector: string) => controls.get(selector) });
   const contexts: Context[] = [];
   vi.stubGlobal('document', document); vi.stubGlobal('window', { setTimeout });
   vi.stubGlobal('localStorage', { getItem: () => null, setItem() {} });
@@ -202,7 +206,7 @@ it('keeps vending and light actions in the opt-in mixer and cancels them on zero
 it('plays one opt-in phone buzz and can stop it without cancelling another room effect', async () => {
   vi.useFakeTimers();
   const controls = new Map(['scene-sound-toggle', 'scene-volume', 'scene-sound-level', 'scene-volume-value', 'scene-sound-status'].map(id => [`#${id}`, new Control()]));
-  const document = Object.assign(new EventTarget(), { hidden: false, querySelector: (selector: string) => controls.get(selector) });
+  const document = Object.assign(new EventTarget(), { createElement: () => new Control(), hidden: false, querySelector: (selector: string) => controls.get(selector) });
   const contexts: Context[] = [];
   vi.stubGlobal('document', document); vi.stubGlobal('window', { setTimeout });
   vi.stubGlobal('localStorage', { getItem: () => null, setItem() {} });
@@ -217,7 +221,7 @@ it('plays one opt-in phone buzz and can stop it without cancelling another room 
   for (let message = 0; message < 20; message++) audio.phoneBuzz();
   expect(context.sources).toHaveLength(before + 1);
   const phone = context.sources.at(-1)!;
-  expect(phone.stop).toHaveBeenCalledWith(context.currentTime + .24);
+  expect(phone.stop).toHaveBeenCalledWith(context.currentTime + .61);
   audio.stopPhoneBuzz(); expect(phone.stop).toHaveBeenLastCalledWith();
   expect(motor.stop).toHaveBeenLastCalledWith(context.currentTime + .32);
   context.currentTime += 2; audio.phoneBuzz(); const muted = context.sources.at(-1)!;
@@ -231,4 +235,26 @@ it('plays one opt-in phone buzz and can stop it without cancelling another room 
   const hiddenCount = context.sources.length; audio.phoneBuzz(); expect(context.sources).toHaveLength(hiddenCount);
   audio.dispose(); audio.phoneBuzz(); expect(context.sources).toHaveLength(hiddenCount);
   expect(fetch).toHaveBeenCalledTimes(9);
+});
+
+
+it('exposes opt-in YouTube volume independently of engine lifecycle', async () => {
+  const controls = new Map(['scene-sound-toggle', 'scene-volume', 'scene-sound-level', 'scene-volume-value', 'scene-sound-status'].map(id => [`#${id}`, new Control()]));
+  const musicSettings = new Control();
+  const document = Object.assign(new EventTarget(), { createElement: () => musicSettings, hidden: false, querySelector: (selector: string) => controls.get(selector) });
+  vi.stubGlobal('document', document); vi.stubGlobal('window', { setTimeout });
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem() {} });
+  vi.stubGlobal('AudioContext', Context);
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
+  const audio = createFactoryAudio();
+  expect(audio.musicPreferences()).toEqual({ enabled: false, volume: 22 });
+  audio.enableMusic();
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  expect(audio.musicPreferences()).toEqual({ enabled: true, volume: 22 });
+  for (let frame = 0; frame < 20; frame++) audio.garageEngine(undefined);
+  expect(audio.musicPreferences().enabled).toBe(true);
+  musicSettings.querySelector('button').dispatchEvent(new Event('click'));
+  expect(audio.musicPreferences().volume).toBe(0);
+  document.hidden = true; expect(audio.musicPreferences().enabled).toBe(false);
+  document.hidden = false; audio.dispose(); expect(audio.musicPreferences().enabled).toBe(false);
 });

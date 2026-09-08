@@ -102,6 +102,8 @@ export class BroadcastManager {
     this.broadcast({ type: 'grab_release', ...target, x, y, reason });
   }
 
+  broadcastRadio(message: import('../../shared/lounge-radio.js').RadioState) { this.broadcast(message); }
+
   private broadcast(msg: WSMessageToClient) {
     const raw = JSON.stringify(msg);
     for (const [client] of this.clients) {

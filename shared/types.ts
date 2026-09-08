@@ -259,6 +259,8 @@ export interface ChatMessage {
 
 // === WebSocket Messages: Server -> Browser ===
 export type WSMessageToClient =
+  | import('./lounge-radio.js').RadioState
+  | import('./lounge-radio.js').RadioResult
   | import('./factory25d-driving.js').GarageDriveState
   | import('./factory25d-driving.js').GarageDriveResult
   | import('./visitor-basketball.js').VisitorBallUpdate
@@ -284,6 +286,7 @@ export type GlobalEffectType = 'vortex';
 
 // === WebSocket Messages: Browser -> Server ===
 export type WSMessageToServer =
+  | import('./lounge-radio.js').RadioRequest
   | import('./factory25d-driving.js').GarageDriveRequest
   | import('./visitor-basketball.js').VisitorBallInput
   | { type: 'identify'; username: string; avatar: AvatarConfig }

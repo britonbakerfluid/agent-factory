@@ -1,5 +1,6 @@
+import type { GaragePedestrianPush } from '../shared/factory25d-driving.js';
 import { StationTickets } from './station-tickets.js';
-import { FACTORY25D_BOUNDS, constrainFactoryStep, toFactoryWorld, factory25dWaypoints, factoryMovementIsClear, recoverFactoryPosition, factoryElevatorTripAt, fromFactoryWorld, clearFactorySegment, GARAGE_MINI_LOOKOUTS, WORKSTATIONS, MINI_WORKSTATION_SLOT, MINI_WORKSTATION_USERNAME, MINI_WORK_PACK_MS, MINI_WORK_RETRIEVAL_MS, factoryRoomAt } from '../shared/factory25d-layout.js';
+import { FACTORY25D_BOUNDS, constrainFactoryStep, toFactoryWorld, factory25dWaypoints, factoryMovementIsClear, recoverFactoryPosition, factoryElevatorTripAt, fromFactoryWorld, clearFactorySegment, GARAGE_MINI_LOOKOUTS, WORKSTATIONS, MINI_WORKSTATION_SLOT, MINI_WORKSTATION_USERNAME, MINI_WORK_PACK_MS, MINI_WORK_RETRIEVAL_MS, factoryRoomAt, GARAGE_WORLD_Z } from '../shared/factory25d-layout.js';
 import { GARAGE_CAR_VISIT_MS, garageCarLookout, isGarageCarId, type GarageCarId } from '../shared/factory25d-garage.js';
 import { manualElevatorEntry, manualElevatorLanding } from '../shared/factory25d-manual-travel.js';
 import { CONTROL_WORLD_BOUNDS, GRAB_POINTER_BOUNDS } from '../shared/constants.js';
@@ -194,6 +195,40 @@ export class StateManager {
       if (!this.garageDriving.blocks(from, to)) continue;
       this.garageYielding.set(session.sessionId, { movement, pausedAt: timestamp, activity: session.activity });
       session.world.position = from; delete session.world.movement;
+      changes.push({ kind: 'agent_upsert', agent: clone(session) });
+    }
+    if (changes.length) this.commit(changes, false, timestamp);
+  }
+
+  /** Server physics may nudge a body, without acquiring controls or changing its real activity. */
+  applyGaragePedestrianPushes(pushes: readonly GaragePedestrianPush[], timestamp: number) {
+    if (this.environment !== 'factory25d') return;
+    const changes: WorldChange[] = [];
+    for (const push of pushes) {
+      const session = this.sessions.get(push.sessionId);
+      if (!session || session.activity === 'stopped' || this.grabbedSession(push.sessionId) || this.garageDrivers.has(push.sessionId)
+        || session.world.carVisit || session.world.miniWork || session.manualControl?.elevatorTrip) continue;
+      const current = this.currentWorldPosition(session, timestamp), from = fromFactoryWorld(current);
+      const target = toFactoryWorld({ x: push.x, z: push.z + GARAGE_WORLD_Z });
+      if (![push.x, push.z, push.fromX, push.fromZ].every(Number.isFinite)
+        || Math.hypot(from.x - push.fromX, from.z - GARAGE_WORLD_Z - push.fromZ) > .01
+        || Math.hypot(push.x - push.fromX, push.z - push.fromZ) > 2
+        || !clearFactorySegment(from, fromFactoryWorld(target))) continue;
+      const held = this.garageYielding.get(push.sessionId), previous = session.world.movement ?? held?.movement;
+      session.world.position = target;
+      delete session.world.movement;
+      this.garageYielding.delete(push.sessionId);
+      if (session.manualControl) {
+        // Retain the owner's lease and input flags; its next input continues from here.
+        session.manualControl = { ...session.manualControl, x: target.x, y: target.y };
+      } else if (previous) {
+        const waypoints = factory25dWaypoints(target, previous.to);
+        const movement = { from: target, to: previous.to, waypoints, startedAt: timestamp,
+          arrivesAt: timestamp + Math.max(100, Math.ceil(routeDistance(target, waypoints, previous.to) / WORLD_MOVE_SPEED * 1000)) };
+        if (factoryMovementIsClear(movement)) {
+          this.garageYielding.set(push.sessionId, { movement, pausedAt: timestamp, activity: session.activity });
+        }
+      }
       changes.push({ kind: 'agent_upsert', agent: clone(session) });
     }
     if (changes.length) this.commit(changes, false, timestamp);

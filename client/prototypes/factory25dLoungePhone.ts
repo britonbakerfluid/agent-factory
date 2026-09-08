@@ -44,21 +44,36 @@ export function createLoungePhone(table: THREE.Group) {
   propPart(phone, [.053, .004, .002], [0, -.209, .016], rim);
   const glow = new THREE.PointLight('#78baff', 0, .9, 2);
   glow.position.set(0, 0, .075); glow.visible = false; phone.add(glow);
+  // One tiny line draw for pixel-friendly cartoon vibration marks on both sides.
+  const markVertices: number[] = [];
+  for (const side of [-1, 1]) for (const x of [.158, .204]) {
+    const points = [[x, -.07], [x + .024, -.04], [x + .024, .04], [x, .07]];
+    for (let i = 1; i < points.length; i++) for (const point of [points[i - 1], points[i]])
+      markVertices.push(side * point[0], point[1], .024);
+  }
+  const markGeometry = new THREE.BufferGeometry();
+  markGeometry.setAttribute('position', new THREE.Float32BufferAttribute(markVertices, 3));
+  const markMaterial = new THREE.LineBasicMaterial({ color: '#a8dded', transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+  const marks = new THREE.LineSegments(markGeometry, markMaterial); marks.visible = false; phone.add(marks);
   const notification = new PhoneNotificationPulse(), idle = new THREE.Color('#a9b7cd'), lit = new THREE.Color('#ffffff');
-  const homeX = phone.position.x, homeTwist = phone.rotation.z;
+  const home = phone.position.clone(), homeRotation = phone.rotation.clone();
   function updateNotification(now: number, reduced: boolean, visible: boolean) {
     if (!visible) notification.cancel();
     const state = notification.sample(now, reduced);
     material.color.copy(idle).lerp(lit, state.glow);
-    arrivalTint.opacity = state.glow * .24; litFace.visible = state.glow > .001;
+    arrivalTint.opacity = state.glow * .34; litFace.visible = state.glow > .001;
     glow.intensity = state.glow * 1.1; glow.visible = state.glow > .001;
-    phone.position.x = homeX + state.offset; phone.rotation.z = homeTwist + state.twist;
+    phone.position.set(home.x + state.offset, home.y + state.lift, home.z);
+    phone.rotation.set(homeRotation.x, homeRotation.y + state.rock, homeRotation.z + state.twist);
+    markMaterial.opacity = state.marks * .95; marks.visible = state.marks > .01;
+    marks.scale.x = 1 + state.marks * .15;
     return state.active;
   }
   return { phone, preview, texture,
     notify: (now: number) => notification.trigger(now),
     updateNotification,
     dispose() {
+    markGeometry.dispose(); markMaterial.dispose();
     phone.removeFromParent(); phone.traverse(node => { if (node instanceof THREE.Mesh) { node.geometry.dispose();
       if (Array.isArray(node.material)) node.material.forEach(mat => mat.dispose()); else node.material.dispose(); } }); texture.dispose();
   } };

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GARAGE_WORLD_Z, GARAGE_LEVEL } from '@shared/factory25d-layout';
+import { clearFactorySegment, GARAGE_WORLD_Z, GARAGE_LEVEL } from '@shared/factory25d-layout';
 import { GARAGE_MARK_LIFETIME_MS, GARAGE_MAX_MARKS, type GarageDriveCar, type GarageDriveInput, type GarageDriveRequest, type GarageDriveResult, type GarageDriveState, type GarageTireMark } from '@shared/factory25d-driving';
 import { garageRampHeightAt, type GarageCarId } from '@shared/factory25d-garage';
 import { isControlPreview, onFactoryConnection, onFactoryMessage, sendGarageDrive } from './factory25dBoardData';
@@ -18,6 +18,8 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
   let available = false, disposed = false, lastSend = -Infinity, lastPacket = -Infinity, serverClock = Date.now(), packetClock = performance.now();
   let engine: { car: GarageCarId; throttle: number } | undefined;
   const busy = new Set<string>();
+  // Explicit playground-only offsets never send avatar commands or change live identities.
+  const previewNudges = new Map<string, { x: number; z: number }>();
   const controls = createDrivingControls(canvas, {
     input(value) { input = value; if (owned) send({ type: 'garage_drive', action: 'input', car: owned, input }); },
     leave() { if (owned) send({ type: 'garage_drive', action: 'release', car: owned }); },
@@ -84,8 +86,22 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
       available = visible; controls.visible(visible); controls.enable(visible && !!owned && !pending && !document.hidden);
       if (!visible && owned) send({ type: 'garage_drive', action: 'release', car: owned });
       const pedestrians = [...agents.entries.values()].filter(entry => entry.mesh.userData.room === 'garage')
-        .map(entry => ({ x: entry.mesh.position.x, z: entry.mesh.position.z, sessionId: entry.session.sessionId }));
-      preview?.update(dt, now, pedestrians);
+        .map(entry => {
+          const id = entry.session.sessionId, offset = previewNudges.get(id), base = { x: entry.mesh.position.x, z: entry.mesh.position.z };
+          const pushable = !entry.session.world.carVisit && !entry.session.world.miniWork && !entry.session.manualControl?.elevatorTrip;
+          if (preview && offset && pushable) {
+            const target = { x: base.x + offset.x, z: base.z + offset.z + GARAGE_WORLD_Z };
+            if (clearFactorySegment({ x: base.x, z: base.z + GARAGE_WORLD_Z }, target)) agents.placeOverride(id, target, 0);
+            else previewNudges.delete(id);
+          } else previewNudges.delete(id);
+          return { x: entry.mesh.position.x, z: entry.mesh.position.z, sessionId: id, pushable };
+        });
+      for (const push of preview?.update(dt, now, pedestrians) ?? []) {
+        const offset = previewNudges.get(push.sessionId) ?? { x: 0, z: 0 };
+        previewNudges.set(push.sessionId, { x: offset.x + push.x - push.fromX, z: offset.z + push.z - push.fromZ });
+        agents.placeOverride(push.sessionId, { x: push.x, z: push.z + GARAGE_WORLD_Z }, 0);
+      }
+      for (const id of previewNudges.keys()) if (!pedestrians.some(p => p.sessionId === id)) previewNudges.delete(id);
       if (pending && now - pending.at > 5000) { pending = undefined; controls.announce('no reply to the car switch yet · try again when connected'); }
       if (owned && now - lastPacket > 2500) drop('connection paused · controls released');
       if (owned && visible && !document.hidden && now - lastSend >= 75) { lastSend = now; send({ type: 'garage_drive', action: 'input', car: owned, input }); }

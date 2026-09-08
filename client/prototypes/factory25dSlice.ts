@@ -13,6 +13,7 @@ import { createBrandFlag } from './factory25dBrandFlag';
 import { createMistFlag } from './factory25dMistFlag';
 import { createAvatarStage } from './factory25dAvatarStage';
 import { createVisitorBasketball } from './factory25dVisitorBasketball';
+import { createLoungeRadio } from './factory25dLoungeRadio';
 import { createNatureTv } from './factory25dNatureTv';
 import { createCeilingLights } from './factory25dCeilingLights';
 import * as THREE from 'three';
@@ -588,6 +589,7 @@ cornerCouch(0.65, 5.8);
 const natureTv = createNatureTv(interior);
 const roomStaff = createRoomStaff(scene, whiteboard, canvas, whiteboardInteraction.openBoard, whiteboardInteraction.boardMotion);
 const loungeDetails = createLoungeDetails(interior, canvas, camera, renderer, teamDesk.members);
+const loungeRadio = createLoungeRadio(interior, canvas, camera, { preferences: sceneAudio.musicPreferences, enable: sceneAudio.enableMusic });
 loungeDetails.chat.configureNotifications({ buzz: sceneAudio.phoneBuzz, stop: sceneAudio.stopPhoneBuzz });
 
 let currentViewCamera: THREE.Camera = camera;
@@ -597,7 +599,7 @@ const avatarStage = createAvatarStage(scene, sideRoomScene, garage.scene, liveAg
   () => currentViewCamera as THREE.OrthographicCamera, () => factoryControls.getTargetSessionId() ?? undefined,
   point => floorKeyboard.floorHeight({ x: point.x, z: point.z - interior.position.z }));
 const factoryControls = createFactoryControls(canvas, liveAgents, () => currentViewCamera,
-  () => !carDrivingActive() && !garage.isTransitioning() && !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive() && !document.body.classList.contains('inspect-open'),
+  () => !carDrivingActive() && !garage.isTransitioning() && !avatarStage.isActive() && !whiteboardInteraction.isTransitioning() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive() && !document.body.classList.contains('inspect-open'),
   room => roomNavigation.request(room), avatarStage,
   () => garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory');
 garage.setWorkAction(() => factoryControls.openGarageStations());
@@ -638,7 +640,10 @@ const basketball = createBasketball(interior, canvas, [], {
   tap: () => sceneAudio.ballTap(), swish: () => sceneAudio.ballSwish(), bounce: energy => sceneAudio.ballBounce(energy),
 });
 const visitorBasketball = createVisitorBasketball(interior, canvas, basketball.pickups, index => index > 0 || !basketball.active,
-  { swish: () => sceneAudio.ballSwish(), bounce: energy => sceneAudio.ballBounce(energy) });
+  { swish: () => sceneAudio.ballSwish(), bounce: energy => sceneAudio.ballBounce(energy) },
+  { factory: interior, patio: sideRoomScene, garage: garage.room,
+    current: () => garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory',
+    visit: room => roomNavigation.request(room), transitioning: () => garage.isTransitioning() }, basketball.pickupShadows);
 const snackCarry = createSnackCarry(vendingMachine, canvas, () => liveAgents.entries.values(),
   entry => !liveAgents.isPerforming(entry.session.sessionId)
     && !(basketball.active && basketballPlayers[basketball.player]?.id === entry.session.sessionId));
@@ -888,6 +893,8 @@ function animate(): void {
     ? sideRoom.isActive() && !sideRoom.showsFactory() ? 'patio' : mainRoomVisible ? 'factory' : undefined : undefined);
   const baseCamera = avatarStage.isActive() ? avatarStage.camera : brandLibrary.isActive() ? brandLibrary.camera : (garage.isActive() || garage.isTransitioning()) ? garage.camera : teamDesk.isActive() ? teamDesk.camera : loungeDetails.chat.isActive() ? loungeDetails.chat.camera : windowInteraction.isOpen() ? windowInteraction.camera : sideRoom.isActive() ? sideRoom.camera : camera;
   const viewCamera = avatarStage.isActive() ? baseCamera : pointerZoom.cameraFor(baseCamera, now);
+  loungeRadio.update(viewCamera, mainRoomVisible && !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen()
+    && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive() && !document.body.classList.contains('inspect-open'));
   viewCamera.updateMatrixWorld(); currentViewCamera = viewCamera;
   if (sideRoom.isActive() && !document.hidden) brandFlag.update(elapsed, weather.wind01, reducedSceneMotion.matches);
   mistFlag.update(elapsed, dt, weather.wind01, viewCamera,
@@ -922,7 +929,7 @@ function animate(): void {
   mountainView.setLightning(lightning);
   mountainView.setDepthOfField(displayStudy.depthOfField);
   mountainView.render(elapsed, sceneryVisible);
-  visitorBasketball.update(dt, viewCamera, !garage.isActive() && !garage.isTransitioning() && !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !sideRoom.isActive() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive());
+  visitorBasketball.update(dt, viewCamera, !garage.isTransitioning() && !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive());
   activityFeedback.update();
   duckHunt.update(dt, viewCamera, sideRoom.isActive() && !sideRoom.showsFactory());
   // Keep a square sky image in both the tilted room view and the straight-on window view.
@@ -976,4 +983,4 @@ function animate(): void {
 
 animate();
 
-if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { titleDisposed = true; loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); });

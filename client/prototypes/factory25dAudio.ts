@@ -10,6 +10,18 @@ export function createFactoryAudio() {
   const level = requireElement<HTMLElement>('#scene-sound-level');
   const output = requireElement<HTMLOutputElement>('#scene-volume-value');
   const status = requireElement<HTMLElement>('#scene-sound-status');
+  const musicSettings = document.createElement('span');
+  musicSettings.className = 'radio-sound-settings';
+  musicSettings.innerHTML = '<button type="button" aria-pressed="false" aria-label="Mute lounge music">music on</button><label>music <input type="range" min="0" max="100" value="55" aria-label="Music volume"></label><output aria-hidden="true">55%</output>';
+  status.parentElement!.insertBefore(musicSettings, status);
+  const musicToggle = musicSettings.querySelector('button')!;
+  const musicSlider = musicSettings.querySelector('input')!;
+  const musicOutput = musicSettings.querySelector('output')!;
+  let musicVolume = 55, musicMuted = false;
+  try { const saved = JSON.parse(localStorage.getItem('factory-radio-volume-v1') ?? 'null');
+    if (saved && Number.isFinite(saved.volume)) musicVolume = Math.max(0, Math.min(100, saved.volume));
+    musicMuted = saved?.muted === true;
+  } catch { /* Optional preferences. */ }
   let context: AudioContext | undefined;
   let graph: ReturnType<typeof createSoundscape> | undefined;
   let garage: ReturnType<typeof createGarageAudio> | undefined;
@@ -38,6 +50,11 @@ export function createFactoryAudio() {
     slider.value = String(volume);
     slider.setAttribute('aria-valuetext', `${volume}%`);
     output.value = `${volume}%`;
+    musicSettings.hidden = !enabled;
+    musicToggle.textContent = musicMuted ? 'music off' : 'music on';
+    musicToggle.setAttribute('aria-pressed', String(musicMuted));
+    musicSlider.value = String(musicVolume); musicOutput.value = `${musicVolume}%`;
+
   }
 
   async function syncPlayback() {
@@ -46,6 +63,7 @@ export function createFactoryAudio() {
     nextBirdAt = Infinity;
     wasFair = false;
     if (!enabled || document.hidden || disposed) {
+
       garage?.update(undefined);
       graph?.stopThunder();
       graph?.stopPropSounds();
@@ -76,6 +94,7 @@ export function createFactoryAudio() {
     } catch {
       if (disposed || currentRequest !== request) return;
       enabled = false;
+
       garage?.update(undefined);
       graph?.stopPropSounds();
       graph?.setVolume(0);
@@ -92,11 +111,18 @@ export function createFactoryAudio() {
   };
   const onVolume = () => {
     volume = Number(slider.value);
-    if (volume <= 0) { garage?.update(undefined); graph?.stopThunder(); graph?.stopPropSounds(); }
+    if (volume <= 0) {  garage?.update(undefined); graph?.stopThunder(); graph?.stopPropSounds(); }
     if (enabled && !document.hidden) graph?.setVolume(volume);
     try { localStorage.setItem('factory-ambient-volume-v1', String(volume)); } catch { /* Optional. */ }
     paint();
   };
+  function onMusic() {
+    musicVolume = Number(musicSlider.value);
+    try { localStorage.setItem('factory-radio-volume-v1', JSON.stringify({ volume: musicVolume, muted: musicMuted })); } catch { /* Optional. */ }
+    paint();
+  }
+  const onMusicToggle = () => { musicMuted = !musicMuted; onMusic(); };
+  musicToggle.addEventListener('click', onMusicToggle); musicSlider.addEventListener('input', onMusic);
   const onVisibility = () => { void syncPlayback(); };
   toggle.addEventListener('click', onToggle);
   slider.addEventListener('input', onVolume);
@@ -105,6 +131,8 @@ export function createFactoryAudio() {
   const propsAudible = () => !disposed && enabled && volume > 0 && !document.hidden && context?.state === 'running' && !!graph;
 
   return {
+    musicPreferences() { return { enabled: !disposed && enabled && !document.hidden, volume: musicMuted ? 0 : musicVolume * volume / 100 }; },
+    enableMusic() { if (!enabled) { enabled = true; paint(); void syncPlayback(); } },
     vendingSelect() { if (propsAudible()) graph!.vendingSelect(); },
     vendingDispense() { if (propsAudible()) graph!.vendingDispense(); },
     vendingLand(energy = 1) { if (propsAudible()) graph!.vendingLand(energy); },
@@ -155,6 +183,7 @@ export function createFactoryAudio() {
       toggle.removeEventListener('click', onToggle);
       slider.removeEventListener('input', onVolume);
       document.removeEventListener('visibilitychange', onVisibility);
+      musicSettings.remove();
       garage?.dispose();
       graph?.dispose();
       void context?.close().catch(() => {});

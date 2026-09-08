@@ -21,7 +21,9 @@ export function createDrivingPreview(receive: (message: GarageDriveResult | Gara
     },
     update(dt: number, now: number, pedestrians: GarageDrivePedestrian[]) {
       simulation.step(dt, Date.now(), pedestrians);
+      const pushes = simulation.pedestrianPushes.map(push => ({ ...push }));
       if (now - lastSend >= 100) { lastSend = now; receive(simulation.snapshot(Date.now())); }
+      return pushes;
     },
     dispose() {},
   };

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from '@fastify/websocket';
 import { GarageDrivingSimulation, GARAGE_NEUTRAL_INPUT, garageCarBlocksSegment, validGarageDriveInput, type GarageDrivePedestrian, type GarageDriveRequest } from '../shared/factory25d-driving.js';
-import { isGarageCarId, type GarageCarId } from '../shared/factory25d-garage.js';
+import { GARAGE_CAR_BAYS, isGarageCarId, type GarageCarId } from '../shared/factory25d-garage.js';
 import { factoryCompanionPosition, factoryRoomAt, fromFactoryWorld, GARAGE_WORLD_Z, MINI_WORKSTATION_USERNAME } from '../shared/factory25d-layout.js';
 import type { Position, WorldAgent } from '../shared/types.js';
 import type { StateManager } from './state.js';
@@ -96,7 +96,7 @@ export class GarageDrivingManager {
   private blocksPedestrian(from: Position, to: Position) {
     const a = fromFactoryWorld(from), b = fromFactoryWorld(to);
     if (factoryRoomAt(a) !== 'garage' || factoryRoomAt(b) !== 'garage') return false;
-    return this.simulation.cars.some(car => car.mode !== 'parked' && garageCarBlocksSegment(car, { x: a.x, z: a.z - GARAGE_WORLD_Z }, { x: b.x, z: b.z - GARAGE_WORLD_Z }));
+    return this.simulation.cars.some(car => (car.mode !== 'parked' || Math.hypot(car.vx, car.vz) > 0 || Math.hypot(car.x - GARAGE_CAR_BAYS[car.id].x, car.z - GARAGE_CAR_BAYS[car.id].z) > .01) && garageCarBlocksSegment(car, { x: a.x, z: a.z - GARAGE_WORLD_Z }, { x: b.x, z: b.z - GARAGE_WORLD_Z }));
   }
   private pedestrians(now: number): GarageDrivePedestrian[] {
     const result: GarageDrivePedestrian[] = [];
@@ -104,7 +104,7 @@ export class GarageDrivingManager {
       if (this.simulation.cars.some(car => car.driverSessionId === agent.sessionId) || this.state.isSessionGrabbed(agent.sessionId)) continue;
       const p = fromFactoryWorld(this.state.getCurrentPosition(agent.sessionId, now)!), next = fromFactoryWorld(this.state.getCurrentPosition(agent.sessionId, now + 200)!);
       if (factoryRoomAt(p) !== 'garage') continue;
-      result.push({ x: p.x, z: p.z - GARAGE_WORLD_Z, toX: next.x, toZ: next.z - GARAGE_WORLD_Z, sessionId: agent.sessionId, radius: agent.world.carVisit ? .65 : .32 });
+      result.push({ x: p.x, z: p.z - GARAGE_WORLD_Z, toX: next.x, toZ: next.z - GARAGE_WORLD_Z, sessionId: agent.sessionId, pushable: !agent.world.carVisit && !agent.world.miniWork && !agent.manualControl?.elevatorTrip, radius: agent.world.carVisit ? .65 : .32 });
       agent.subagents.forEach((_, i) => { const child = factoryCompanionPosition(p, i); result.push({ x: child.x, z: child.z - GARAGE_WORLD_Z, radius: .22 }); });
     }
     return result;
@@ -119,8 +119,9 @@ export class GarageDrivingManager {
       if (car.mode === 'driving' && timestamp - peer.usedAt > GARAGE_LEASE_IDLE_MS) this.simulation.release(peer.car);
     }
     this.state.yieldToGarageCars(timestamp);
-    const active = this.simulation.cars.some(car => car.mode !== 'parked' || car.damage > 0);
+    const active = this.simulation.cars.some(car => car.mode !== 'parked' || car.damage > 0 || Math.hypot(car.vx, car.vz) > 0);
     this.simulation.step(dt, timestamp, this.pedestrians(timestamp));
+    this.state.applyGaragePedestrianPushes(this.simulation.pedestrianPushes, timestamp);
     this.advanceExcursion(timestamp);
     this.dirty ||= active || this.simulation.cars.some(car => car.mode !== 'parked');
     if (this.dirty && timestamp - this.broadcastAt >= 100) this.flush(timestamp);
