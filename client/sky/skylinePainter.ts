@@ -1,5 +1,5 @@
 /**
- * Phaser-free pixel compositor for the skyline window. Everything here works on a
+ * Renderer-independent pixel compositor for the skyline window. Everything here works on a
  * plain RGBA byte buffer so the same code can be unit tested and rendered headlessly.
  */
 import { clamp01, lerp, lerpRgb } from './skyPhase';

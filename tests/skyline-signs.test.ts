@@ -14,10 +14,10 @@ import { sanitizeSign, sanitizeSkyline, signKind } from '../client/sky/skylineDa
 import type { SkylineBuilding } from '../client/sky/skylineData';
 import { skyStateFromSnapshot } from '../client/sky/skyPhase';
 import { solarSnapshot, sunTimesForLocalDay } from '../client/sky/solar';
-import { skylineWindowRect } from '../client/scenes/viewport';
 
-const WIDTH = skylineWindowRect().width;
-const HEIGHT = skylineWindowRect().height;
+// Keep a fixed raster fixture for shared sky/weather paint tests.
+const WIDTH = 768;
+const HEIGHT = 106;
 const NIGHT = sunTimesForLocalDay(2026, 1, 15, -420).sunriseMs - 5 * 3_600_000;
 
 function building(overrides: Partial<SkylineBuilding>): SkylineBuilding {

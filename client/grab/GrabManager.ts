@@ -1,10 +1,8 @@
-import type Phaser from 'phaser';
-import type { GrabTarget, WSMessageToClient } from '@shared/types';
+import type { GrabTarget, WSMessageToClient, WSMessageToServer } from '@shared/types';
 import { GRAB_HEARTBEAT_MS, GRAB_INPUT_TIMEOUT_MS } from '@shared/constants';
 import type { AuthManager } from '../auth/AuthManager';
-import type { SocketClient } from '../network/socket';
-import { GRAB_DRAG_THRESHOLD } from './physics';
-import type { Point } from './physics';
+import { GRAB_DRAG_THRESHOLD } from './pointer';
+import type { Point } from './pointer';
 
 const MOVE_SEND_INTERVAL_MS = 50; // pointer updates to the server, at most 20/s
 const GRABBING_CLASS = 'is-grabbing';
@@ -29,7 +27,7 @@ interface ActiveGrab {
   confirmed: boolean;
 }
 
-/** The slice of the Phaser scene this manager touches, so it can run without a canvas in tests. */
+/** Pointer event source supplied by the renderer adapter. */
 export interface GrabScene {
   input: {
     on(event: string, fn: (...args: never[]) => void): unknown;
@@ -37,10 +35,10 @@ export interface GrabScene {
   };
 }
 
-/** The slice of AgentManager this manager drives. */
+/** Renderer-independent operations for the live agent adapter. */
 export interface GrabAgents {
   readonly isVortexActive: boolean;
-  resolveGrabTarget(gameObject: Phaser.GameObjects.GameObject): GrabTarget | null;
+  resolveGrabTarget(gameObject: unknown): GrabTarget | null;
   hasGrabTarget(target: GrabTarget): boolean;
   beginGrab(target: GrabTarget, pointer: Point): boolean;
   applyRemoteGrab(target: GrabTarget, pointer: Point): void;
@@ -80,7 +78,7 @@ export class GrabManager {
   private releasedPending = new Map<string, number>();
   private lastMoveSentAt = 0;
   private heartbeat: ReturnType<typeof setInterval>;
-  private onGameObjectDown = (pointer: PointerLike, gameObject: Phaser.GameObjects.GameObject) => this.handlePress(pointer, gameObject);
+  private onGameObjectDown = (pointer: PointerLike, gameObject: unknown) => this.handlePress(pointer, gameObject);
   private onPointerMove = (pointer: PointerLike) => this.handleMove(pointer);
   private onPointerUp = (pointer: PointerLike) => this.handleUp(pointer);
   private onWindowCancel = () => this.release();
@@ -91,7 +89,7 @@ export class GrabManager {
   constructor(
     private scene: GrabScene,
     private auth: Pick<AuthManager, 'isLoggedIn'>,
-    private socket: Pick<SocketClient, 'send'>,
+    private socket: { send(message: WSMessageToServer): unknown },
     private agents: GrabAgents,
     private now: () => number = () => Date.now(),
   ) {
@@ -194,7 +192,7 @@ export class GrabManager {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
   }
 
-  private handlePress(pointer: PointerLike, gameObject: Phaser.GameObjects.GameObject): void {
+  private handlePress(pointer: PointerLike, gameObject: unknown): void {
     if (this.active || this.press || this.agents.isVortexActive) return;
     const target = this.agents.resolveGrabTarget(gameObject);
     if (!target) return;

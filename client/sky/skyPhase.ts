@@ -166,10 +166,6 @@ export function rgbToCss(rgb: Rgb, alpha = 1): string {
   return alpha >= 1 ? `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})` : `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
 }
 
-export function rgbToInt(rgb: Rgb): number {
-  return (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
-}
-
 function lerpPalette(a: SkyPalette, b: SkyPalette, t: number): SkyPalette {
   return {
     skyTop: lerpRgb(a.skyTop, b.skyTop, t),

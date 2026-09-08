@@ -10,12 +10,12 @@ import {
   sunX,
   sunY,
 } from '../client/sky/skylinePainter';
-import { skylineWindowRect } from '../client/scenes/viewport';
 import { lerpRgb, skyStateFromSnapshot } from '../client/sky/skyPhase';
 import { MOUNTAIN_DAYLIGHT_OFFSET_MINUTES, MOUNTAIN_STANDARD_OFFSET_MINUTES, solarSnapshot, sunTimesForLocalDay } from '../client/sky/solar';
 
-const WIDTH = skylineWindowRect().width;
-const HEIGHT = skylineWindowRect().height;
+// Keep a fixed raster fixture for shared sky/weather paint tests.
+const WIDTH = 768;
+const HEIGHT = 106;
 const PANES = 6;
 
 function render(nowMs: number) {

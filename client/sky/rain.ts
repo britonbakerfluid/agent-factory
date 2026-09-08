@@ -1,5 +1,5 @@
 /**
- * Per-frame rain for the skyline window, Phaser-free so it can be unit tested.
+ * Renderer-independent rain simulation for the skyline window.
  *
  * Two independent simulations:
  *  - `BackRainSim` is the weather outside: nearby streaks composited in front of the

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GrabTarget, WSMessageToClient } from '../shared/types';
 import { GrabManager, sameGrabTarget } from '../client/grab/GrabManager';
 import type { GrabAgents, GrabScene } from '../client/grab/GrabManager';
-import { GRAB_DRAG_THRESHOLD } from '../client/grab/physics';
+import { GRAB_DRAG_THRESHOLD } from '../client/grab/pointer';
 import { GRAB_INPUT_TIMEOUT_MS } from '../shared/constants';
 
 type Listener = (...args: unknown[]) => void;
@@ -47,7 +47,7 @@ function fakeAgents(target: GrabTarget | null = { sessionId: 'alice-1' }) {
   return agents as typeof agents & GrabAgents;
 }
 
-const AVATAR = {} as unknown as Phaser.GameObjects.GameObject;
+const AVATAR = {};
 
 function pointer(id: number, x: number, y: number) {
   return { id, worldX: x, worldY: y };
