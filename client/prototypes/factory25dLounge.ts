@@ -7,6 +7,7 @@ import type { BoardData } from "./factory25dBoardData";
 import { createLoungeChat } from "./factory25dLoungeChat";
 import { contactShadow } from "./factory25dContactShadows";
 import type { TeamMember } from '@shared/team';
+import { createSoccerInteraction } from './factory25dSoccer';
 
 /** Small matte props and two local light sources keep the lounge warm after dark. */
 export function createLoungeDetails(
@@ -49,7 +50,7 @@ export function createLoungeDetails(
   candle.castShadow = true;
   candle.receiveShadow = true;
   table.add(candle);
-  propPart(
+  const wick = propPart(
     table,
     [0.013, 0.03, 0.013],
     [0.1, 0.569, -0.05],
@@ -173,7 +174,7 @@ export function createLoungeDetails(
   ball.rotation.set(0.15, 0.25, 0.2);
   ball.castShadow = ball.receiveShadow = true;
   parent.add(ball);
-  contactShadow(parent, {
+  const ballShadow = contactShadow(parent, {
     x: 2.8,
     z: 7.12,
     floorY: 0.018,
@@ -183,6 +184,7 @@ export function createLoungeDetails(
     opacity: 0.27,
     round: true,
   });
+  const soccer = createSoccerInteraction(ball, ballShadow, canvas);
 
   const lamp = new THREE.Group();
   lamp.position.set(FRONT_COUNTER.x-1.14, FRONT_COUNTER.topY, FRONT_COUNTER.z-INTERIOR_Z-.04);
@@ -218,7 +220,7 @@ export function createLoungeDetails(
   lampLight.shadow.bias = -0.0004;
   lampLight.shadow.normalBias = 0.01;
   lamp.add(lampLight, lampLight.target);
-  contactShadow(lamp, {
+  const lampShadow = contactShadow(lamp, {
     width: 0.24,
     depth: 0.24,
     spread: 0.05,
@@ -246,7 +248,7 @@ export function createLoungeDetails(
   pool.shadow.camera.near = 0.05;
   pool.shadow.bias = -0.001;
   floorLamp.add(pool, pool.target);
-  contactShadow(floorLamp, {
+  const floorShadow = contactShadow(floorLamp, {
     width: 0.27,
     depth: 0.27,
     spread: 0.09,
@@ -254,6 +256,7 @@ export function createLoungeDetails(
   });
   let candleOn = true;
   const lightSwitches: SceneLightSwitch[] = [{ id: 'lounge-candle', label: 'Lounge candle', kind: 'candle', target: candle,
+    motionTargets: [candle, wick, flame, candleLight],
     isOn: () => candleOn, setOn(on) { candleOn = on; flame.visible = on; candleLight.visible = on; candleLight.intensity = on ? .8 : 0; } }];
   function lampSwitch(id: string, label: string, target: THREE.Object3D, light: THREE.Light,
     material: THREE.MeshStandardMaterial, glow?: THREE.Object3D): SceneLightSwitch {
@@ -265,6 +268,8 @@ export function createLoungeDetails(
   }
   lightSwitches.push(lampSwitch('front-desk-lamp', 'Front desk lamp', shade, lampLight, shade.material, bulb),
     lampSwitch('lounge-floor-lamp', 'Lounge floor lamp', floorShade, pool, floorShade.material));
+  lightSwitches[1].motionTargets = lamp.children.filter(child => child !== lampShadow);
+  lightSwitches[2].motionTargets = floorLamp.children.filter(child => child !== floorShadow);
   const activity = createLoungeChat(table, canvas, camera, renderer, getMembers);
   return {
     chat: activity,
@@ -277,11 +282,13 @@ export function createLoungeDetails(
       visible: boolean,
     ) {
       activity.update(performance.now(), data, visible);
+      soccer.update(time, reduced, camera, visible);
       const flicker = reduced
         ? 0
         : Math.sin(time * 4.1) * 0.025 + Math.sin(time * 6.7) * 0.016;
       candleLight.intensity = candleOn ? 0.8 + flicker : 0;
       flame.scale.y = 1.5 + flicker * 2;
     },
+    dispose() { soccer.dispose(); activity.dispose(); },
   };
 }

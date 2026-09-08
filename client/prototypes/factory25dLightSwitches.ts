@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { createFixtureRock } from './factory25dFixtureRock';
+import type { FixtureCleanupJob } from './factory25dStaffCleanup';
 import './factory25dLightSwitches.css';
 
 export interface SceneLightSwitch {
@@ -7,11 +9,20 @@ export interface SceneLightSwitch {
   kind: 'lamp' | 'candle' | 'light';
   target: THREE.Object3D;
   hitTargets?: THREE.Object3D[];
+  /** Sibling parts that must tip together (body, shade, bulb and light). */
+  motionTargets?: THREE.Object3D[];
   isOn: () => boolean;
   setOn: (on: boolean) => void;
 }
 export interface RoomLightSwitch extends SceneLightSwitch { room: 'factory' | 'garage' | 'patio' }
 const STORAGE_KEY = 'factory-light-switches-v1';
+// These standing props have floor/counter space to fall into and a reachable
+// service position. Hanging bulbs, ceiling strips and fire pits stay attached.
+const FALLING_FIXTURES: Record<string, { axis: 'x' | 'z'; x: number; z: number }> = {
+  'front-desk-lamp': { axis: 'z', x: 0, z: -.58 },
+  'lounge-floor-lamp': { axis: 'x', x: .65, z: 0 },
+  'lounge-candle': { axis: 'x', x: .7, z: 0 },
+};
 
 export function readLightPreferences(storage: Pick<Storage, 'getItem'>): Record<string, boolean> {
   try {
@@ -25,7 +36,8 @@ export function readLightPreferences(storage: Pick<Storage, 'getItem'>): Record<
  * phone and candle) resolve to the nearest center instead of stealing each other's taps. */
 export function createLightInteractions(canvas: HTMLCanvasElement, switches: RoomLightSwitch[],
   options: { camera: () => THREE.Camera; visible: (room: RoomLightSwitch['room']) => boolean;
-    sound: (kind: SceneLightSwitch['kind'], on: boolean) => void }) {
+    sound: (kind: SceneLightSwitch['kind'], on: boolean) => void;
+    onCleanup?: (job: FixtureCleanupJob) => void }) {
   const host = canvas.parentElement!, abort = new AbortController();
   let saved: Record<string, boolean> = {};
   try { saved = readLightPreferences(localStorage); } catch { /* Storage can be disabled. */ }
@@ -43,15 +55,28 @@ export function createLightInteractions(canvas: HTMLCanvasElement, switches: Roo
     }, { signal: abort.signal });
     light.target.updateWorldMatrix(true, true); box.setFromObject(light.target);
     const center = box.isEmpty() ? new THREE.Vector3() : light.target.worldToLocal(box.getCenter(new THREE.Vector3()));
-    return { light, button, center, x: 0, y: 0, lastOn: undefined as boolean | undefined };
+    const fall = light.room === 'factory' ? FALLING_FIXTURES[light.id] : undefined;
+    const motion = createFixtureRock(light.motionTargets ?? [light.target], {
+      canFall: Boolean(fall && options.onCleanup), fallAxis: fall?.axis,
+      onFallen() {
+        if (!fall || !motion) return;
+        const anchor = motion.worldAnchor(new THREE.Vector3());
+        options.onCleanup?.({ id: light.id, label: light.label.toLowerCase(),
+          point: { x: anchor.x, z: anchor.z }, standAt: { x: anchor.x + fall.x, z: anchor.z + fall.z },
+          isPending: () => motion.isPending, recover: () => motion.recover() });
+      },
+    });
+    return { light, button, center, motion, x: 0, y: 0, lastOn: undefined as boolean | undefined };
   });
   function toggle(light: SceneLightSwitch) {
     const on = !light.isOn(); light.setOn(on); saved[light.id] = on;
+    entries.find(entry => entry.light === light)?.motion?.press();
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); } catch { /* Keep the current scene usable. */ }
     options.sound(light.kind, on); updateLabels();
   }
   function updateLabels() {
     for (const entry of entries) {
+      entry.button.dataset.fixtureState = entry.motion?.state ?? 'fixed';
       const { light, button } = entry, on = light.isOn(); if (entry.lastOn === on) continue; entry.lastOn = on;
       button.setAttribute('aria-pressed', String(on));
       button.title = `${on ? 'turn off' : 'turn on'} ${light.label.toLowerCase()}`;
@@ -101,10 +126,11 @@ export function createLightInteractions(canvas: HTMLCanvasElement, switches: Roo
   }, { capture: true, signal: abort.signal });
   updateLabels();
   return {
-    update() {
+    update(dt = 1 / 60, reduced = false) {
       const camera = options.camera(), rect = canvas.getBoundingClientRect(), parent = host.getBoundingClientRect();
       camera.updateMatrixWorld();
       for (const entry of entries) {
+        entry.motion?.update(dt, reduced);
         const { light, button } = entry;
         button.hidden = document.hidden || !options.visible(light.room);
         if (button.hidden) continue;
@@ -120,6 +146,6 @@ export function createLightInteractions(canvas: HTMLCanvasElement, switches: Roo
       }
       updateLabels();
     },
-    dispose() { abort.abort(); for (const { button } of entries) button.remove(); },
+    dispose() { abort.abort(); for (const { button, motion } of entries) { button.remove(); motion?.dispose(); } },
   };
 }

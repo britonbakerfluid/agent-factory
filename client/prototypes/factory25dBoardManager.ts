@@ -1,8 +1,10 @@
 import { FACTORY_OBSTACLES, INDOOR_COLUMNS, INDOOR_ROWS, INTERIOR_Z } from '@shared/factory25d-layout';
 import type { FloorPoint as Point } from './factory25dKeyboardState';
+import { AVATAR_FRAME_DISTANCE } from './factory25dAvatarGait';
 
 type Rect = { left: number; right: number; near: number; far: number };
 export type BoardManagerPhase = 'idle' | 'waiting' | 'approaching' | 'grabbing' | 'returning' | 'releasing' | 'walking-home' | 'walking-to-note' | 'writing';
+export type BoardManagerNote = Point & { id?: string; label?: string };
 const actorBounds = { left: -7.75, right: 7.75, near: -4.8, far: 3.3 };
 const boardBounds = { left: -7.25, right: 7.25, near: -4.7, far: 2.6 };
 const furniture: Rect[] = FACTORY_OBSTACLES.map(o => ({ ...o, near: o.near - INTERIOR_Z, far: o.far - INTERIOR_Z }))
@@ -81,18 +83,24 @@ export function boardReturnPath(from: Point, home: Point, grip: Point) {
 }
 
 function advance(point: Point, path: Point[], amount: number): Point {
-  let current = { ...point };
-  while (path.length && amount > 0) {
-    const target = path[0], length = distance(current, target);
-    if (length <= amount) { current = { ...target }; path.shift(); amount -= length; }
-    else { current.x += (target.x - current.x) * amount / length; current.z += (target.z - current.z) * amount / length; break; }
-  }
-  return current;
+  const target = path[0];
+  if (!target) return { ...point };
+  const length = distance(point, target);
+  // End a step at its corner. Combining two headings in one frame made the
+  // character snap diagonally as their hands kept moving the board sideways.
+  if (length <= amount) { path.shift(); return { ...target }; }
+  if (amount <= 0) return { ...point };
+  return { x: point.x + (target.x - point.x) * amount / length, z: point.z + (target.z - point.z) * amount / length };
 }
 
 /** The person owns a floor position; only a deliberate grip couples it to the board. */
 export class BoardManager {
-  phase: BoardManagerPhase = 'idle';
+  private currentPhase: BoardManagerPhase = 'idle';
+  phaseElapsed = 0;
+  get phase() { return this.currentPhase; }
+  set phase(next: BoardManagerPhase) {
+    if (next !== this.currentPhase) { this.currentPhase = next; this.phaseElapsed = 0; }
+  }
   position: Point;
   motion: Point = { x: 0, z: 0 };
   grip: Point = { x: 0, z: 0 };
@@ -101,6 +109,10 @@ export class BoardManager {
   private quiet = 0;
   private lastBoard: Point;
   private destination?: Point;
+  private speed = 0;
+  private noteTask?: BoardManagerNote;
+  private queuedNote?: BoardManagerNote;
+  private seenNote?: string;
   readonly idle: Point;
 
   constructor(readonly home: Point, readonly yaw: number) {
@@ -111,18 +123,40 @@ export class BoardManager {
     return { x: x * Math.cos(this.yaw) + z * Math.sin(this.yaw), z: z * Math.cos(this.yaw) - x * Math.sin(this.yaw) };
   }
   get holding() { return ['grabbing', 'returning', 'releasing'].includes(this.phase); }
+  get taskName() { return this.noteTask?.label; }
+  private observeNote(note: BoardManagerNote) {
+    const id = note.id ?? `${note.x.toFixed(2)},${note.z.toFixed(2)}`;
+    if (this.noteTask?.id === id) {
+      if (this.phase !== 'writing') this.noteTask = { ...note, id };
+    } else if (id !== this.seenNote) {
+      this.seenNote = id;
+      if (this.phase === 'writing') this.queuedNote = { ...note, id };
+      else this.noteTask = { ...note, id };
+    }
+  }
+  private travel(dt: number, point: Point, path: Point[], limit: number) {
+    const length = path[0] ? distance(point, path[0]) : 0;
+    const desired = Math.min(limit, Math.sqrt(2 * 4 * length));
+    this.speed += Math.max(-5 * dt, Math.min(4 * dt, desired - this.speed));
+    const count = path.length, next = advance(point, path, this.speed * dt);
+    if (path.length < count) this.speed = 0;
+    return next;
+  }
 
-  update(dt: number, board: Point, busy: boolean, available: boolean, note?: Point): Point | undefined {
-    dt = Math.min(.05, Math.max(0, dt));
+  update(dt: number, board: Point, busy: boolean, available: boolean, note?: BoardManagerNote): Point | undefined {
+    dt = Number.isFinite(dt) ? Math.min(.05, Math.max(0, dt)) : 0;
     this.motion = { x: 0, z: 0 };
     const moved = distance(board, this.lastBoard) > .001;
     this.lastBoard = { ...board };
     if (busy || moved) {
       this.phase = 'waiting'; this.quiet = 0; this.path = []; this.boardPath = []; this.destination = undefined;
+      this.speed = 0; this.noteTask = this.queuedNote = undefined;
       return;
     }
     if (!available) return;
+    this.phaseElapsed += dt;
     const displaced = distance(board, this.home) > .005;
+    if (!displaced && !this.holding && note) this.observeNote(note);
     if (this.phase === 'waiting' || displaced && ['idle', 'writing', 'walking-home', 'walking-to-note'].includes(this.phase)) {
       this.phase = 'waiting'; this.quiet += dt;
       if (this.quiet < .9) return;
@@ -133,6 +167,7 @@ export class BoardManager {
           const path = managerPath(this.position, add(board, grip), board);
           if (!boardPath || !path) continue;
           this.grip = grip; this.boardPath = boardPath; this.path = path;
+          this.speed = 0;
           this.phase = 'approaching'; return;
         }
         this.quiet = 0; return;
@@ -145,26 +180,77 @@ export class BoardManager {
       return;
     }
     if (this.phase === 'returning') {
-      const next = advance(board, this.boardPath, dt * .85);
+      const next = this.travel(dt, board, this.boardPath, .85);
       const before = this.position; this.position = add(next, this.grip);
       this.motion = { x: this.position.x - before.x, z: this.position.z - before.z };
       this.lastBoard = { ...next };
       if (!this.boardPath.length) { this.phase = 'releasing'; this.quiet = 0; }
       return next;
     }
+    if (this.phase === 'writing') {
+      // Paper animations last less than a second. Finish the person's reach,
+      // writing beat and arm-lowering even after that transient event disappears.
+      if (this.phaseElapsed < 1.12) return;
+      this.noteTask = this.queuedNote; this.queuedNote = undefined;
+      this.destination = undefined; this.phase = 'idle';
+    }
     if (this.phase !== 'approaching') {
-      const target = note ?? this.idle;
+      const target = this.noteTask ?? this.idle;
       if (!this.destination || distance(target, this.destination) > .05) {
         this.destination = { ...target };
-        this.path = managerPath(this.position, target, board) ?? [];
+        const path = managerPath(this.position, target, board);
+        this.path = path ?? [];
+        if (!path) { this.noteTask = undefined; this.destination = undefined; this.speed = 0; }
       }
-      this.phase = this.path.length ? note ? 'walking-to-note' : 'walking-home' : note && distance(this.position, target) < .07 ? 'writing' : 'idle';
+      this.phase = this.path.length ? this.noteTask ? 'walking-to-note' : 'walking-home'
+        : this.noteTask && distance(this.position, target) < .07 ? 'writing' : 'idle';
     }
     if (this.path.length) {
       const before = this.position;
-      this.position = advance(before, this.path, dt * 1.15);
+      this.position = this.travel(dt, before, this.path, 1.15);
       this.motion = { x: this.position.x - before.x, z: this.position.z - before.z };
       if (!this.path.length && this.phase === 'approaching') { this.phase = 'grabbing'; this.quiet = 0; }
     }
+  }
+}
+
+type Facing = 'left' | 'right' | 'up' | 'down';
+/** Discrete sprites keep a continuous stride phase, including walking backwards
+ * while pulling. Reversing a frame number at a corner changed feet instantly. */
+export class BoardManagerAnimation {
+  private facing: Facing = 'down';
+  private stride = 1;
+  private heldStride = 1;
+  private heldDirection = 1;
+  sample(manager: Pick<BoardManager, 'phase' | 'phaseElapsed' | 'holding' | 'grip' | 'motion'>, reduced = false) {
+    const { motion, grip } = manager, distance = Math.hypot(motion.x, motion.z), walking = distance > .00001;
+    if (manager.holding) {
+      const facing: Facing = Math.abs(grip.x) > Math.abs(grip.z) ? grip.x > 0 ? 'left' : 'right' : grip.z > 0 ? 'up' : 'down';
+      if (manager.phase === 'grabbing' && manager.phaseElapsed < .12 || manager.phase === 'releasing' && manager.phaseElapsed >= .16) {
+        this.heldStride = 1; return { animation: `walk_${facing}`, frame: 1 };
+      }
+      if (walking && !reduced) {
+        const projected = -(motion.x * grip.x + motion.z * grip.z);
+        if (Math.abs(projected) > distance * Math.hypot(grip.x, grip.z) * .12) this.heldDirection = Math.sign(projected);
+        this.heldStride = (this.heldStride + this.heldDirection * distance / AVATAR_FRAME_DISTANCE + 4) % 4;
+      } else this.heldStride = 1;
+      return { animation: `hold_${facing}`, frame: Math.floor(this.heldStride) };
+    }
+    this.heldStride = 1;
+    if (walking) {
+      const x = Math.abs(motion.x), z = Math.abs(motion.z);
+      // Keep the previous heading near a diagonal boundary instead of rapidly
+      // swapping a side profile and a front/back sprite as tiny deltas vary.
+      const horizontal = x > z * 1.18 || x >= z / 1.18 && (this.facing === 'left' || this.facing === 'right');
+      this.facing = horizontal ? motion.x > 0 ? 'right' : 'left' : motion.z > 0 ? 'down' : 'up';
+      this.stride = reduced ? 0 : (this.stride + distance / AVATAR_FRAME_DISTANCE) % 4;
+      return { animation: `walk_${this.facing}`, frame: Math.floor(this.stride) };
+    }
+    this.stride = 1;
+    if (manager.phase === 'writing') {
+      const writing = manager.phaseElapsed >= .16 && manager.phaseElapsed < .92;
+      return { animation: writing ? 'board' : 'walk_up', frame: writing ? reduced ? 0 : Math.floor((manager.phaseElapsed - .16) * 4) % 2 : 1 };
+    }
+    return { animation: 'idle', frame: 0 };
   }
 }

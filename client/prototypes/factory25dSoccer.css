@@ -1,0 +1,8 @@
+.lounge-soccer-ball {
+  position: absolute; z-index: 8; width: 44px; height: 44px; padding: 0;
+  background: transparent; border: 0; border-radius: 50%; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.lounge-soccer-ball[hidden] { display: none; }
+.lounge-soccer-ball:focus { outline: none; }
+.lounge-soccer-ball:focus-visible { outline: 2px solid #9bf2dd; outline-offset: 2px; background: #9bf2dd14; }

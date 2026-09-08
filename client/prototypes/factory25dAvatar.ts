@@ -15,7 +15,7 @@ export function readAvatar(value: unknown): AvatarConfig | undefined {
     if (typeof raw[key] === 'string' && /^#[0-9a-f]{6}$/i.test(raw[key] as string)) result[key] = color(key, '#4a90d9');
   return result;
 }
-export const AVATAR_ANIMATIONS = ['idle', 'walk_right', 'walk_left', 'walk_down', 'walk_up', 'work', 'sit', 'sit_up'];
+export const AVATAR_ANIMATIONS = ['idle', 'walk_right', 'walk_left', 'walk_down', 'walk_up', 'work', 'sit', 'sit_up', 'hold_up'];
 // Painted sheets are immutable and shared by matching agents, companions and portraits.
 // Bound the cache so dragging a custom color never retains every intermediate look.
 const sheets = new Map<string, { canvas: HTMLCanvasElement; feet: number[][] }>();

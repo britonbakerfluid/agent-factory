@@ -1,3 +1,5 @@
+import { ticketBalance } from '@shared/station-tickets';
+import type { StationTicketState } from '@shared/types';
 import * as THREE from 'three';
 import { FRONT_COUNTER, INTERIOR_Z } from '@shared/factory25d-layout';
 import { lastSeenLabel, type TeamMember, type TeamSnapshot } from '@shared/team';
@@ -18,6 +20,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   roomCamera: THREE.OrthographicCamera, renderer: THREE.WebGLRenderer, onOpen: () => void,
   onVisitors?: (members: readonly TeamMember[]) => void,
   contributionFor: (username: string) => ContributionRecord | undefined = () => undefined) {
+  let stationTickets: StationTicketState | undefined;
   const abort = new AbortController(), events = { signal: abort.signal };
   const terminal = new THREE.Group(); terminal.position.set(FRONT_COUNTER.x-.25, FRONT_COUNTER.topY, FRONT_COUNTER.z-INTERIOR_Z-.04); parent.add(terminal);
   const casing = standard('#364344', .7), edge = standard('#566363', .6);
@@ -65,7 +68,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
     status.textContent = unavailable ? 'reconnecting · showing the last update'
       : data?.historyAvailable === false ? 'live now · visit history is waiting to save'
       : 'people join this list when they connect';
-    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now), contributionFor(member.name)])) + unavailable;
+    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now), contributionFor(member.name), stationTickets && ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name })])) + unavailable;
     if (signature !== next) {
       signature = next; const scroll = list.scrollTop; list.replaceChildren();
       for (const member of members) {
@@ -87,7 +90,9 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
           ? member.agents ? `here · ${member.agents} ${member.agents === 1 ? 'agent' : 'agents'}` : 'here · in the room'
           : lastSeenLabel(member.lastSeen, now);
         const dot = document.createElement('span'); dot.className = 'team-person-dot'; dot.setAttribute('aria-hidden', 'true');
-        details.append(heading, seen); row.append(image, details, dot); list.append(row);
+        const tickets = document.createElement('span'); tickets.className = 'team-person-tickets';
+        tickets.hidden = !stationTickets; tickets.textContent = `${ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name }).toLocaleString()} tickets`;
+        details.append(heading, seen, tickets); row.append(image, details, dot); list.append(row);
       }
       if (!members.length) { const empty = document.createElement('p'); empty.className = 'team-desk-empty'; empty.textContent = unavailable ? 'the team list is temporarily unavailable' : data ? 'the first person to connect will appear here' : 'checking who’s here…'; list.append(empty); }
       list.scrollTop = scroll;
@@ -175,6 +180,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   };
   paint(); void refresh();
   return {
+    setTickets(next: StationTicketState | undefined) { if (stationTickets === next) return; stationTickets = next; paint(); },
     members: (): readonly TeamMember[] => data?.members ?? emptyMembers,
     camera, isActive: () => active, focusPoint: () => desk.localToWorld(focus.set(0, 0, DISPLAY.faceZ)),
     update(now: number, visible: boolean) {

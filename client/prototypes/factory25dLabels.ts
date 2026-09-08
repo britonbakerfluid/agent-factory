@@ -109,7 +109,8 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
   const nextLevel = document.createElement('span'); nextLevel.className = 'agent-next-level';
   const provenance = document.createElement('small');
   contributions.append(total, progress, nextLevel, provenance);
-  details.append(heading, activity, source, contributions);
+  const tickets = document.createElement('small'); tickets.className = 'agent-ticket-total'; tickets.hidden = true;
+  details.append(heading, activity, source, contributions, tickets);
   details.hidden = true;
   element.append(button, details);
   parent.append(element);
@@ -165,6 +166,10 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
       progress.setAttribute('aria-label', `Level ${rank.level} progress: ${rank.earned} of ${rank.required} PRs`);
       nextLevel.textContent = `${rank.remaining} ${rank.remaining === 1 ? 'PR' : 'PRs'} to level ${rank.level + 1}`;
       provenance.textContent = `@${record.githubLogin} · checked ${new Date(record.checkedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    },
+    setTickets(balance: number | undefined) {
+      tickets.hidden = balance === undefined;
+      tickets.textContent = balance === undefined ? '' : `${balance.toLocaleString()} tickets collected`;
     },
     setActivity(text: string) {
       if (activity.textContent !== text) activity.textContent = text;

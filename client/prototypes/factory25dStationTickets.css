@@ -1,0 +1,3 @@
+.ticket-collection-note { position:absolute; z-index:7; transform:translate(-50%,-100%); pointer-events:none; padding:3px 6px; color:#ffe0a0; background:#263337; border:1px solid #847a59; border-radius:3px; font:11px "Geist Pixel",monospace; white-space:nowrap; }
+.ticket-collection-note[hidden] { display:none; }
+.agent-ticket-total, .team-person-tickets { color:#ddbf83 !important; }

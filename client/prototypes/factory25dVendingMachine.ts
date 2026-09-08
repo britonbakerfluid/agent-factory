@@ -20,8 +20,8 @@ export function createVendingMachine(parent: THREE.Object3D) {
     const result = standard(color, roughness, emissive); result.emissiveIntensity = intensity;
     materials.add(result); return result;
   };
-  const enamel = material('#c2d7c4', .52), edge = material('#7fa99c', .7);
-  const teal = material('#254743'), dark = material('#13262c'), metal = material('#8ca8a7', .45);
+  const enamel = material('#171c23', .42), edge = material('#343c45', .6);
+  const teal = material('#202c30'), dark = material('#0b1117'), metal = material('#8ca8a7', .45);
   const coral = material('#d96467'), cream = material('#f7deb5');
   const cool = material('#9bf2dd', .5, '#52c8b2', .85);
   const warm = material('#ffe3ac', .5, '#ffb76b', .75);
@@ -105,7 +105,7 @@ export function createVendingMachine(parent: THREE.Object3D) {
   };
   const header = sign('FLUID', .715, .103, 0, 1.24, '#243f3d', '#ffe5b9', .65);
   sign('SNACKS + SIPS', .48, .039, -.0675, .456, '#9fdfd8', '#244340', .35);
-  sign('REFRESH', .28, .033, -.06, .15, '#456b60', '#c2d7c4', .12);
+  sign('REFRESH', .28, .033, -.06, .15, '#8fb5aa', '#171c23', .12);
 
   // Glass is a thin overlay; all drinks and shelves behind it are real geometry.
   const glassMaterial = new THREE.MeshStandardMaterial({ color: '#a9dfd4', roughness: .19, metalness: .12,
