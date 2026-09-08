@@ -16,7 +16,7 @@ const validCount = (count: number) => new Response(JSON.stringify({ total_count:
 const services: ContributionService[] = [];
 
 function service(options: ConstructorParameters<typeof ContributionService>[0] = {}) {
-  const value = new ContributionService({ seed, identities, now: () => 5_000, ...options });
+  const value = new ContributionService({ seed, identities, repository: 'fluid-commerce/fluid-mono', now: () => 5_000, ...options });
   services.push(value);
   return value;
 }
@@ -32,7 +32,7 @@ describe('authored Fluid main contribution totals', () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     const counts = service({ fetch });
     counts.start();
-    expect(await counts.refresh()).toEqual({ repository: 'fluid-commerce/fluid-mono', baseBranch: 'main', contributors: seed, refresh: 'unconfigured' });
+    expect(await counts.refresh()).toEqual({ repository: 'fluid-commerce/fluid-mono', baseBranch: 'main', contributors: seed, identities: identities.map(identity => ({ ...identity, factoryUsernames: [] })), refresh: 'unconfigured' });
     expect(fetch).not.toHaveBeenCalled();
     const snapshot = counts.snapshot();
     snapshot.contributors[0].mergedPullRequests = 0;

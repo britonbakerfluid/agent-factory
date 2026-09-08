@@ -161,7 +161,7 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
       const rank = contributionLevel(record.mergedPullRequests);
       badge.textContent = `LV ${rank.level}`;
       badge.setAttribute('aria-label', `level ${rank.level}`);
-      total.textContent = `${record.mergedPullRequests.toLocaleString('en-US')} ${record.mergedPullRequests === 1 ? 'PR' : 'PRs'} merged into fluid/main`;
+      total.textContent = `${record.mergedPullRequests.toLocaleString('en-US')} ${record.mergedPullRequests === 1 ? 'PR' : 'PRs'} merged`;
       progress.max = rank.required; progress.value = rank.earned;
       progress.setAttribute('aria-label', `Level ${rank.level} progress: ${rank.earned} of ${rank.required} PRs`);
       nextLevel.textContent = `${rank.remaining} ${rank.remaining === 1 ? 'PR' : 'PRs'} to level ${rank.level + 1}`;

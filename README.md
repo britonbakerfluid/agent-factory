@@ -460,3 +460,7 @@ agent-factory/
 ## License
 
 MIT
+
+### GitHub App contribution counts
+
+Install a private GitHub App per organization/deployment to replace bundled contribution counts with live, repository-scoped totals. Configuration, callback behavior, Render setup, and migration steps are in [the GitHub App setup guide](docs/github-app.md).

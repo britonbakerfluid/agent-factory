@@ -93,6 +93,24 @@ describe('durable contribution history', () => {
     } finally { inspect.close(); }
   });
 
+  it('isolates deployments and repository/branch scopes and never imports unscoped legacy counts', async () => {
+    const { repository, url } = await database();
+    await repository.saveContributionRecords(baseline);
+    expect(await repository.loadContributionRecords('tenant-a')).toEqual([]);
+    await repository.saveContributionRecords(baseline, 'tenant-a');
+    const other = [{ ...baseline[0], mergedPullRequests: 2 }];
+    await repository.saveContributionRecords(other, 'tenant-b');
+    expect(await repository.loadContributionRecords('tenant-a')).toEqual(baseline);
+    expect(await repository.loadContributionRecords('tenant-b')).toEqual(other);
+    expect(await repository.loadContributionRecords('tenant-c')).toEqual([]);
+    await repository.close();
+    const restarted = new LibSqlWorldRepository({ url, production: false });
+    repositories.push(restarted); await restarted.initialize();
+    expect(await restarted.loadContributionRecords('tenant-b')).toEqual(other);
+    await restarted.saveContributionRecords([{ ...other[0], checkedAt: 1, mergedPullRequests: 100 }], 'tenant-b');
+    expect(await restarted.loadContributionRecords('tenant-b')).toEqual(other);
+  });
+
   it('does not overwrite world state, avatars, team presence, or the world revision status', async () => {
     const { repository } = await database();
     const world: WorldSnapshot = { schemaVersion: 1, revision: 7, serverTime: 5_000, environment: 'factory25d', agents: [], tombstones: [], chat: [], events: [] };

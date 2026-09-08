@@ -1,0 +1,13 @@
+{
+  "organization": "fluid-commerce",
+  "repository": "fluid-commerce/fluid-mono",
+  "baseBranch": "main",
+  "identities": [
+    { "githubLogin": "tingeym", "factoryUsernames": ["michaeltingey"] },
+    { "githubLogin": "britonbakerfluid", "factoryUsernames": ["Briton Baker", "britonbaker"] },
+    { "githubLogin": "Jonathanvergara", "factoryUsernames": ["jonathanvergara"] },
+    { "githubLogin": "wolzey", "factoryUsernames": ["Wolzey"] },
+    { "githubLogin": "braypay", "factoryUsernames": ["BrayPay"] },
+    { "githubLogin": "sachin-fluid", "factoryUsernames": ["Sachin"] }
+  ]
+}
