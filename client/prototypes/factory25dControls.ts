@@ -9,7 +9,7 @@ import { createToolbarMotion } from './factory25dToolbarMotion';
 import { factoryToolbarState } from './factory25dToolbarState';
 import { createProfilePortrait } from './factory25dPortrait';
 import { parseAvatarConfig } from '@shared/avatar-customization';
-import type { Position, WSMessageToServer } from '@shared/types';
+import type { Position } from '@shared/types';
 import { toFactoryWorld, fromFactoryWorld, WORKSTATIONS, factoryWorldPoint, factoryRoomAt, GARAGE_LEVEL, MINI_WORKSTATION_ID, MINI_WORKSTATION_USERNAME, type FactoryRoom } from '@shared/factory25d-layout';
 import { nearestWorkstationSlot, slotPosition } from '@shared/world-layouts';
 import { AuthManager } from '../auth/AuthManager';
@@ -22,7 +22,7 @@ import { createAvatarEditor, type AvatarScenePreview } from './factory25dAvatarE
 import { createEmoteBar } from './factory25dEmoteBar';
 import { AgentAttentionEpisodes, agentAttentionSummary, findPersonalAttentionAgent, personalAgentAttention } from './factory25dAgentAttention';
 import { createToolbarFocus } from './factory25dToolbarFocus';
-import { GRAB_DRAG_THRESHOLD } from '../grab/physics';
+import { GRAB_DRAG_THRESHOLD } from '../grab/pointer';
 import { ManualRoomFollower } from './factory25dManualTravel';
 import './factory25dControls.css';
 
@@ -129,9 +129,9 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   };
   const emit = (name: string, ...args: unknown[]) => listeners.get(name)?.forEach(fn => fn(...args as never[]));
   const grab = new GrabManager({ input }, { get isLoggedIn() { return !!data.canChat && data.world?.environment === 'factory25d'; } },
-    { send: message => { sendFactoryCommand(message as WSMessageToServer); } }, {
+    { send: message => { sendFactoryCommand(message); } }, {
       get isVortexActive() { return data.world?.events.some(event => event.effect === 'vortex' && event.expiresAt > Date.now()) ?? false; },
-      resolveGrabTarget(object) { const id = (object as unknown as THREE.Object3D).userData.sessionId; return id ? { sessionId: id } : null; },
+      resolveGrabTarget(object) { const id = (object as THREE.Object3D).userData.sessionId; return id ? { sessionId: id } : null; },
       hasGrabTarget: target => agents.entries.has(target.sessionId),
       beginGrab(target, pointer) { held.set(target.sessionId, pointer); return true; },
       applyRemoteGrab: (target, pointer) => { held.set(target.sessionId, pointer); },

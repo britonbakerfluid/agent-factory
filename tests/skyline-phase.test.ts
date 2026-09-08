@@ -3,7 +3,6 @@ import {
   paletteForElevation,
   phaseForElevation,
   rgbToCss,
-  rgbToInt,
   skyStateFromSnapshot,
   snowCover01,
   sunAltitude01,
@@ -56,10 +55,9 @@ describe('palette interpolation', () => {
     expect(paletteForElevation(90, true)).toEqual(paletteForElevation(24, true));
   });
 
-  it('formats colours for canvas and Phaser', () => {
+  it('formats canvas colours with optional opacity', () => {
     expect(rgbToCss([255, 128, 0])).toBe('rgb(255, 128, 0)');
     expect(rgbToCss([255, 128, 0], 0.5)).toBe('rgba(255, 128, 0, 0.5)');
-    expect(rgbToInt([0x12, 0x34, 0x56])).toBe(0x123456);
   });
 });
 

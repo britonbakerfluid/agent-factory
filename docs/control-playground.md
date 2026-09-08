@@ -35,5 +35,5 @@ It opens no factory WebSocket, sends no hooks, and never exchanges real authenti
 handoffs. Avatar saving uses an in-memory adapter. Its fixtures and state switcher are
 excluded from production builds; normal local preview URLs still watch the public factory.
 
-The original Phaser `EmoteWheel` and the 2.5D bar share `client/ui/emotes.ts` and
-`VALID_EMOTES`, preserving the existing names, glyphs, order, and animation commands.
+The 2.5D emote bar uses `client/ui/emotes.ts` and `VALID_EMOTES`, preserving the
+existing names, glyphs, order, and animation commands.

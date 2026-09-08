@@ -1,7 +1,7 @@
 {
   "name": "agent-factory",
   "version": "1.0.0",
-  "description": "2D pixel art visualization of Claude Code agent sessions",
+  "description": "Pixel-styled 3D visualization of Claude Code and Codex agent sessions",
   "type": "module",
   "pi": {
     "extensions": [
@@ -45,8 +45,6 @@
     "@types/node": "^25.5.0",
     "@types/three": "0.185.0",
     "concurrently": "^9.2.1",
-    "jsfxr": "^1.4.0",
-    "phaser": "^3.90.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "vite": "^8.0.2",

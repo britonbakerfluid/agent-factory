@@ -2,7 +2,7 @@
 
 The 2.5D room is now the main client entry at `/`. The existing
 `/prototype-25d-slice.html` bookmark opens the same factory. The previous Phaser
-entry is no longer part of the production build.
+entry and its unused client implementation have been removed.
 
 ## Upstream and deployment
 

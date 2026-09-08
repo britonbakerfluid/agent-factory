@@ -8,7 +8,6 @@ import {
   signKind,
 } from '../client/sky/skylineData';
 import type { SkylineBuilding } from '../client/sky/skylineData';
-import { prefersReducedMotion } from '../client/sky/motion';
 
 describe('seeded random', () => {
   it('replays the same sequence for the same seed and differs across seeds', () => {
@@ -95,16 +94,6 @@ describe('resolveSkyline data hook', () => {
       { x: 0, width: 4, height: DEFAULT_SKYLINE_BOUNDS.minHeight, roof: 'flat', lit: 0, seed: 4, facade: 0.5, windows: 'grid', setback: 0, antenna: false, sign: null },
       { x: 190, width: 10, height: DEFAULT_SKYLINE_BOUNDS.maxHeight, roof: 'flat', lit: 1, seed: 3, facade: 0.5, windows: 'grid', setback: 0, antenna: false, sign: null },
     ]);
-  });
-});
-
-describe('prefersReducedMotion', () => {
-  it('is false without matchMedia and reflects the query when present', () => {
-    expect(prefersReducedMotion(undefined)).toBe(false);
-    expect(prefersReducedMotion(() => ({ matches: true }))).toBe(true);
-    expect(prefersReducedMotion(() => ({ matches: false }))).toBe(false);
-    expect(prefersReducedMotion(() => null)).toBe(false);
-    expect(prefersReducedMotion(() => { throw new Error('boom'); })).toBe(false);
   });
 });
 

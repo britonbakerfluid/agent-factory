@@ -1,6 +1,6 @@
 # Agent Factory
 
-A 2D pixel art visualization of Claude Code/Codex agent sessions. Watch your team's agents work in a retro arcade game room in real time.
+A pixel-styled 3D visualization of Claude Code/Codex agent sessions. Watch your team's agents work across a shared workspace, patio, and garage in real time.
 
 ![Retro arcade themed visualization](https://img.shields.io/badge/theme-retro%20arcade-ff00ff)
 ![Hook events](https://img.shields.io/badge/powered%20by-hook%20events-00ffff)
@@ -13,7 +13,7 @@ A 2D pixel art visualization of Claude Code/Codex agent sessions. Watch your tea
 - Subagents orbit their parent with a purple tint
 - Hover over any avatar to see session details (username, project, current tool, task description)
 - Team members connect to a shared server to see everyone's agents at once
-- Log in from the browser to send emotes and chat via a terminal-style command prompt
+- Connect your browser to customize avatars, control your agents, and use emotes and lounge chat
 
 ## Quick Install (Team Members)
 
@@ -178,8 +178,8 @@ The response should report `status: "ok"` and `persistence.healthy: true`. Resta
 ## How It Works
 
 ```
-Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket──>  Browser (Phaser 3)
-(ephemeral bash)                   (port 4242)                     (2D pixel art arcade)
+Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket──>  Browser (Three.js)
+(ephemeral bash)                   (port 4242)                     (pixel-styled 3D factory)
 ```
 
 1. **Hooks** fire on Claude Code/Codex events (session start/end, tool use, subagent spawn/stop)
@@ -296,24 +296,24 @@ agent-factory login
 
 The CLI authenticates this installation, creates a one-time 60-second handoff, and opens Agent Factory in your default browser. The handoff contains no device credential and is removed from the URL immediately after exchange.
 
-Once logged in, an **Avatar Uplink** panel appears in the top-left. It lists active top-level agents owned by this installation. Choose a session and click **Take Control**; ownership is independent of the editable display username.
+Once connected, open your profile in the bottom toolbar to see agents owned by this installation. Choose **go to** to locate an agent or **control** to move it. The toolbar shows which agent you are controlling and a **stop controlling** button. Ownership is independent of the editable display username.
 
 ### Web Avatar Controls
 
 | Key | Action |
 |-----|--------|
 | `W` `A` `S` `D` | Move the selected avatar around the factory |
-| `B` | Open the radial emote wheel |
-| `Left` / `Right` | Rotate the wheel selection |
-| `Enter` / `Space` | Confirm the selected wheel emote |
-| `Space` | Fire in the avatar's current facing direction while the wheel is closed |
-| `Escape` | Close the wheel, or release avatar control |
+| `B` | Open the emote menu |
+| `Left` / `Right` | Move between emotes |
+| `Enter` / `Space` | Activate the focused emote |
+| `Space` | Fire in the avatar's current facing direction while the emote menu is closed |
+| `Escape` | Close the emote menu, or release avatar control |
 
 Manual control affects only the visual avatar. The underlying Claude/Codex session keeps running, its activity indicators continue to update, and automatic workstation/lounge routing resumes when control is released. Control is also released on logout, disconnect, or session end. A newer browser authenticated as the same owner can take over an existing control lease.
 
 ### Web Avatar Editor
 
-In the 2.5D room, open **agents → edit avatar** after connecting your browser.
+Open **your profile → edit avatar** in the bottom toolbar after connecting your browser.
 Preview hair, skin, clothing and accessories, turn the character, or preview its
 walking animation. **Save avatar** updates your connected installation's agents
 immediately and applies the same appearance to its future sessions. Cancel keeps
@@ -326,24 +326,15 @@ preference continue using their terminal configuration. No CLI update is needed.
 
 ### Grabbing Avatars
 
-Once logged in, you can also pick full-size agent avatars up. Press and drag: the avatar lifts off the floor and dangles under your pointer, with its shirt pinched into a shaded fabric triangle from the shoulders to your cursor (long-haired avatars are lifted by a matching wedge of hair instead). Let go anywhere and it drops with gravity, squashes on landing, and resumes its server-authored route. Dropping directly on a free workstation assigns it to that station.
+Connected viewers can press and drag an avatar to pick it up, then release it to drop it. Dropping near a free workstation can update its shared workstation assignment.
 
-- Any authenticated viewer can grab any avatar, not just their own.
-- The server hands out one grab lease per avatar, so two viewers never fight over the same sprite. Everyone in the room sees the same lift, dangle, and drop.
-- A grab is released automatically on pointer cancel, window blur, tab hidden, logout, disconnect, when the session ends, or when the avatar's owner takes manual control.
-- Dropping an avatar next to a free workstation seats it there; dropping it onto another avatar starts a quick rock-paper-scissors match. Idle avatars roam the lounge and wander to the window on their own.
-- Ordinary floor drops are temporary. A validated workstation drop updates the shared workstation assignment.
-- Avatars and workstations share one floor-sorted depth band keyed on the base line of each object. An avatar dropped behind a machine renders behind the top of the cabinet and walks back out in front of it, while the server-authored aisle routes keep agents in the visible lane between cabinets.
+- The server grants one grab lease per avatar so viewers cannot drag it in competing directions.
+- Grabs end on pointer cancellation, window blur, a hidden tab, logout, disconnect, session end, or manual control takeover.
+- Shared grab messages keep the other viewers in sync; the Three.js scene renders the movement.
 
-A terminal-style command bar also appears at the bottom. Available commands:
+### Chat and Emotes
 
-| Command | Description |
-|---------|-------------|
-| `/emote <name>` | Trigger an emote (dance, jump, guitar, gun, laugh, wave, sleep, explode, dizzy, flex, rage, fart) |
-| `/chat <message>` | Send a chat message visible to all viewers |
-| `/help` | Show available commands |
-| `/logout` | Log out of the browser session |
-| bare text | Sent as a chat message (no `/` prefix needed) |
+Click the lounge phone to open shared chat. While controlling your agent, use the toolbar's emote menu or press **B** to choose a reaction. The terminal also supports `agent-factory chat` and `agent-factory emote`.
 
 Login persists in an HttpOnly, SameSite browser cookie and automatically re-authenticates on refresh, browser restart, server redeploy, and WebSocket reconnect. Its one-year expiration renews whenever the app restores the session. Browser JavaScript never stores or reads the credential.
 
@@ -448,13 +439,14 @@ agent-factory/
 │   ├── routes/       # Hook, command, health, and browser handoff APIs
 │   ├── ws/           # WebSocket broadcast manager (per-socket auth)
 │   └── cleanup.ts    # Stale session reaper
-├── client/           # Phaser 3 browser app
-│   ├── scenes/       # BootScene, FactoryScene, UIScene
-│   ├── entities/     # AgentSprite, SubagentSprite, Machine
-│   ├── systems/      # AgentManager, LayoutManager
+├── client/           # Three.js browser app with HTML/CSS controls
+│   ├── prototypes/   # Live factory scene, rooms, toolbar, weather and interactions
+│   ├── rendering/    # Shared pixel avatar painter
+│   ├── sky/          # Shared weather, solar clock and raster painting
+│   ├── grab/         # Renderer-independent drag/lease handling
+│   ├── state/        # Revisioned WebSocket world store
 │   ├── auth/         # Cookie-session bootstrap state
-│   ├── ui/           # ChatOverlay, LoginOverlay, CommandInput
-│   └── network/      # WebSocket client with auto-reconnect
+│   └── ui/           # Shared chat rendering and emote definitions
 ├── shared/           # Types and constants shared between server/client
 ├── cli/              # Go CLI binary
 │   ├── cmd/          # Cobra commands (install, login, connect, emote, chat, avatar, update)

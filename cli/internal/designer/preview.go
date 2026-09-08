@@ -143,7 +143,7 @@ func (g *Grid) fillRectAlpha(p Pixel, x, y, w, h int) {
 }
 
 // DrawCharacter renders the idle frame 0 character onto a Grid.
-// Matches BootScene.ts drawCharacter() for anim="idle", frame=0.
+// Legacy sprite layout: drawCharacter() for anim="idle", frame=0.
 func DrawCharacter(params AvatarParams) Grid {
 	var g Grid
 
@@ -249,7 +249,7 @@ func DrawCharacter(params AvatarParams) Grid {
 }
 
 // drawHairStyle draws the appropriate hair style onto the grid.
-// Matches BootScene.ts HAIR_STYLES exactly (idle frame 0, bounce=0, hairY=4).
+// Legacy sprite layout: HAIR_STYLES (idle frame 0, bounce=0, hairY=4).
 func drawHairStyle(g *Grid, style int, hair, body Pixel) {
 	switch style % 8 {
 	case 0: // Short flat
@@ -302,7 +302,7 @@ func drawHairStyle(g *Grid, style int, hair, body Pixel) {
 }
 
 // drawMouthStyle draws the mouth onto the grid.
-// Matches BootScene.ts MOUTH_STYLES (bounce=0).
+// Legacy sprite layout: MOUTH_STYLES (bounce=0).
 func drawMouthStyle(g *Grid, style int) {
 	switch style % 6 {
 	case 0: // Default (none)
@@ -327,7 +327,7 @@ func drawMouthStyle(g *Grid, style int) {
 }
 
 // drawFacialHairStyle draws facial hair onto the grid.
-// Matches BootScene.ts FACIAL_HAIR_STYLES (bounce=0).
+// Legacy sprite layout: FACIAL_HAIR_STYLES (bounce=0).
 func drawFacialHairStyle(g *Grid, style int, hair Pixel) {
 	hairAlpha := Pixel{hair.R, hair.G, hair.B, 102} // globalAlpha 0.4
 	switch style % 6 {
@@ -355,7 +355,7 @@ func drawFacialHairStyle(g *Grid, style int, hair Pixel) {
 }
 
 // drawFaceAccessoryStyle draws face accessories onto the grid.
-// Matches BootScene.ts FACE_ACCESSORIES (bounce=0, eyeY=8).
+// Legacy sprite layout: FACE_ACCESSORIES (bounce=0, eyeY=8).
 func drawFaceAccessoryStyle(g *Grid, style int) {
 	switch style % 6 {
 	case 0: // None
@@ -405,7 +405,7 @@ func drawFaceAccessoryStyle(g *Grid, style int) {
 }
 
 // drawHeadAccessoryStyle draws head accessories onto the grid.
-// Matches BootScene.ts HEAD_ACCESSORIES (bounce=0).
+// Legacy sprite layout: HEAD_ACCESSORIES (bounce=0).
 func drawHeadAccessoryStyle(g *Grid, style int) {
 	switch style % 7 {
 	case 0: // None
@@ -465,7 +465,7 @@ func drawHeadAccessoryStyle(g *Grid, style int) {
 }
 
 // drawShirtDesignStyle draws shirt designs onto the grid.
-// Matches BootScene.ts SHIRT_DESIGNS (bounce=0, breathe=0) + new designs.
+// Legacy sprite layout: SHIRT_DESIGNS (bounce=0, breathe=0) + new designs.
 func drawShirtDesignStyle(g *Grid, style int, darkShirt, lightShirt Pixel) {
 	switch style % 12 {
 	case 0: // Solid (none)
