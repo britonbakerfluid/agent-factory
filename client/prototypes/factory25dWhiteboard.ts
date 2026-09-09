@@ -493,8 +493,8 @@ export function createWhiteboardInteraction({
           top = Math.min(top, py);
           bottom = Math.max(bottom, py);
         }
-    const hitWidth = button === openBoard ? Math.max(44, right - left) : right - left;
-    const hitHeight = button === openBoard ? Math.max(44, bottom - top) : bottom - top;
+    const hitWidth = Math.max(44, right - left);
+    const hitHeight = Math.max(44, bottom - top);
     button.style.left = `${(left + right - hitWidth) / 2}px`;
     button.style.top = `${(top + bottom - hitHeight) / 2}px`;
     button.style.width = `${hitWidth}px`;

@@ -1,0 +1,502 @@
+{
+  "date": "2026-09-08",
+  "scope": "Local production builds with 18 synthetic active agents, logged out; not a live-site or mobile score.",
+  "baselineCommit": "e952b2fcbd5235ce4dbb808aa0df4c9f04261a5c",
+  "baselineIncludes": "Pending second cleanup: removed unused images/symbols and enabled client noUnused checks.",
+  "candidateChanges": [
+    "Production-only shader diagnostics disabled",
+    "Hidden upper-floor plant transforms skipped in the garage",
+    "Larger whiteboard game hit target and unobscured staff targets"
+  ],
+  "fixtureSHA256": "d5bf96d16281d8ff012cbaba8774ce373496128c91939a6c321a2108fcf0cadd",
+  "lighthouse": {
+    "baseline": {
+      "runs": [
+        {
+          "run": 1,
+          "fetchTime": "2026-09-08T22:51:02.592Z",
+          "performance": 32,
+          "accessibility": 95,
+          "metrics": {
+            "first-contentful-paint": 1636.8735000000001,
+            "largest-contentful-paint": 4860.8735,
+            "total-blocking-time": 6713,
+            "speed-index": 11504.206880352242,
+            "cumulative-layout-shift": 0.0004343865102296938
+          },
+          "version": "13.4.1",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+          "benchmarkIndex": 3249
+        },
+        {
+          "run": 2,
+          "fetchTime": "2026-09-08T22:52:29.784Z",
+          "performance": 48,
+          "accessibility": 95,
+          "metrics": {
+            "first-contentful-paint": 1637.9361,
+            "largest-contentful-paint": 2198.9361,
+            "total-blocking-time": 1021.5,
+            "speed-index": 3030.7197683479485,
+            "cumulative-layout-shift": 0.0004078560692291977
+          },
+          "version": "13.4.1",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+          "benchmarkIndex": 3119.5
+        },
+        {
+          "run": 3,
+          "fetchTime": "2026-09-08T22:52:53.398Z",
+          "performance": 57,
+          "accessibility": 95,
+          "metrics": {
+            "first-contentful-paint": 1626.8218769594782,
+            "largest-contentful-paint": 1666.8218769594782,
+            "total-blocking-time": 716,
+            "speed-index": 2314.9847665666025,
+            "cumulative-layout-shift": 0.00041815602836879433
+          },
+          "version": "13.4.1",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+          "benchmarkIndex": 3233.5
+        }
+      ],
+      "median": {
+        "performance": 48,
+        "accessibility": 95,
+        "metrics": {
+          "first-contentful-paint": 1636.8735000000001,
+          "largest-contentful-paint": 2198.9361,
+          "total-blocking-time": 1021.5,
+          "speed-index": 3030.7197683479485,
+          "cumulative-layout-shift": 0.00041815602836879433
+        }
+      }
+    },
+    "candidate": {
+      "runs": [
+        {
+          "run": 1,
+          "fetchTime": "2026-09-08T23:01:58.166Z",
+          "performance": 56,
+          "accessibility": 100,
+          "metrics": {
+            "first-contentful-paint": 1636.2766881354084,
+            "largest-contentful-paint": 1676.2766881354084,
+            "total-blocking-time": 797.9999999999995,
+            "speed-index": 2448.5971107524933,
+            "cumulative-layout-shift": 0.00043333508449347686
+          },
+          "version": "13.4.1",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+          "benchmarkIndex": 3513
+        },
+        {
+          "run": 2,
+          "fetchTime": "2026-09-08T23:02:17.068Z",
+          "performance": 56,
+          "accessibility": 100,
+          "metrics": {
+            "first-contentful-paint": 1656.3335,
+            "largest-contentful-paint": 1696.3335,
+            "total-blocking-time": 724,
+            "speed-index": 2356.045882336875,
+            "cumulative-layout-shift": 0.0004041014359513177
+          },
+          "version": "13.4.1",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+          "benchmarkIndex": 3121.5
+        },
+        {
+          "run": 3,
+          "fetchTime": "2026-09-08T23:02:34.130Z",
+          "performance": 61,
+          "accessibility": 100,
+          "metrics": {
+            "first-contentful-paint": 1649.0673004305147,
+            "largest-contentful-paint": 1689.0673004305147,
+            "total-blocking-time": 561.9999999999998,
+            "speed-index": 2099.0597856248064,
+            "cumulative-layout-shift": 0.0004022851180573797
+          },
+          "version": "13.4.1",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+          "benchmarkIndex": 3143.5
+        }
+      ],
+      "median": {
+        "performance": 56,
+        "accessibility": 100,
+        "metrics": {
+          "first-contentful-paint": 1649.0673004305147,
+          "largest-contentful-paint": 1689.0673004305147,
+          "total-blocking-time": 724,
+          "speed-index": 2356.045882336875,
+          "cumulative-layout-shift": 0.0004041014359513177
+        }
+      }
+    },
+    "settings": {
+      "preset": "desktop",
+      "screenEmulation": {
+        "mobile": false,
+        "width": 1350,
+        "height": 940,
+        "deviceScaleFactor": 1,
+        "disabled": false
+      },
+      "throttling": {
+        "rttMs": 40,
+        "throughputKbps": 10240,
+        "requestLatencyMs": 0,
+        "downloadThroughputKbps": 0,
+        "uploadThroughputKbps": 0,
+        "cpuSlowdownMultiplier": 1
+      },
+      "throttlingMethod": "simulate"
+    }
+  },
+  "frames": {
+    "baseline": [
+      {
+        "url": "http://127.0.0.1:5184/?factoryServer=local&skyTime=day&skyWeather=cloudy&benchmark=1",
+        "garage": false,
+        "width": 1231,
+        "height": 1684,
+        "results": [
+          {
+            "sample": 1,
+            "frames": 601,
+            "fps": 59.998003394229805,
+            "meanMs": 16.66722129783694,
+            "p95Ms": 17.599999999998545,
+            "over33ms": 0,
+            "longTasks": 2,
+            "longTaskMs": 155,
+            "hidden": false
+          },
+          {
+            "sample": 2,
+            "frames": 601,
+            "fps": 59.99920134174589,
+            "meanMs": 16.66688851913477,
+            "p95Ms": 17.5,
+            "over33ms": 0,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          },
+          {
+            "sample": 3,
+            "frames": 594,
+            "fps": 59.3994060059399,
+            "meanMs": 16.835185185185196,
+            "p95Ms": 17.599999999998545,
+            "over33ms": 3,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          }
+        ]
+      },
+      {
+        "url": "http://127.0.0.1:5184/?factoryServer=local&skyTime=day&skyWeather=cloudy&benchmark=1",
+        "garage": true,
+        "width": 1231,
+        "height": 1684,
+        "results": [
+          {
+            "sample": 1,
+            "frames": 543,
+            "fps": 54.212717524785106,
+            "meanMs": 18.445856353591157,
+            "p95Ms": 33.30000000000291,
+            "over33ms": 19,
+            "longTasks": 1,
+            "longTaskMs": 59,
+            "hidden": false
+          },
+          {
+            "sample": 2,
+            "frames": 574,
+            "fps": 57.39827805165848,
+            "meanMs": 17.42212543554006,
+            "p95Ms": 17.60000000000582,
+            "over33ms": 9,
+            "longTasks": 2,
+            "longTaskMs": 199,
+            "hidden": false
+          },
+          {
+            "sample": 3,
+            "frames": 558,
+            "fps": 55.797210139493025,
+            "meanMs": 17.922043010752688,
+            "p95Ms": 33.299999999995634,
+            "over33ms": 12,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          }
+        ]
+      },
+      {
+        "url": "http://127.0.0.1:5184/?factoryServer=local&skyTime=day&skyWeather=rain-heavy&benchmark=1",
+        "garage": false,
+        "width": 1231,
+        "height": 1684,
+        "results": [
+          {
+            "sample": 1,
+            "frames": 599,
+            "fps": 59.80192484325704,
+            "meanMs": 16.721869782971623,
+            "p95Ms": 17.5,
+            "over33ms": 0,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          },
+          {
+            "sample": 2,
+            "frames": 600,
+            "fps": 59.997600095996155,
+            "meanMs": 16.667333333333335,
+            "p95Ms": 17.5,
+            "over33ms": 0,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          },
+          {
+            "sample": 3,
+            "frames": 596,
+            "fps": 59.59940400595995,
+            "meanMs": 16.778691275167784,
+            "p95Ms": 17.5,
+            "over33ms": 1,
+            "longTasks": 1,
+            "longTaskMs": 83,
+            "hidden": false
+          }
+        ]
+      },
+      {
+        "url": "http://127.0.0.1:5184/?factoryServer=local&skyTime=day&skyWeather=cloudy&benchmark=1",
+        "garage": false,
+        "width": 1280,
+        "height": 720,
+        "results": [
+          {
+            "sample": 1,
+            "frames": 195,
+            "fps": 19.374068554396423,
+            "meanMs": 51.61538461538461,
+            "p95Ms": 133.3000000000029,
+            "over33ms": 114,
+            "longTasks": 103,
+            "longTaskMs": 9879,
+            "hidden": false
+          },
+          {
+            "sample": 2,
+            "frames": 189,
+            "fps": 18.495865342271372,
+            "meanMs": 54.06613756613756,
+            "p95Ms": 133.29999999998836,
+            "over33ms": 128,
+            "longTasks": 89,
+            "longTaskMs": 7357,
+            "hidden": false
+          },
+          {
+            "sample": 3,
+            "frames": 271,
+            "fps": 27.05454835875728,
+            "meanMs": 36.962361623616246,
+            "p95Ms": 68.60000000000582,
+            "over33ms": 93,
+            "longTasks": 49,
+            "longTaskMs": 3369,
+            "hidden": false
+          }
+        ]
+      }
+    ],
+    "candidate": [
+      {
+        "url": "http://127.0.0.1:5185/?factoryServer=local&skyTime=day&skyWeather=cloudy&benchmark=1",
+        "garage": false,
+        "width": 1280,
+        "height": 720,
+        "results": [
+          {
+            "sample": 1,
+            "frames": 444,
+            "fps": 44.322878191946025,
+            "meanMs": 22.561711711711705,
+            "p95Ms": 34,
+            "over33ms": 49,
+            "longTasks": 2,
+            "longTaskMs": 176,
+            "hidden": false
+          },
+          {
+            "sample": 2,
+            "frames": 513,
+            "fps": 51.299487005129954,
+            "meanMs": 19.493372319688106,
+            "p95Ms": 33.39999999999782,
+            "over33ms": 25,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          },
+          {
+            "sample": 3,
+            "frames": 464,
+            "fps": 46.32264118921399,
+            "meanMs": 21.58771551724139,
+            "p95Ms": 33.599999999998545,
+            "over33ms": 47,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          }
+        ]
+      },
+      {
+        "url": "http://127.0.0.1:5185/?factoryServer=local&skyTime=day&skyWeather=cloudy&benchmark=1",
+        "garage": false,
+        "width": 1280,
+        "height": 720,
+        "results": [
+          {
+            "sample": 1,
+            "frames": 593,
+            "fps": 59.200543087612836,
+            "meanMs": 16.891736930860027,
+            "p95Ms": 17.599999999998545,
+            "over33ms": 3,
+            "longTasks": 1,
+            "longTaskMs": 50,
+            "hidden": false
+          },
+          {
+            "sample": 2,
+            "frames": 600,
+            "fps": 59.99940000599995,
+            "meanMs": 16.66683333333333,
+            "p95Ms": 17.5,
+            "over33ms": 0,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          },
+          {
+            "sample": 3,
+            "frames": 598,
+            "fps": 59.79940200597991,
+            "meanMs": 16.72257525083613,
+            "p95Ms": 17.39999999999418,
+            "over33ms": 1,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          }
+        ]
+      },
+      {
+        "url": "http://127.0.0.1:5185/?factoryServer=local&skyTime=day&skyWeather=cloudy&benchmark=1",
+        "garage": true,
+        "width": 1280,
+        "height": 720,
+        "results": [
+          {
+            "sample": 1,
+            "frames": 596,
+            "fps": 59.49469439092798,
+            "meanMs": 16.808221476510088,
+            "p95Ms": 17.60000000000582,
+            "over33ms": 0,
+            "longTasks": 1,
+            "longTaskMs": 71,
+            "hidden": false
+          },
+          {
+            "sample": 2,
+            "frames": 599,
+            "fps": 59.89880202395962,
+            "meanMs": 16.694824707846383,
+            "p95Ms": 17.60000000000582,
+            "over33ms": 0,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          },
+          {
+            "sample": 3,
+            "frames": 598,
+            "fps": 59.79940200597991,
+            "meanMs": 16.72257525083613,
+            "p95Ms": 17.60000000000582,
+            "over33ms": 0,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          }
+        ]
+      },
+      {
+        "url": "http://127.0.0.1:5185/?factoryServer=local&skyTime=day&skyWeather=rain-heavy&benchmark=1",
+        "garage": false,
+        "width": 1280,
+        "height": 720,
+        "results": [
+          {
+            "sample": 1,
+            "frames": 599,
+            "fps": 59.799536778212605,
+            "meanMs": 16.72253756260434,
+            "p95Ms": 17.599999999998545,
+            "over33ms": 0,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          },
+          {
+            "sample": 2,
+            "frames": 599,
+            "fps": 59.89940100598995,
+            "meanMs": 16.694657762938228,
+            "p95Ms": 17.599999999998545,
+            "over33ms": 0,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          },
+          {
+            "sample": 3,
+            "frames": 600,
+            "fps": 59.99940000599995,
+            "meanMs": 16.66683333333333,
+            "p95Ms": 17.599999999998545,
+            "over33ms": 0,
+            "longTasks": 0,
+            "longTaskMs": 0,
+            "hidden": false
+          }
+        ]
+      }
+    ],
+    "notes": [
+      "All samples kept. No defensible paired FPS speedup claim: initial baseline viewport was 1231x1684, candidate viewport 1280x720.",
+      "Candidate frame group 1 ran with both benchmark tabs open; exclude it from representative candidate medians.",
+      "Candidate groups 2-4 use one benchmark tab at 1280x720: workspace cloudy, garage cloudy, workspace rain-heavy.",
+      "Baseline group 4 is the 1280x720 workspace repeat with matching lights; it dropped to 18-27 fps during substantial unrelated background CPU load.",
+      "Initial baseline light preferences differed from candidate; corrected before the 1280x720 repeat. Initial baseline numbers are diagnostic only.",
+      "Frame rates are requestAnimationFrame callback timing, not GPU presentation measurements. All saved groups have hidden=false.",
+      "The first long-task count in each group includes its 5-second warmup; frame samples exclude warmup."
+    ]
+  }
+}

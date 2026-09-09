@@ -9,7 +9,7 @@ for (const [width, height] of [[1440, 900], [1033, 1044], [699, 900], [390, 844]
     const target = brandClosePose(focus, new THREE.Quaternion(), size, width, height);
     const camera = new THREE.OrthographicCamera(-10, 10, 10, -10, .01, 100);
     blendCamera(camera, target, target, 1, width / height, focus);
-    const center = focus.clone().project(camera), frame = brandFraming(width, height);
+    const center = focus.clone().project(camera), frame = brandFraming(width);
     expect((center.x + 1) / 2).toBeCloseTo(frame.x);
     expect((1 - center.y) / 2).toBeCloseTo(frame.y);
     for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
@@ -28,7 +28,7 @@ it('hones in on the shelf along one screen-space path and can reverse midflight'
   const focus = new THREE.Vector3(-4.84, .6, 6.61), from = cameraPose(camera);
   const to = brandClosePose(focus, new THREE.Quaternion(), new THREE.Vector3(1.48, 1.18, .5), 1440, 900);
   blendCamera(camera, from, to, 0, 1440 / 900, focus);
-  const endX = brandFraming(1440, 900).x * 2 - 1;
+  const endX = brandFraming(1440).x * 2 - 1;
   let previous = Math.abs(focus.clone().project(camera).x - endX);
   for (let t = 0; t <= 1; t += .1) {
     blendCamera(camera, from, to, t, 1440 / 900, focus);

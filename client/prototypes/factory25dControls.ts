@@ -1,3 +1,4 @@
+import { agentPickerItems } from './factory25dAgentPicker';
 import { createProfileMenu } from './factory25dProfileMenu';
 import { createToolbarElement } from './factory25dToolbarElement';
 import * as THREE from 'three';
@@ -231,10 +232,10 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     panel.querySelector('.factory-step-help')!.textContent = help[phase];
     panel.querySelector<HTMLElement>('.factory-connect-guide')!.hidden = !connecting || !!data.principal || (!preview && factoryHost() !== location.origin);
     paintToolbar();
-    const list = state.owned(), next = JSON.stringify(list.map(a => [a.sessionId, a.sessionName, a.activity]));
+    const list = state.owned(), items = agentPickerItems(list), next = JSON.stringify(items);
     if (next !== signature) {
       const selected = picker.value; picker.replaceChildren(); signature = next;
-      for (const agent of list) { const option = document.createElement('option'); option.value = agent.sessionId; option.textContent = `${agent.sessionName || agent.cwd.split('/').filter(Boolean).at(-1) || agent.username} · ${agent.activity}`; picker.add(option); }
+      for (const item of items) { const option = document.createElement('option'); option.value = item.value; option.textContent = item.label; picker.add(option); }
       if (list.some(a => a.sessionId === selected)) picker.value = selected;
     }
     picker.disabled = list.length === 0 || !data.connected;

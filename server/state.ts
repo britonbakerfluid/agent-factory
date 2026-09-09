@@ -924,6 +924,8 @@ export class StateManager {
         this.touchAndEmit(payload, 'info_flash', { type: 'config' });
         break;
       case 'CwdChanged': {
+        // Missing paths from older/malformed hooks must not erase the last known project.
+        if (!payload.cwd) break;
         const s = this.ensureSession(payload);
         if (!s) break;
         s.cwd = payload.cwd;
