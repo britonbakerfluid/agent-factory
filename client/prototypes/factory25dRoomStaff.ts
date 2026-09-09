@@ -44,8 +44,8 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
           // missing caption or the empty transparent pixels around the sprite.
           corner.set(point.x - .25, point.y, point.z).project(camera);
           top.set(point.x + .25, point.y + .71, point.z).project(camera);
-          label.element.style.setProperty('--staff-hit-width', `${Math.max(16, Math.abs(top.x - corner.x) * canvas.clientWidth / 2)}px`);
-          label.element.style.setProperty('--staff-hit-height', `${Math.max(20, Math.abs(top.y - corner.y) * canvas.clientHeight / 2)}px`);
+          label.element.style.setProperty('--staff-hit-width', `${Math.max(24, Math.abs(top.x - corner.x) * canvas.clientWidth / 2)}px`);
+          label.element.style.setProperty('--staff-hit-height', `${Math.max(24, Math.abs(top.y - corner.y) * canvas.clientHeight / 2)}px`);
         }
       },
       dispose() { label.element.querySelector('button')!.removeEventListener('click', click); label.dispose(); mesh.removeFromParent(); shadow.removeFromParent(); mesh.geometry.dispose(); material.dispose(); texture.dispose(); }

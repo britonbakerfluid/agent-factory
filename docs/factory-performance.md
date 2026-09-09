@@ -32,3 +32,7 @@ The procedural window landscape totals 121,868 triangles. The optional Blender t
 5. Skip decorative plant transform updates when their room is not rendered. Avoid pausing shared agent, chat, control or driving state along with the visuals.
 
 Checks cover closed solid low-detail leaves, subpixel outline differences at normal room scale, attached vein depth, restored detail and snow on zoom, unchanged foliage poses/colours, switching hysteresis and the hanging plant's geometry/drawing budget. Actual visual comparison, shadow appearance and performance on a physical mobile device still need checking.
+
+## Measured follow-up — September 8, 2026
+
+[The local Lighthouse and frame baseline](performance-baseline.md) records automated accessibility improving from 95 to 100, preliminary startup measurements, and frame samples with their viewport/background-load limitations. It also implements the hidden upper-floor plant update skip described above. A reliable paired FPS comparison and physical-phone measurements remain pending.

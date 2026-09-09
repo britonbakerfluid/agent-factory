@@ -1,6 +1,7 @@
 /* Staff have no floating nameplate. The same accessible button follows their
    painted body, so hovering or keyboard focus can still reveal their role. */
-.agent-label.room-staff-label { width: 1px; padding-bottom: 0; }
+/* Staff body targets sit above the board hit area, like the visible character. */
+.agent-label.room-staff-label { width: 1px; padding-bottom: 0; z-index: 8; }
 .agent-label.room-staff-label > .agent-name {
   position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
   width: var(--staff-hit-width, 24px); height: var(--staff-hit-height, 34px);

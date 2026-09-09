@@ -100,26 +100,6 @@ export interface SkylineGeometry {
   buildingSource: 'custom' | 'default';
 }
 
-function softenRidge(ridge: Ridge, passes = 2): Ridge {
-  let current = Float32Array.from(ridge.heights);
-  for (let pass = 0; pass < passes; pass++) {
-    const next = new Float32Array(current.length);
-    for (let x = 0; x < current.length; x++) {
-      const a = current[Math.max(0, x - 2)];
-      const b = current[Math.max(0, x - 1)];
-      const c = current[x];
-      const d = current[Math.min(current.length - 1, x + 1)];
-      const e = current[Math.min(current.length - 1, x + 2)];
-      next[x] = (a + 2 * b + 4 * c + 2 * d + e) / 10;
-    }
-    current = next;
-  }
-  return {
-    ...ridge,
-    heights: Uint8Array.from(current, height => Math.round(height)),
-  };
-}
-
 export function createSkylineGeometry(
   width: number,
   height: number,
@@ -570,7 +550,6 @@ function paintRidge(pixels: PixelBuffer, geometry: SkylineGeometry, ridge: Ridge
     const right = heights[Math.min(width - 1, x + 18)];
     const trend = right - left;
     const facingLight = clamp01(0.5 + (light.fromLeft ? trend : -trend) / Math.max(10, maxHeight * 0.42));
-    const faceTone = lerpRgb(shadeFace, litFace, facingLight);
     const bodyTone = lerpRgb(shadeDither, litDither, 0.3 + facingLight * 0.5);
     const faceBand = Math.max(3, Math.round(h * 0.72));
     const top = baseRow - h;
@@ -1180,20 +1159,6 @@ export function buildRidge(width: number, seed: number, params: RidgeParams): Ri
     }
   }
   return { heights, snowNoise, snowFingers };
-}
-
-function carveValley(ridge: Ridge, centerRatio: number, halfWidthRatio: number, floorHeight: number): Ridge {
-  const width = ridge.heights.length;
-  const center = width * centerRatio;
-  const halfWidth = width * halfWidthRatio;
-  const heights = Uint8Array.from(ridge.heights, (height, x) => {
-    const distance = Math.abs(x - center);
-    if (distance >= halfWidth) return height;
-    const t = distance / halfWidth;
-    const eased = t * t * (3 - 2 * t);
-    return Math.round(floorHeight + (height - floorHeight) * eased);
-  });
-  return { ...ridge, heights };
 }
 
 function buildStars(width: number, maxRow: number, seed: number, count: number): Star[] {

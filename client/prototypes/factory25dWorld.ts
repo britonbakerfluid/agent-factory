@@ -1,4 +1,4 @@
-import { fromFactoryWorld, toFactoryWorld, factoryScenePoint, factoryRoomAt, factoryElevatorTripAt, factory25dWaypoints, factoryMovementIsClear, recoverFactoryPosition, FACTORY_ENTRANCE, GARAGE_LEVEL, type FactoryRoom } from '@shared/factory25d-layout';
+import { fromFactoryWorld, toFactoryWorld, factoryScenePoint, factoryElevatorTripAt, factory25dWaypoints, factoryMovementIsClear, recoverFactoryPosition, FACTORY_ENTRANCE, GARAGE_LEVEL, type FactoryRoom } from '@shared/factory25d-layout';
 import { positionAt } from '@shared/world-layouts';
 import type { EnvironmentType, Position, WorldAgent, WorldMovement } from '@shared/types';
 import { slotPosition } from '@shared/world-layouts';

@@ -95,6 +95,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color('#171a35');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
+// Shader diagnostics synchronously query the GPU; keep them in development only.
+renderer.debug.checkShaderErrors = import.meta.env.DEV;
 renderer.setPixelRatio(1);
 renderer.setSize(800, 564, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -481,7 +483,7 @@ plant('rubber', -4.85, -5.77, 0.92, 0.8);
 plant('fern', -4.1, -5.38, 0.78, 1.6);
 plant('cactus', -3.3, -5.74, 0.72, 0);
 plant('trailing', 4.38, -5.2, 0.79, 2.4);
-const movablePlant = plant('calathea', 5.85, -5.25, 0.85, 3.2);
+plant('calathea', 5.85, -5.25, 0.85, 3.2);
 plant('bird', 7.05, -5.98, 1.02, 4);
 plant('succulent', 6.68, -5.05, 0.64, 1);
 plant('palm', -6.25, 4.12, 0.92, 1.1);
@@ -867,7 +869,9 @@ function animate(): void {
   teamDesk.update(now, mainRoomVisible);
   natureTv.update(elapsed, reducedSceneMotion.matches, mainRoomVisible);
   ceilingLights.update(dt, isNight);
-  hangingPothos.update(elapsed, reducedSceneMotion.matches);
+  // Absolute-time sways resume at the current pose when the upper floor returns.
+  const upperFloorVisible = !garage.isActive() || garage.isTransitioning();
+  if (upperFloorVisible) hangingPothos.update(elapsed, reducedSceneMotion.matches);
   if (!weatherSettled && now - lastWeatherUpdate >= 50) {
     weather = weatherTransition.at(now);
     weatherSettled = !weatherTransition.isChanging(now);
@@ -903,7 +907,7 @@ function animate(): void {
   garage.setStationFeedback(stationFeedback);
   const feet = [...liveAgents.entries.values()].filter(entry => entry.mesh.userData.room === 'factory').map(entry => ({ x: entry.mesh.position.x, z: entry.mesh.position.z - 1.95 }));
   floorKeyboard.update(dt, feet, mainRoomVisible);
-  indoorPlants.update(elapsed, reducedSceneMotion.matches);
+  if (upperFloorVisible) indoorPlants.update(elapsed, reducedSceneMotion.matches);
   vendingMachine.update(elapsed,reducedSceneMotion.matches,dt);
   loungeDetails.update(elapsed, reducedSceneMotion.matches, factoryData, camera, mainRoomVisible);
   brandLibrary.update(now, currentViewCamera as THREE.OrthographicCamera, roomNavigationAvailable && !garage.isActive() && !garage.isTransitioning()

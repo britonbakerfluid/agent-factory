@@ -2,7 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist/client",
-    "rootDir": "."
+    "rootDir": ".",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": ["client/**/*.ts", "shared/**/*.ts"]
 }
