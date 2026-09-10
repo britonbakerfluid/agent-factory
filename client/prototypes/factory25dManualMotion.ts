@@ -1,5 +1,5 @@
 import { MAX_BROADCAST_RATE_MS } from '@shared/constants';
-import { clearFactorySegment, factory25dWaypoints, factoryMovementIsClear, factoryRoomAt, fromFactoryWorld } from '@shared/factory25d-layout';
+import { clearFactorySegment, factory25dWaypoints, factoryMovementIsClear, factoryRoomAt, fromFactoryWorld, recoverFactoryPosition } from '@shared/factory25d-layout';
 import type { FacingDirection, ManualControlState, Position, WorldMovement } from '@shared/types';
 import { positionAt } from '@shared/world-layouts';
 
@@ -27,6 +27,7 @@ export class ManualMotionBuffer {
   push(control: ManualControlState | undefined, serverTime: number, receivedAt: number) {
     if (!control || control.elevatorTrip) { this.clear(); return; }
     if (![control.x, control.y, serverTime, receivedAt].every(Number.isFinite)) return;
+    control={...control,...recoverFactoryPosition(control)};
     let previous = this.samples.at(-1);
     if (previous && serverTime < previous.at) return;
     // Estimate a monotonic server clock from the least-delayed received sample.

@@ -244,7 +244,7 @@ export class ControlManager {
           this.state.worldBounds.minY,
           this.state.worldBounds.maxY,
         );
-        const constrained = this.state.constrainStep(before, { x: lease.x, y: lease.y });
+        const constrained = this.state.constrainStep(before, { x: lease.x, y: lease.y }, lease.sessionId);
         const entry = this.state.manualElevatorEntry(before, constrained);
         if (entry && !lease.awaitingNeutralInput) {
           lease.x = entry.departure.x; lease.y = entry.departure.y;

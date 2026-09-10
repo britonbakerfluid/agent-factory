@@ -109,7 +109,7 @@ describe('manual movement presentation', () => {
   });
 
   it('uses a safe corner path instead of cutting across the factory wall', () => {
-    const from = toFactoryWorld({ x: 5.97, z: 5.59 }), to = toFactoryWorld({ x: 5.72, z: 5.29 });
+    const from = toFactoryWorld({ x: 6.07, z: 5.59 }), to = toFactoryWorld({ x: 5.72, z: 5.19 });
     expect(clearFactorySegment(fromFactoryWorld(from), fromFactoryWorld(to))).toBe(false);
     const buffer = new ManualMotionBuffer();
     buffer.push({ ...control(), ...from }, 1000, 0);

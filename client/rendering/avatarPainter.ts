@@ -576,6 +576,7 @@ export function drawCharacter(
     frame: number,
     colors: { hairStyle: number; hairColor: string; skinTone: string; shirtColor: string; pantsColor: string; shoeColor: string; facialHair: number; mouthStyle: number; faceAccessory: number; headAccessory: number; shirtDesign: number },
     eyes?: AvatarEyes,
+    frontFacing = false,
   ) {
     const r = (color >> 16) & 0xff;
     const g = (color >> 8) & 0xff;
@@ -588,7 +589,7 @@ export function drawCharacter(
     const climbing = anim === 'climb';
     const sitting = anim === 'sit' || anim === 'sit_up';
     const holding = anim.startsWith('hold_');
-    const facesAway = anim === 'work' || anim === 'walk_up' || anim === 'sit_up' || anim === 'board' || anim === 'hold_up' || climbing;
+    const facesAway = !frontFacing && (anim === 'work' || anim === 'walk_up' || anim === 'sit_up' || anim === 'board' || anim === 'hold_up' || climbing);
 
     ctx.clearRect(x, y, size, size);
 

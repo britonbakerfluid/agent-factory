@@ -1,3 +1,4 @@
+import { createStaffPickup, updatePickupShadow } from './factory25dPickup';
 import * as THREE from 'three';
 import { FRONT_COUNTER } from '@shared/factory25d-layout';
 import { DEFAULT_AVATAR } from '@shared/constants';
@@ -28,16 +29,21 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
     const label = createNameTag(name, false, canvas.parentElement!);
     label.element.classList.add('room-staff-label');
     label.element.dataset.roomStaff = name;
+    const pickup=createStaffPickup(mesh,label.element.querySelector('button')!,canvas,avatar);
     const click = (event: MouseEvent) => { event.stopPropagation(); action(); };
     label.element.querySelector('button')!.addEventListener('click', click);
     const feet = new THREE.Vector3(), walk = new AvatarWalkCycle(), corner = new THREE.Vector3(), top = new THREE.Vector3();
-    return { mesh, shadow, label, walk,
+    return { mesh, shadow, label, walk, pickup,
       pose(row: number, frame: number, point: THREE.Vector3, camera: THREE.Camera, visible: boolean) {
+        if(pickup.airborne){row=0;frame=0;}
         setAvatarTextureFrame(texture, row, frame, avatarEyePose(eyeTime, name === 'board manager' ? 37 : 83, 'relaxed', eyesFrozen));
         mesh.position.copy(point); mesh.position.y += (sheet.feet[row][frame] / 32 - .5) * .86 + .004;
         feet.set(0, (.5 - sheet.feet[row][frame] / 32) * .86, 0);
         mesh.visible = shadow.visible = visible;
         shadow.position.set(point.x, point.y + .004, point.z);
+        pickup.update(camera);
+        updatePickupShadow(mesh,shadow,camera,pickup.shadowAirborne);
+      if(pickup.busy&&!pickup.shadowAirborne){shadow.position.x=mesh.position.x;shadow.position.z=mesh.position.z;}
         label.update(mesh, point.y, camera, canvas, visible, undefined, feet);
         if (visible) {
           // The transparent hit area scales with the visible character, not a
@@ -48,7 +54,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
           label.element.style.setProperty('--staff-hit-height', `${Math.max(24, Math.abs(top.y - corner.y) * canvas.clientHeight / 2)}px`);
         }
       },
-      dispose() { label.element.querySelector('button')!.removeEventListener('click', click); label.dispose(); mesh.removeFromParent(); shadow.removeFromParent(); mesh.geometry.dispose(); material.dispose(); texture.dispose(); }
+      dispose() { pickup.dispose(); label.element.querySelector('button')!.removeEventListener('click', click); label.dispose(); mesh.removeFromParent(); shadow.removeFromParent(); mesh.geometry.dispose(); material.dispose(); texture.dispose(); }
     };
   }
   const manager = staff('board manager', { ...DEFAULT_AVATAR, shirtColor: '#5f8f78', color: '#5f8f78', hairStyle: 2, hairColor: '#604332', faceAccessory: 1, pantsColor: '#2b3440' }, openBoard);
@@ -67,7 +73,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
       // The writing pose raises the right hand, so its body stands a little
       // left of the note instead of reaching farther away from the paper.
       const noteOffset = task ? managerLife.offset(task.point.x - .23, .56) : undefined;
-      const movedBoard = managerLife.update(dt, board.position, boardMotion.isBusy(), visible,
+      const movedBoard = managerLife.update(manager.pickup.busy?0:dt, board.position, boardMotion.isBusy(), visible,
         noteOffset && task && { x: board.position.x + noteOffset.x, z: board.position.z + noteOffset.z,
           id: `${task.name}:${task.startsAt}`, label: task.name });
       if (movedBoard) boardMotion.moveByStaff(movedBoard);
@@ -84,7 +90,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
         : phase === 'walking-to-note' ? 'walking over to update a note' : 'keeping the board organized';
       if (managerStatus !== managerActivity) { managerStatus = managerActivity; manager.label.setDetails('board manager', managerActivity, 'room staff · click to read the whiteboard'); }
       // A receptionist finishes each small cleanup before returning to the desk.
-      cleanup.update(dt, visible);
+      cleanup.update(desk.pickup.busy?0:dt, visible&&!desk.pickup.busy);
       clerkPoint.set(cleanup.position.x, .018, cleanup.position.z);
       const deskWalking = Math.hypot(cleanup.motion.x, cleanup.motion.z) > .0001;
       const deskFrame = desk.walk.sample(cleanup.position, now / 1000, deskWalking, reduced);

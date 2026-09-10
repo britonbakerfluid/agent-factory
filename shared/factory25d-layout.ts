@@ -61,7 +61,8 @@ export function factory25dWaypoints(from: Position, to: Position): Position[] {
 
 export type RoomPoint = { x: number; z: number };
 type Obstacle = { left: number; right: number; near: number; far: number; id?: string };
-const margin = 0.12;
+export const FACTORY_BODY_RADIUS = 0.22;
+const margin = FACTORY_BODY_RADIUS;
 export const FACTORY_OBSTACLES: Obstacle[] = [
   ...PATIO_OBSTACLES,
   { left:BRAND_SHELF.x-BRAND_SHELF.width/2, right:BRAND_SHELF.x+BRAND_SHELF.width/2, near:BRAND_SHELF.z-BRAND_SHELF.depth/2, far:BRAND_SHELF.z+BRAND_SHELF.depth/2 }, // Built-in display joins the shorter front counter.
@@ -191,8 +192,17 @@ export function constrainFactoryStep(from: Position, to: Position): Position {
 }
 
 /** Followers can spread out on open floor, but never straddle a stair wall. */
-export function factoryCompanionPosition(parent: RoomPoint, index: number): RoomPoint {
-  const angle = index * 2.4 + .5;
-  const desired = { x: parent.x + Math.cos(angle) * .42, z: parent.z + .2 + Math.sin(angle) * .28 };
-  return fromFactoryWorld(constrainFactoryStep(toFactoryWorld(parent), toFactoryWorld(desired)));
+export function factoryCompanionPosition(parent: RoomPoint, index: number, occupied: RoomPoint[] = []): RoomPoint {
+  const siblings:RoomPoint[]=[];
+  for(let child=0;child<=index;child++){
+    let result:RoomPoint|undefined;
+    for(let ring=0;ring<10&&!result;ring++)for(let turn=0;turn<16;turn++){
+      const angle=child*2.4+.5+turn*Math.PI/8,radius=.62+ring*.32;
+      const candidate={x:parent.x+Math.cos(angle)*radius,z:parent.z+Math.sin(angle)*radius};
+      if(clearFactorySegment(parent,candidate)&&siblings.every(p=>Math.hypot(p.x-candidate.x,p.z-candidate.z)>=.38)
+        &&occupied.every(p=>Math.hypot(p.x-candidate.x,p.z-candidate.z)>=.5)){result=candidate;break;}
+    }
+    siblings.push(result??parent);
+  }
+  return siblings[index];
 }

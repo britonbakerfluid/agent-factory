@@ -31,8 +31,13 @@ export function floorTravelCamera(camera: THREE.OrthographicCamera, home: THREE.
   camera.position.lerpVectors(home.position, destination.position, t);
   camera.quaternion.slerpQuaternions(home.quaternion, destination.quaternion, t);
   camera.zoom = THREE.MathUtils.lerp(home.zoom, destination.zoom, t);
-  // Keep the same orthographic lens throughout. Only ease between the two
-  // established room framings; never swing edge-on or magnify the foreground.
+  // Dip toward an eye-level view during the ride, like entering the window.
+  // Orbit the current framing center so lowering the angle does not lose the room.
+  const dip = Math.sin(Math.PI*t)**2;
+  const direction=camera.getWorldDirection(new THREE.Vector3());
+  const focus=camera.position.clone().addScaledVector(direction,18);
+  camera.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),.32*dip));
+  camera.getWorldDirection(direction);camera.position.copy(focus).addScaledVector(direction,-18);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
 }

@@ -1,3 +1,4 @@
+import { createRpsObjects } from './factory25dRpsObjects';
 import * as THREE from 'three';
 import { patioFloorHeight } from '@shared/factory25d-patio';
 import type { EnvironmentType } from '@shared/types';
@@ -6,7 +7,7 @@ import { projectPosition } from './factory25dWorld';
 import { effectProgress, effectSeed, FactoryEffectsState, rpsPhase, vortexStrength, type AgentEffect } from './factory25dEffectsState';
 
 export type EffectAnchor = { x: number; y: number; z: number };
-type Decoration = { group: THREE.Group; particles?: THREE.InstancedMesh; icons?: Map<string, THREE.Mesh> };
+type Decoration = { group: THREE.Group; particles?: THREE.InstancedMesh; icons?: Map<string, THREE.Mesh>; rps?: ReturnType<ReturnType<typeof createRpsObjects>['create']> };
 const patterns: Record<string, string> = {
   note: '000111/000101/000101/000100/011100/111100/011000',
   guitar: '0000000001/0000000011/0000000110/0000001100/0011001100/0111111000/1100110000/1100111000/0111111000/0011100000',
@@ -15,14 +16,12 @@ const patterns: Record<string, string> = {
   star: '0001000/0011100/1111111/0111110/0011100/0110110/1000001',
   flex: '011000000011/111000000111/110000000011/110010010011/111111111111/011111111110/001111111100',
   fire: '000010000/000110000/001110100/011111100/011111110/111111110/111111111/011111110/001111100',
-  rock: '0001111000/0011111100/0111111110/1111111111/1111111111/0111111110/0011111100',
-  paper: '001010100/001010101/001010101/001111111/101111111/111111111/011111111/001111110',
-  scissors: '1100000011/0110000110/0011001100/0001111000/0000110000/0001111000/0011111100/0011111100',
 };
 const colors = ['#e8b35f', '#dba8c3', '#92c3bd', '#9ba6d0', '#f1d690'];
 
 /** Small pixel props and instanced particles share resources and expire with their clock state. */
 export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
+  const rpsObjects=createRpsObjects();
   let garage: THREE.Scene | undefined;
   const geometry = new THREE.BoxGeometry(1, 1, 1), plane = new THREE.PlaneGeometry(1, 1);
   const materials = new Map<string, THREE.MeshBasicMaterial>();
@@ -105,7 +104,7 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
         break;
       case 'rps':
         item.icons = new Map();
-        for (const choice of ['rock', 'paper', 'scissors']) item.icons.set(choice, icon(group, choice, 0, .98, .32));
+        item.rps=rpsObjects.create();group.add(item.rps.root);
         for (const [outcome, text, ink] of [['win', 'WINNER', '#a3d1aa'], ['lose', 'LOST', '#d5acb0'], ['draw', 'DRAW', '#e5ca91']]) item.icons.set(outcome, label(group, text, ink));
         break;
     }
@@ -157,7 +156,7 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
     update(state: FactoryEffectsState, now: number, anchors: Map<string, EffectAnchor>, environment: EnvironmentType, reduced = false) {
       state.prune(now);
       const activeIds = new Set([...state.effects.values()].map(effect => effect.id));
-      for (const [id, item] of decorations) if (!activeIds.has(id)) { remove(item.group); decorations.delete(id); }
+      for (const [id, item] of decorations) if (!activeIds.has(id)) { item.rps?.dispose(); remove(item.group); decorations.delete(id); }
       for (const effect of state.effects.values()) {
         const anchor = anchors.get(effect.sessionId);
         if (!anchor) { const item = decorations.get(effect.id); if (item) item.group.visible = false; continue; }
@@ -168,7 +167,11 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
         item.group.scale.setScalar(reduced ? 1 : Math.min(1, p * 12, (1 - p) * 10));
         if (effect.kind === 'dizzy') item.group.children.forEach((star, i) => star.position.set(Math.cos(t * (reduced ? 0 : 3) + i * 2.1) * .3, .88, Math.sin(t * (reduced ? 0 : 3) + i * 2.1) * .14));
         if (effect.kind === 'wave') item.group.children[0].rotation.z = reduced ? -.2 : Math.sin(t * 12) * .4;
-        if (effect.kind === 'rps') for (const [phase, icon] of item.icons!) icon.visible = phase === rpsPhase(effect, now);
+        if (effect.kind === 'rps') {
+          for (const [phase, icon] of item.icons!) {icon.visible=phase===rpsPhase(effect,now);icon.position.y=1.9;}
+          const opponent=effect.opponentSessionId?anchors.get(effect.opponentSessionId):undefined;
+          item.rps!.update(effect,now,opponent&&Math.abs(opponent.y-anchor.y)<2?opponent:undefined,anchor,reduced);
+        }
         updateParticles(item, effect, now, reduced);
       }
       const activeShots = new Set(state.shots.map(shot => shot.id));
@@ -208,10 +211,10 @@ export function createFactoryEffects(factory: THREE.Scene, patio: THREE.Scene) {
       }
     },
     dispose() {
-      for (const item of decorations.values()) remove(item.group); for (const item of shots.values()) remove(item.group);
+      for (const item of decorations.values()) {item.rps?.dispose();remove(item.group);} for (const item of shots.values()) remove(item.group);
       for (const groups of vortexGroups.values()) groups.forEach(remove);
       decorations.clear(); shots.clear(); vortexGroups.clear(); materials.forEach(material => material.dispose()); textures.forEach(texture => texture.dispose());
-      geometry.dispose(); plane.dispose();
+      rpsObjects.dispose();geometry.dispose(); plane.dispose();
     },
   };
 }

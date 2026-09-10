@@ -1,3 +1,4 @@
+import { createStaffPickup, updatePickupShadow } from './factory25dPickup';
 import * as THREE from 'three';
 import { DEFAULT_AVATAR } from '@shared/constants';
 import { avatarTexture, setAvatarTextureFrame } from './factory25dAvatarTexture';
@@ -11,9 +12,10 @@ const SCALE = .86;
 
 /** A room-staff character, never an agent session or a source of activity credit. */
 export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, onClick: () => void) {
-  const { sheet, texture } = avatarTexture({ ...DEFAULT_AVATAR, shirtColor: '#638b88', color: '#638b88',
+  const avatar={ ...DEFAULT_AVATAR, shirtColor: '#638b88', color: '#638b88',
     hairStyle: 0, hairColor: '#302e39', skinTone: '#c68e5a', pantsColor: '#303447', shoeColor: '#443c42',
-    mouthStyle: 1, faceAccessory: 0, headAccessory: 0 }, poses, true);
+    mouthStyle: 1, faceAccessory: 0, headAccessory: 0 };
+  const {sheet,texture}=avatarTexture(avatar,poses,true);
   // The avatar cache is immutable. Headphones and one-pixel head nods are painted
   // into this NPC's own copy, preserving every eye variant and grounded shoe row.
   const painted = document.createElement('canvas'); painted.width = sheet.canvas.width; painted.height = sheet.canvas.height;
@@ -48,6 +50,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
   label.element.classList.add('room-staff-label'); label.element.dataset.roomStaff = 'lounge DJ';
   label.setDetails('lounge DJ', 'keeping the lounge music flowing', 'room staff · click to open the radio');
   const button = label.element.querySelector('button')!;
+  const pickup=createStaffPickup(mesh,button,canvas,avatar);
   button.setAttribute('aria-label', 'Lounge DJ · open radio');
   let visible = false, disposed = false, lastEntry: number | undefined, choosingUntil = 0, lastActivity = '';
   const click = (event: MouseEvent) => { event.stopPropagation(); if (visible && !disposed) onClick(); };
@@ -66,7 +69,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
       }
       if (!visible || reduced) choosingUntil = 0;
       const choosing = now < choosingUntil;
-      const row = choosing ? 1 : 0;
+      const row = choosing&&!pickup.airborne ? 1 : 0;
       // A brief one-pixel head nod every few seconds; shoes never bob off the floor.
       const frame = !reduced && !choosing && entryId !== undefined && (now % 4400) > 3820 ? 3 : 0;
       setAvatarTextureFrame(texture, row, frame, avatarEyePose(now / 1000, 121, choosing ? 'attentive' : 'relaxed', reduced));
@@ -74,6 +77,10 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
       feet.set(0, (.5 - sheet.feet[row][frame] / 32) * SCALE, 0);
       mesh.visible = shadow.visible = visible;
       parent.updateWorldMatrix(true, false); parent.localToWorld(worldPoint.copy(point));
+      shadow.position.set(point.x,point.y+.003,point.z);
+      pickup.update(camera);
+      updatePickupShadow(mesh,shadow,camera,pickup.shadowAirborne);
+      if(pickup.busy&&!pickup.shadowAirborne){shadow.position.x=mesh.position.x;shadow.position.z=mesh.position.z;}
       label.update(mesh, worldPoint.y, camera, canvas, visible, undefined, feet);
       if (visible) {
         corner.set(point.x - .25, point.y, point.z); top.set(point.x + .25, point.y + .71, point.z);
@@ -87,7 +94,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
     },
     dispose() {
       if (disposed) return;
-      disposed = true; button.removeEventListener('click', click); label.dispose();
+      pickup.dispose();disposed = true; button.removeEventListener('click', click); label.dispose();
       mesh.removeFromParent(); shadow.removeFromParent(); mesh.geometry.dispose(); material.dispose(); texture.dispose();
       // Contact shadows share geometry/material with all other room staff.
     },

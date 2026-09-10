@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GARAGE_LEVEL, GARAGE_WORLD_Z, MINI_WORKSTATION_ID, MINI_WORKSTATION_SLOT, MINI_WORKSTATION_USERNAME, WORKSTATIONS, fromFactoryWorld } from '@shared/factory25d-layout';
+import { GARAGE_LEVEL, GARAGE_WORLD_Z, MINI_WORKSTATION_ID, MINI_WORKSTATION_SLOT, MINI_WORKSTATION_USERNAME, WORKSTATIONS, fromFactoryWorld, toFactoryWorld, recoverFactoryPosition, routeToStation } from '@shared/factory25d-layout';
 import { slotPosition } from '@shared/world-layouts';
 import { agentPosition } from './factory25dWorld';
 import { isWorking } from './factory25dWorkstations';
@@ -56,6 +56,7 @@ export function createMiniWorkstation(room: THREE.Group, cars: Map<string, THREE
   let phase: string | undefined;
   let active: { id: string; startedAt: number; packAt?: number } | undefined;
   let rig: { root: THREE.Group; door: THREE.Object3D; seat: THREE.Object3D; entry: THREE.Object3D; closed: number } | undefined;
+  let accessPath:THREE.Vector3[]|undefined,accessKey='';
   function findRig() {
     if (rig) return rig;
     const root = cars.get('mini'); if (!root) return;
@@ -99,9 +100,16 @@ export function createMiniWorkstation(room: THREE.Group, cars: Map<string, THREE
       const workPoint = fromFactoryWorld(slotPosition('factory25d', 'work', MINI_WORKSTATION_SLOT));
       const home = new THREE.Vector3(workPoint.x, GARAGE_LEVEL + .025, workPoint.z - GARAGE_WORLD_Z);
       const door = model.entry.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(-.3, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), model.root.rotation.y));
-      const corner = new THREE.Vector3(Math.max(home.x, door.x), home.y, Math.max(1.6, door.z));
-      const first = home.distanceTo(corner), total = first + corner.distanceTo(door), distance = pose.approach * total;
-      const point = distance < first ? home.clone().lerp(corner, distance / Math.max(first, .001)) : corner.clone().lerp(door, (distance - first) / Math.max(total - first, .001));
+      const key=`${home.x},${home.z},${door.x},${door.z}`;
+      if(!accessPath||key!==accessKey){
+        accessKey=key;
+        const safeDoor=fromFactoryWorld(recoverFactoryPosition(toFactoryWorld({x:door.x,z:door.z+GARAGE_WORLD_Z})));
+        accessPath=[home,...routeToStation({x:home.x,z:home.z+GARAGE_WORLD_Z},safeDoor).map(p=>new THREE.Vector3(p.x,home.y,p.z-GARAGE_WORLD_Z))];
+      }
+      const lengths=accessPath.slice(1).map((p,i)=>p.distanceTo(accessPath![i]));
+      let remaining=pose.approach*lengths.reduce((sum,length)=>sum+length,0),leg=0;
+      while(leg<lengths.length-1&&remaining>lengths[leg])remaining-=lengths[leg++];
+      const point=accessPath[leg].clone().lerp(accessPath[leg+1]??accessPath[leg],remaining/Math.max(lengths[leg]??0,.001));
       if (pose.blendOut) {
         const live = agentPosition(entry.session, now, 'factory25d');
         point.lerp(new THREE.Vector3(live.x, GARAGE_LEVEL + .025, live.z - GARAGE_WORLD_Z), pose.blendOut);

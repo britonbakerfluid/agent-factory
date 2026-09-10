@@ -1,3 +1,7 @@
+import { setAvatarTextureFrame } from './factory25dAvatarTexture';
+import { createPickupMotion, updatePickupShadow, pickupLanding, pickupReleaseLanding } from './factory25dPickup';
+import { avatarSheet, AVATAR_ANIMATIONS } from './factory25dAvatar';
+import { DEFAULT_AVATAR } from '@shared/constants';
 import { agentPickerItems } from './factory25dAgentPicker';
 import { createProfileMenu } from './factory25dProfileMenu';
 import { createToolbarElement } from './factory25dToolbarElement';
@@ -11,7 +15,7 @@ import { factoryToolbarState } from './factory25dToolbarState';
 import { createProfilePortrait } from './factory25dPortrait';
 import { parseAvatarConfig } from '@shared/avatar-customization';
 import type { Position } from '@shared/types';
-import { toFactoryWorld, fromFactoryWorld, WORKSTATIONS, factoryWorldPoint, factoryRoomAt, GARAGE_LEVEL, MINI_WORKSTATION_ID, MINI_WORKSTATION_USERNAME, type FactoryRoom } from '@shared/factory25d-layout';
+import { fromFactoryWorld, toFactoryWorld, factoryWorldPoint, WORKSTATIONS, factoryRoomAt, GARAGE_LEVEL, MINI_WORKSTATION_ID, MINI_WORKSTATION_USERNAME, type FactoryRoom } from '@shared/factory25d-layout';
 import { nearestWorkstationSlot, slotPosition } from '@shared/world-layouts';
 import { AuthManager } from '../auth/AuthManager';
 import { GrabManager } from '../grab/GrabManager';
@@ -123,6 +127,9 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const placeButton = panel.querySelector<HTMLButtonElement>('.factory-place')!;
   for (const [index, station] of WORKSTATIONS.entries()) { const option = document.createElement('option'); option.value = String(index); option.textContent = `${station.room === 'factory' ? 'indoors' : station.room} · ${station.label}${station.id === MINI_WORKSTATION_ID ? '' : ` ${Number(station.id.split('-').at(-1)) + 1}`}`; stationPicker.add(option); }
   const held = new Map<string, Position>();
+  const pickupMotions=new Map<string,ReturnType<typeof createPickupMotion>>(),heldScreen=new Map<string,{x:number;y:number}>();
+  const pickupFacing=new Map<string,THREE.Vector2>();
+  let lastGrabScreen={x:0,y:0};
   const listeners = new Map<string, Set<(...args: never[]) => void>>();
   const input = {
     on(name: string, fn: (...args: never[]) => void) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name)!.add(fn); },
@@ -130,15 +137,21 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   };
   const emit = (name: string, ...args: unknown[]) => listeners.get(name)?.forEach(fn => fn(...args as never[]));
   const grab = new GrabManager({ input }, { get isLoggedIn() { return !!data.canChat && data.world?.environment === 'factory25d'; } },
-    { send: message => { sendFactoryCommand(message); } }, {
+    { send: message => {
+      if(message.type==='grab_move'||message.type==='grab_end'){
+        const entry=agents.entries.get(message.sessionId),landing=entry&&(message.type==='grab_end'?pickupReleaseLanding(entry.mesh):entry.mesh.userData.pickupLanding);
+        if(landing){if(message.type==='grab_end')entry!.mesh.userData.pickupLanding=landing;const world=toFactoryWorld(factoryWorldPoint(landing,entry!.mesh.userData.room));sendFactoryCommand({...message,...world});return;}
+      }
+      sendFactoryCommand(message);
+    } }, {
       get isVortexActive() { return data.world?.events.some(event => event.effect === 'vortex' && event.expiresAt > Date.now()) ?? false; },
       resolveGrabTarget(object) { const id = (object as THREE.Object3D).userData.sessionId; return id ? { sessionId: id } : null; },
       hasGrabTarget: target => agents.entries.has(target.sessionId),
-      beginGrab(target, pointer) { held.set(target.sessionId, pointer); return true; },
-      applyRemoteGrab: (target, pointer) => { held.set(target.sessionId, pointer); },
-      moveGrab: (target, pointer) => { held.set(target.sessionId, pointer); },
-      releaseGrab: target => { held.delete(target.sessionId); },
-      workstationDropSlot: target => { const pointer = held.get(target.sessionId); return pointer && data.world ? nearestWorkstationSlot(data.world.environment, pointer, 36) : undefined; },
+      beginGrab(target, pointer) { const entry=agents.entries.get(target.sessionId);if(entry)pickupFacing.set(target.sessionId,entry.texture.offset.clone());held.set(target.sessionId, pointer);heldScreen.set(target.sessionId,{...lastGrabScreen}); return true; },
+      applyRemoteGrab: (target, pointer) => { held.set(target.sessionId, pointer);heldScreen.delete(target.sessionId); },
+      moveGrab: (target, pointer) => { held.set(target.sessionId, pointer);heldScreen.set(target.sessionId,{...lastGrabScreen}); },
+      releaseGrab: target => { held.delete(target.sessionId);heldScreen.delete(target.sessionId); },
+      workstationDropSlot: target => { const entry=agents.entries.get(target.sessionId),landing=entry&&pickupReleaseLanding(entry.mesh);const pointer=landing?toFactoryWorld(factoryWorldPoint(landing,entry!.mesh.userData.room)):held.get(target.sessionId); return pointer && data.world ? nearestWorkstationSlot(data.world.environment, pointer, 36) : undefined; },
       showGrabHint: (_target, text) => { status.textContent = text; },
     });
   const avatarEditor = createAvatarEditor(
@@ -165,10 +178,24 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   }
   editAvatar.addEventListener('click', openAvatar, options);
   const profileMenu=createProfileMenu(toolbar,avatarShortcut,{
+    open:()=>{panel.open=false;roomMenu.close();},
+    preview:(id,canvas)=>{
+      const entry=agents.entries.get(id);if(!entry)return;
+      const texture=entry.texture,ctx=canvas.getContext('2d')!;
+      const sourceRow=Math.round((1-texture.offset.y-texture.repeat.y)/texture.repeat.y);
+      const sourceAnimation=AVATAR_ANIMATIONS[sourceRow]??'idle',lifted=pickupMotions.get(id)?.stage==='lifted';
+      const animation=lifted?'hold_down':sourceAnimation.startsWith('walk_')?'walk_down':sourceAnimation==='sit_up'?'sit':sourceAnimation==='hold_up'?'hold_down':sourceAnimation;
+      const source=avatarSheet(entry.session.avatar??DEFAULT_AVATAR,[animation],[undefined],true).canvas;
+      const frame=matchMedia('(prefers-reduced-motion: reduce)').matches?0:Math.round(texture.offset.x*(texture.userData.avatarColumns??4))%4;
+      ctx.clearRect(0,0,32,32);ctx.imageSmoothingEnabled=false;
+      if(lifted){ctx.fillStyle='#ffffff20';ctx.fillRect(10,30,12,1);ctx.save();ctx.translate(16,14);ctx.rotate((frame%2?1:-1)*.08);ctx.drawImage(source,frame*32,0,32,32,-16,-17,32,32);ctx.restore();}
+      else ctx.drawImage(source,frame*32,0,32,32,0,0,32,32);
+    },
     edit:()=>toolbarFocus.run(openAvatar),
     go:id=>{if(!available()||!state.owned().some(a=>a.sessionId===id))return;picker.value=id;panel.open=false;goToAgent(id);},
     control:id=>{if(!available()||!data.connected||!state.owned().some(a=>a.sessionId===id))return;picker.value=id;state.claim(id);goToAgent(id);panel.open=!!state.error;paint();},
   });
+  panel.addEventListener('toggle',()=>{if(panel.open){profileMenu.close();roomMenu.close();}},options);
   function goToAgent(id:string){
     const entry=agents.entries.get(id);if(!entry)return;
     visit((entry.mesh.userData.room as FactoryRoom|undefined)??factoryRoomAt({x:entry.lastX,z:entry.lastZ}));
@@ -278,7 +305,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const toolbarTooltip = createToolbarTooltip(toolbar);
   const roomMenu = createRoomMenu(toolbar, roomPicker, destination => {
     toolbarFocus.run(() => { state.stop(); panel.open = false; visit(destination); });
-  }, agentsShortcut);
+  }, agentsShortcut,undefined,()=>{profileMenu.close();panel.open=false;});
   let nextRoomCount = 0, nextProfileUpdate = 0;
   let roomCounts = {factory:0,patio:0,garage:0};
   function paintToolbar() {
@@ -293,6 +320,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       owned:state.owned().length, active:!!state.active, pending:!!state.pending,
       controlName:(()=>{const agent=state.agents.find(agent=>agent.sessionId===(state.active||state.pending)); return agent?.sessionName||agent?.cwd.split('/').filter(Boolean).at(-1)||agent?.username;})(),
       focused, blocked:!available(), room:currentRoom() });
+    profileMenu.render(now);
     if(now>=nextProfileUpdate) { nextProfileUpdate=now+500;
     profileMenu.update(state.owned().map(agent=>{
       const entry=agents.entries.get(agent.sessionId);
@@ -412,7 +440,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     const rect = canvas.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), camera());
     if (currentRoom() === 'garage' ? !ray.ray.intersectPlane(garageFloor,point) : !intersectFactoryFloor(ray.ray, point)) return null;
-    const world = toFactoryWorld(factoryWorldPoint(point,currentRoom())); return { id: event.pointerId, worldX: world.x, worldY: world.y };
+    const world = pickupLanding(point,currentRoom()); return { id: event.pointerId, worldX: world.x, worldY: world.y };
   }
   let dragPointer: number | undefined;
   let captureTarget: HTMLElement | undefined;
@@ -420,6 +448,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const pointerOptions = { ...options, capture: true };
   function beginAgentPress(event: PointerEvent, mesh: THREE.Object3D, target: HTMLElement) {
     if (dragPointer !== undefined) return;
+    lastGrabScreen={x:event.clientX,y:event.clientY};
     const p = pointer(event); if (!p) return;
     agentPress = { id: mesh.userData.sessionId, x: event.clientX, y: event.clientY, worldX: p.worldX, worldY: p.worldY, moved: false };
     dragPointer = event.pointerId; captureTarget = target;
@@ -442,6 +471,8 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   }, pointerOptions);
   function moveAgentPress(event: PointerEvent) {
     if (dragPointer !== event.pointerId) return;
+    lastGrabScreen={x:event.clientX,y:event.clientY};
+    if(agentPress&&held.has(agentPress.id))heldScreen.set(agentPress.id,{...lastGrabScreen});
     event.stopImmediatePropagation(); const p = pointer(event);
     if (agentPress && (Math.hypot(event.clientX - agentPress.x, event.clientY - agentPress.y) >= 6
       || p && Math.hypot(p.worldX - agentPress.worldX, p.worldY - agentPress.worldY) >= GRAB_DRAG_THRESHOLD)) agentPress.moved = true;
@@ -567,9 +598,22 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       grab.update();
       for (const [id, pointer] of held) {
         const entry = agents.entries.get(id); if (!entry) continue;
-        const target = fromFactoryWorld(pointer); agents.placeOverride(id, target);
+        if(!pickupMotions.has(id))pickupMotions.set(id,createPickupMotion(entry.mesh,entry.session.avatar??DEFAULT_AVATAR));
+        if(!heldScreen.has(id)){
+          const point=fromFactoryWorld(pointer),projected=new THREE.Vector3(point.x,.9,point.z).project(camera()),rect=canvas.getBoundingClientRect();
+          heldScreen.set(id,{x:rect.left+(projected.x+1)*rect.width/2,y:rect.top+(1-projected.y)*rect.height/2});
+        }
+      }
+      for(const [id,motion] of pickupMotions){
+        if(!agents.entries.has(id)){motion.dispose();pickupMotions.delete(id);pickupFacing.delete(id);continue;}
+        if(held.has(id)){const texture=agents.entries.get(id)!.texture;if(motion.stage==='lifted')setAvatarTextureFrame(texture,0,0);else {const facing=pickupFacing.get(id);if(facing)texture.offset.copy(facing);}}
+        motion.update(camera(),canvas,held.has(id)?heldScreen.get(id):undefined);
+        const entry=agents.entries.get(id)!;
+        updatePickupShadow(entry.mesh,entry.shadow,camera(),motion.shadowAirborne,entry.labelFeet);
+        if(motion.active)entry.label.element.hidden=true;
+        if(!held.has(id)&&!motion.active){motion.dispose();pickupMotions.delete(id);pickupFacing.delete(id);}
       }
     },
-    dispose() { profileMenu.dispose(); roomMenu.dispose(); toolbarTooltip.dispose(); toolbarMotion.dispose(); toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
+    dispose() { for(const motion of pickupMotions.values())motion.dispose();profileMenu.dispose(); roomMenu.dispose(); toolbarTooltip.dispose(); toolbarMotion.dispose(); toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
   };
 }
