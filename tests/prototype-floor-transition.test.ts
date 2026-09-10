@@ -25,10 +25,10 @@ describe('physical floor descent',()=>{
     const camera=home(),source=home(),front=new THREE.Vector3(0,0,13.9),back=new THREE.Vector3(0,0,-4.6);
     for(let i=0;i<=100;i++){
       floorTravelCamera(camera,source,i/100,true);
-      expect(camera.getWorldDirection(new THREE.Vector3()).y).toBeLessThan(-.5);
+      expect(camera.getWorldDirection(new THREE.Vector3()).y).toBeLessThan(-.25);
       // No edge-on collapse or underside flip; the room retains its 2.5D depth.
       const depth=back.clone().project(camera).y-front.clone().project(camera).y;
-      expect(depth).toBeGreaterThan(1.4);expect(depth).toBeLessThan(1.9);
+      expect(depth).toBeGreaterThan(.7);expect(depth).toBeLessThan(1.9);
     }
     const section=createFloorSection(new THREE.Scene());
     expect(section.root.position.toArray()).toEqual([0,0,0]);
@@ -36,6 +36,12 @@ describe('physical floor descent',()=>{
     expect(section.root.getObjectByName('upper-slab-underside')).toBeDefined();
     expect(section.root.getObjectByName('patio-lower-underside')).toBeDefined();
     section.dispose();
+  });
+  it('lowers the viewing angle during travel, then restores the landing framing',()=>{
+    const source=home(),camera=home();floorTravelCamera(camera,source,.5,true);
+    expect(camera.getWorldDirection(new THREE.Vector3()).y).toBeGreaterThan(-.4);
+    floorTravelCamera(camera,source,1,true);
+    expect(camera.getWorldDirection(new THREE.Vector3()).y).toBeLessThan(-.6);
   });
   it('clears the upper cutaway above the frame before the garage settles',()=>{
     const camera=home();floorTravelCamera(camera,home(),1,true);
@@ -49,7 +55,7 @@ describe('physical floor descent',()=>{
     });
     section.dispose();
   });
-  it('glides both floors and the outdoor view in one direction without a late launch',()=>{
+  it('keeps projected room motion continuous while lowering and restoring the view',()=>{
     const camera=home(),source=home();
     const landmarks=[
       {at:new THREE.Vector3(0,0,13.9),upper:true},
@@ -64,8 +70,8 @@ describe('physical floor descent',()=>{
       floorTravelCamera(camera,source,t,true);
       const ys=landmarks.map(({at,upper})=>at.clone().add(new THREE.Vector3(0,upper?upperFloorLift(t):0,0)).project(camera).y);
       if(previous)ys.forEach((y,i)=>{
-        expect(y).toBeGreaterThanOrEqual(previous![i]-1e-8);
-        expect(y-previous![i]).toBeLessThan(.065);
+        expect(Math.abs(y-previous![i])).toBeLessThan(.11);
+        expect(y-previous![i]).toBeLessThan(.11);
       });
       previous=ys;
     }

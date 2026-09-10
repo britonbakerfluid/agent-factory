@@ -384,6 +384,7 @@ async function main() {
   const staleTimer = startStaleReaper(state);
   const teamTimer = setInterval(() => void team.flush(), 5_000);
   const worldTimer = setInterval(() => { state.advanceWorld(); visitorBalls.expire(); loungeRadio.tick(); }, 1_000);
+  const personalSpaceTimer = setInterval(() => state.advancePersonalSpace(), 50);
   controls.start();
   grabs.start();
   garageDriving.start();
@@ -399,6 +400,7 @@ async function main() {
   app.addHook('onClose', async () => {
     clearInterval(staleTimer);
     clearInterval(worldTimer);
+    clearInterval(personalSpaceTimer);
     clearInterval(teamTimer);
     contributions.dispose();
     registry.stop();

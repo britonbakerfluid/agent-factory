@@ -1,3 +1,4 @@
+import { PERSONAL_SPACE, PERSONAL_SPACE_LOOKAHEAD_MS, distance as personDistance, peopleCross, clearPeopleStep, freeStandingPoint, passingDetour } from '../shared/personal-space.js';
 import type { GaragePedestrianPush } from '../shared/factory25d-driving.js';
 import { StationTickets } from './station-tickets.js';
 import { FACTORY25D_BOUNDS, constrainFactoryStep, toFactoryWorld, factory25dWaypoints, factoryMovementIsClear, recoverFactoryPosition, factoryElevatorTripAt, fromFactoryWorld, clearFactorySegment, GARAGE_MINI_LOOKOUTS, WORKSTATIONS, MINI_WORKSTATION_SLOT, MINI_WORKSTATION_USERNAME, MINI_WORK_PACK_MS, MINI_WORK_RETRIEVAL_MS, factoryRoomAt, GARAGE_WORLD_Z } from '../shared/factory25d-layout.js';
@@ -128,13 +129,79 @@ export class StateManager {
     private now: () => number = Date.now,
   ) {}
 
-  constrainStep(from: Position, to: Position) {
+  constrainStep(from: Position, to: Position, sessionId?: string) {
     const next = this.environment === 'factory25d' ? constrainFactoryStep(from, to) : to;
+    if(this.environment==='factory25d') {
+      const people=this.personalSpacePeople(sessionId).map(agent=>this.currentWorldPosition(agent));
+      if(!clearPeopleStep(from,next,people))return from;
+    }
     return this.garageDriving?.blocks(from, next) ? from : next;
   }
   manualElevatorEntry(from: Position, to: Position) { return this.environment === 'factory25d' ? manualElevatorEntry(from, to) : undefined; }
   get worldBounds() { return this.environment === 'factory25d' ? FACTORY25D_BOUNDS : CONTROL_WORLD_BOUNDS; }
   get grabBounds() { return this.environment === 'factory25d' ? { ...FACTORY25D_BOUNDS, minY: -82 } : GRAB_POINTER_BOUNDS; }
+
+  private crowdPaused = new Map<string, { movement: WorldMovement; activity: AgentActivity; retryAt: number }>();
+  private personalSpacePeople(except?: string) {
+    return [...this.sessions.values()].filter(a=>a.sessionId!==except&&!this.garageDrivers.has(a.sessionId)&&!this.grabbedSession(a.sessionId)
+      && !a.manualControl?.elevatorTrip && !(a.world.movement&&factoryElevatorTripAt(a.world.movement,this.now())));
+  }
+
+  /** Look ahead before clients reach a conflict. Only changed routes are broadcast. */
+  advancePersonalSpace(timestamp=this.now()) {
+    if(this.environment!=='factory25d')return;
+    const agents=this.personalSpacePeople().sort((a,b)=>Number(!!b.manualControl)-Number(!!a.manualControl)||a.sessionId.localeCompare(b.sessionId));
+    const changes=new Map<string,WorldAgent>(), placed:Position[]=[];
+    for(const agent of agents){
+      let from=this.currentWorldPosition(agent,timestamp);
+      // Repair imported overlaps once and keep same-floor, scenery-safe positions.
+      const separated=freeStandingPoint(from,placed);
+      if(personDistance(from,separated)>.01&&!agent.manualControl){
+        const target=agent.world.movement?.to;
+        agent.world.position=separated;delete agent.world.movement;
+        if(target){const waypoints=factory25dWaypoints(separated,target);if(factoryMovementIsClear({from:separated,to:target,waypoints}))agent.world.movement={from:separated,to:target,waypoints,startedAt:timestamp,arrivesAt:timestamp+routeDistance(separated,waypoints,target)/WORLD_MOVE_SPEED*1000};}
+        from=separated;changes.set(agent.sessionId,agent);
+      }
+      placed.push(from);
+    }
+    for(const agent of agents){
+      const id=agent.sessionId,held=this.crowdPaused.get(id);
+      if(held&&(agent.manualControl||agent.activity!==held.activity||agent.world.movement)){this.crowdPaused.delete(id);}
+      if(agent.manualControl||this.garageYielding.has(id))continue;
+      const paused=this.crowdPaused.get(id), original=agent.world.movement??paused?.movement;
+      if(!original)continue;
+      const from=this.currentWorldPosition(agent,timestamp);
+      let movement=agent.world.movement;
+      if(!movement){
+        const to=original.to,waypoints=factory25dWaypoints(from,to);
+        if(!factoryMovementIsClear({from,to,waypoints}))continue;
+        movement={from,to,waypoints,startedAt:timestamp,arrivesAt:timestamp+routeDistance(from,waypoints,to)/WORLD_MOVE_SPEED*1000};
+      }
+      if(timestamp>=movement.arrivesAt){this.crowdPaused.delete(id);continue;}
+      if(factoryElevatorTripAt(movement,timestamp)||factoryElevatorTripAt(movement,timestamp+PERSONAL_SPACE_LOOKAHEAD_MS))continue;
+      const peers=agents.filter(other=>other!==agent), end=positionAt(movement,timestamp+PERSONAL_SPACE_LOOKAHEAD_MS);
+      const blocked=peers.some(other=>peopleCross(from,end,this.currentWorldPosition(other,timestamp),this.currentWorldPosition(other,timestamp+PERSONAL_SPACE_LOOKAHEAD_MS)));
+      if(!blocked){if(paused){agent.world.movement=movement;this.crowdPaused.delete(id);changes.set(id,agent);}continue;}
+      // Pause before contact, then take a short right-hand detour where space permits.
+      agent.world.position=from;delete agent.world.movement;
+      if(!paused||timestamp>=paused.retryAt){
+        const people=peers.map(other=>this.currentWorldPosition(other,timestamp));
+        const waypoint=(movement.waypoints??[]).find(point=>personDistance(from,point)>2)??movement.to;
+        const detour=passingDetour(from,waypoint,people);
+        if(detour){
+          const last=detour.at(-1)!,rest=factory25dWaypoints(last,movement.to),waypoints=[...detour,...rest];
+          const candidate={from,to:movement.to,waypoints,startedAt:timestamp,arrivesAt:timestamp+routeDistance(from,waypoints,movement.to)/WORLD_MOVE_SPEED*1000};
+          if(factoryMovementIsClear(candidate)&&peers.every(other=>!peopleCross(from,positionAt(candidate,timestamp+PERSONAL_SPACE_LOOKAHEAD_MS),this.currentWorldPosition(other,timestamp),this.currentWorldPosition(other,timestamp+PERSONAL_SPACE_LOOKAHEAD_MS)))){
+            agent.world.movement=candidate;this.crowdPaused.delete(id);changes.set(id,agent);continue;
+          }
+        }
+      }
+      this.crowdPaused.set(id,{movement:original,activity:agent.activity,retryAt:paused&&timestamp<paused.retryAt?paused.retryAt:timestamp+750});
+      if(!paused)changes.set(id,agent);
+    }
+    for(const id of this.crowdPaused.keys())if(!this.sessions.has(id))this.crowdPaused.delete(id);
+    if(changes.size)this.commit([...changes.values()].map(agent=>({kind:'agent_upsert' as const,agent:clone(agent)})),false,timestamp);
+  }
 
   setSessionNameLookup(fn: (id: string) => string | undefined) {
     this.sessionNameLookup = fn;
@@ -616,6 +683,7 @@ export class StateManager {
   }
 
   private moveFactoryIdle(session: WorldAgent,target: Position,slotIndex: number,timestamp: number,idleVisit?: 'garage-mini',car?: GarageCarId): boolean {
+    target=freeStandingPoint(target,this.personalSpacePeople(session.sessionId).flatMap(a=>[this.currentWorldPosition(a,timestamp),a.world.movement?.to??a.world.position]));
     const from=this.currentWorldPosition(session,timestamp),path=factory25dWaypoints(from,target);
     const route=[from,...path,target].map(fromFactoryWorld);
     if(route.slice(1).some((point,index)=>!clearFactorySegment(route[index],point))) {
@@ -1566,7 +1634,8 @@ export class StateManager {
 
   private initialWorld(sessionId: string, _timestamp: number): WorldAgent['world'] {
     const tombstone = this.tombstones.get(sessionId);
-    const position = tombstone?.position ?? WORLD_LAYOUTS[this.environment].entrance;
+    const entrance = tombstone?.position ?? WORLD_LAYOUTS[this.environment].entrance;
+    const position = this.environment==='factory25d' ? freeStandingPoint(entrance,this.personalSpacePeople(sessionId).map(a=>this.currentWorldPosition(a))) : entrance;
     return {
       zone: 'entrance',
       position: { ...position },
@@ -1764,6 +1833,10 @@ export class StateManager {
     const session = this.sessions.get(sessionId);
     if (this.environment === 'factory25d' && zone === 'work'
       && (preferred !== MINI_WORKSTATION_SLOT || !session || !this.workstationAllowed(session, MINI_WORKSTATION_SLOT) || this.garageCarOccupied('mini', sessionId))) occupied.add(MINI_WORKSTATION_SLOT);
+    if(this.environment==='factory25d')for(let index=0;index<WORLD_LAYOUTS.factory25d[zone==='work'?'workSlots':zone==='idle'?'idleSlots':'waitingSlots'].length;index++){
+      const target=slotPosition(this.environment,zone,index);
+      if(this.personalSpacePeople(sessionId).some(a=>personDistance(target,a.world.movement?.to??this.currentWorldPosition(a))<PERSONAL_SPACE))occupied.add(index);
+    }
     if (preferred !== undefined && !occupied.has(preferred)) return preferred;
     let index = 0;
     while (occupied.has(index)) index++;

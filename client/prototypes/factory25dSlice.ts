@@ -547,12 +547,6 @@ interior.add(box([counterWidth, 0.16, 0.34], [counterCenter, 0.36, counterZ], st
 interior.add(box([counterTopWidth, 0.1, FRONT_COUNTER.depth], [counterTopCenter, FRONT_COUNTER.topY-.05, counterZ], standard('#c4991a')));
 contactShadow(interior, { x: counterCenter, z: counterZ, floorY: 0.018,
   width: counterWidth - 0.14, depth: 0.29, spread: 0.18, opacity: 0.32 });
-// The counter label belongs on its cabinet face, leaving the tabletop screen clear.
-const counterLabel = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.16), new THREE.MeshStandardMaterial({
-  map: signTexture('FRONT COUNTER', '#d2c8a1', '#4d401e', 2, 1.65 / 0.16), roughness: 1,
-}));
-counterLabel.position.set(counterCenter, 0.23, counterZ+.178);
-interior.add(counterLabel);
 const vendingMachine=createVendingMachine(interior);
 vendingMachine.root.position.set(FRONT_VENDING.x,0,FRONT_VENDING.z-INTERIOR_Z);
 // Front desk room, beside its right divider; the display faces left into the room.
@@ -678,7 +672,7 @@ sideRoomScene.add(sideRoomAmbient);
 // A real window-sized source supplies the broad room wash. It intentionally
 // does not cast shadows; the directional light below only provides object form.
 const windowWashLight = new THREE.RectAreaLight('#c2dcff', 8, 15.2, glassHeight - 0.1);
-windowWashLight.position.set(0, glassCenterY, -4.05);
+windowWashLight.position.set(0, glassCenterY, -4.49);
 windowWashLight.lookAt(0, glassCenterY, 2.8);
 scene.add(windowWashLight);
 

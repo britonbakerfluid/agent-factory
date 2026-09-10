@@ -3,7 +3,7 @@ import { positionAt } from '@shared/world-layouts';
 
 export type AgentEffect = {
   id: number; sessionId: string; kind: EmoteType | 'shot' | 'hit' | 'commit' | 'merge' | 'return' | 'arrive' | 'rps';
-  startedAt: number; duration: number; facing: FacingDirection; choice?: RpsChoice; outcome?: RpsOutcome;
+  startedAt: number; duration: number; facing: FacingDirection; opponentSessionId?: string; choice?: RpsChoice; outcome?: RpsOutcome;
 };
 export type ShotEffect = { id: number; sessionId: string; targetSessionIds: string[]; startedAt: number; duration: number; facing: FacingDirection };
 export type EffectPose = { x: number; lift: number; angle: number; scaleX: number; scaleY: number; opacity: number };
@@ -79,8 +79,8 @@ export class FactoryEffectsState {
       const startedAt = typeof data.startedAt === 'number' && Number.isFinite(data.startedAt) ? data.startedAt : now;
       if (startedAt + durations.rps <= now) return;
       this.pairs.set(pair, startedAt + durations.rps);
-      Object.assign(this.start(id, 'rps', startedAt), { choice: data.firstChoice, outcome: data.firstOutcome });
-      Object.assign(this.start(other, 'rps', startedAt), { choice: data.secondChoice, outcome: data.secondOutcome });
+      Object.assign(this.start(id, 'rps', startedAt), { choice: data.firstChoice, outcome: data.firstOutcome, opponentSessionId: other });
+      Object.assign(this.start(other, 'rps', startedAt), { choice: data.secondChoice, outcome: data.secondOutcome, opponentSessionId: id });
       return;
     }
     if (message.effect === 'shoot' || (message.effect === 'emote' && data?.emote === 'gun')) {

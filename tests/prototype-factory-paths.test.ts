@@ -57,9 +57,8 @@ describe('visible factory arrivals and safe server paths', () => {
   });
 
   it('preserves valid live patrol waypoints, progress and idle positions', () => {
-    const patrol: WorldMovement = { from: { x: 828, y: 488 }, to: { x: 388, y: 608 }, startedAt: 1000, arrivesAt: 21000,
-      waypoints: [{ x: 881.4, y: 477.4 }, { x: 1026.6, y: 298.6 }, { x: 1026.6, y: 214.6 }, { x: 1026.6, y: 177.4 },
-        { x: 1026.6, y: 163.4 }, { x: 996.2, y: 114.6 }, { x: 629.8, y: 104.6 }, { x: 557.4, y: 410.2 }] };
+    const from=toFactoryWorld({x:12.7,z:7.7}),to=toFactoryWorld({x:1.7,z:10.7});
+    const patrol: WorldMovement = {from,to,startedAt:1000,arrivesAt:21000,waypoints:factory25dWaypoints(from,to)};
     expect(factoryMovementIsClear(patrol)).toBe(true); expect(factoryMovementForScene(patrol)).toBe(patrol);
     for (const now of [1000, 3000, 7000, 15000, 21000]) expect(agentPosition(agent(patrol), now, 'factory25d')).toEqual(fromFactoryWorld(positionAt(patrol, now)));
     const idle = agent(); idle.world.zone = 'idle';

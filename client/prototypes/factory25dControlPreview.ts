@@ -23,6 +23,16 @@ export function createControlPreview(publish: (data: BoardData) => void,
   tools.setAttribute('aria-label', 'Local control preview');
   tools.innerHTML = '<summary>local playground</summary><p>sample agents · nothing is sent live</p><label>jump to a state <select aria-label="Preview control state"></select></label><p class="preview-current" role="status"></p><div class="preview-actions"><button class="preview-reset">reset</button><button class="preview-finish">finish connecting</button></div><div class="preview-actions preview-mini-actions" hidden><button class="preview-mini-start" aria-label="start working">start working</button><button class="preview-mini-pack" aria-label="pack up">pack up</button></div><div class="preview-actions preview-travel-actions" hidden><button class="preview-by-elevator">by elevator</button><button class="preview-by-patio">by patio door</button><button class="preview-by-snacks">by snacks</button></div><div class="preview-activity" hidden></div><a href="?">leave playground ↗</a>';
   let spawnSample = 0;
+  for(const [choice,opponent] of [['rock','scissors'],['paper','rock'],['scissors','paper']] as const){
+    const button=document.createElement('button');button.type='button';button.textContent=`${choice} beats ${opponent}`;
+    button.addEventListener('click',()=>{
+      reset('ready');
+      const first=world.agents.find(a=>a.sessionId==='preview-mine')!,second=world.agents.find(a=>a.sessionId==='preview-teammate')!;
+      for(const [agent,x] of [[first,-.45],[second,.45]] as const){agent.activity='idle';agent.world={zone:'idle',position:toFactoryWorld({x,z:3.65}),facing:'down'};}
+      update();receive({type:'world_snapshot',snapshot:world});
+      receive({type:'effect',effect:'rps',sessionId:first.sessionId,data:{opponentSessionId:second.sessionId,firstChoice:choice,secondChoice:opponent,firstOutcome:'win',secondOutcome:'lose',startedAt:Date.now()+100}});
+    });tools.append(button);
+  }
   const dropSample = document.createElement('button'); dropSample.type = 'button'; dropSample.textContent = 'drop in a sample agent'; tools.append(dropSample);
   const ticketSample = document.createElement('button'); ticketSample.textContent = 'sample ticket payout'; ticketSample.className = 'preview-ticket-payout'; tools.append(ticketSample);
   const picker = tools.querySelector('select')!, finish = tools.querySelector<HTMLButtonElement>('.preview-finish')!;
@@ -276,7 +286,7 @@ export function createControlPreview(publish: (data: BoardData) => void,
         movement: { from, to, waypoints, startedAt, arrivesAt: startedAt + routeDistance(from, waypoints, to) / 80 * 1000 } };
     }
     connection(connected()); update(); scenarioChanged(next, data());
-    const panel = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (panel) panel.open = !['activity', 'spawn', 'tickets', 'room-life'].includes(next);
+    const panel = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (panel) panel.open = false;
     if (next === 'spawn') later(spawnAgent, 1400);
   }
   picker.addEventListener('change', () => reset(picker.value as Scenario), events);

@@ -13,3 +13,6 @@
   clip-path: inset(50%); white-space: nowrap;
 }
 .room-staff-label > .agent-name:focus-visible { border-radius: 3px; }
+
+.is-grabbing .agent-details { display:none; }
+.room-staff-label > .agent-name { touch-action:none; }

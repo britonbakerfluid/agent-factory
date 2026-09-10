@@ -1,6 +1,6 @@
 import type { FactoryRoom } from '@shared/factory25d-layout';
 
-export function createRoomMenu(toolbar: HTMLElement, trigger: HTMLButtonElement, visit: (room: FactoryRoom) => void, agentsButton: HTMLButtonElement, id = 'factory-room-menu') {
+export function createRoomMenu(toolbar: HTMLElement, trigger: HTMLButtonElement, visit: (room: FactoryRoom) => void, agentsButton: HTMLButtonElement, id = 'factory-room-menu', onOpen:()=>void=()=>{}) {
   const events = new AbortController(), options = {signal:events.signal};
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const rooms = {factory:'workspace',patio:'patio',garage:'garage'} as const;
@@ -29,6 +29,7 @@ export function createRoomMenu(toolbar: HTMLElement, trigger: HTMLButtonElement,
   }
   function open(last = false) {
     if(trigger.disabled) return;
+    onOpen();
     menu.hidden=false; trigger.setAttribute('aria-expanded','true');
     const dock=toolbar.getBoundingClientRect(), button=trigger.getBoundingClientRect();
     menu.style.left=`${Math.max(8-dock.left,Math.min(button.left-dock.left,innerWidth-menu.offsetWidth-8-dock.left))}px`;
