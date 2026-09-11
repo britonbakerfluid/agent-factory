@@ -49,6 +49,8 @@ export class TeamRoster {
     const member = id && this.members.get(id);
     if (member) this.remember({ ...member, lastSeen: this.now() });
   }
+  /** A person who has connected before, by durable owner id. */
+  member(id: string): StoredTeamMember | undefined { const member = this.members.get(id); return member && structuredClone(member); }
   snapshot(): TeamSnapshot {
     const online = new Set(this.browsers.values()), counts = new Map<string, number>();
     for (const agent of this.agents()) if (agent.activity !== 'stopped') {

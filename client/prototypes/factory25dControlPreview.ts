@@ -1,3 +1,4 @@
+import { floorTransitionDebug } from './factory25dElevatorTrip';
 import { TICKET_COLLECT_MS, ticketOwnerKey } from '@shared/station-tickets';
 import { CONTROL_MOVE_SPEED, DEFAULT_AVATAR, VALID_EMOTES } from '@shared/constants';
 import { constrainFactoryStep, toFactoryWorld, fromFactoryWorld, factoryRoomAt, FACTORY_ELEVATOR, GARAGE_ELEVATOR, WORKSTATIONS, factory25dWaypoints, MINI_WORKSTATION_SLOT, MINI_WORKSTATION_USERNAME } from '@shared/factory25d-layout';
@@ -22,6 +23,23 @@ export function createControlPreview(publish: (data: BoardData) => void,
   const mobile = window.matchMedia('(max-width: 600px)'); tools.open = !mobile.matches;
   tools.setAttribute('aria-label', 'Local control preview');
   tools.innerHTML = '<summary>local playground</summary><p>sample agents · nothing is sent live</p><label>jump to a state <select aria-label="Preview control state"></select></label><p class="preview-current" role="status"></p><div class="preview-actions"><button class="preview-reset">reset</button><button class="preview-finish">finish connecting</button></div><div class="preview-actions preview-mini-actions" hidden><button class="preview-mini-start" aria-label="start working">start working</button><button class="preview-mini-pack" aria-label="pack up">pack up</button></div><div class="preview-actions preview-travel-actions" hidden><button class="preview-by-elevator">by elevator</button><button class="preview-by-patio">by patio door</button><button class="preview-by-snacks">by snacks</button></div><div class="preview-activity" hidden></div><a href="?">leave playground ↗</a>';
+  const speedControl=document.createElement('label');
+  speedControl.className='preview-floor-speed';
+  speedControl.innerHTML='<span>floor transition speed <output>1.00×</output></span><input type="range" aria-label="Floor transition speed" min="0.02" max="1" step="0.01" value="1"><small>left = slow motion · right = normal</small>';
+  const speedSlider=speedControl.querySelector('input')!;
+  const speedOutput=speedControl.querySelector('output')!;
+  speedSlider.value=String(floorTransitionDebug.speed);
+  const updateSpeed=()=>{
+    floorTransitionDebug.speed=Number(speedSlider.value);
+    speedOutput.textContent=`${floorTransitionDebug.speed.toFixed(2)}×`;
+    speedSlider.setAttribute('aria-valuetext',`${Math.round(floorTransitionDebug.speed*100)} percent speed`);
+  };
+  speedSlider.addEventListener('input',updateSpeed);updateSpeed();
+  if(import.meta.env.DEV) {
+    tools.querySelector('summary')!.after(speedControl);
+    const finishTrip=document.createElement('button');finishTrip.type='button';finishTrip.textContent='finish floor transition';
+    finishTrip.addEventListener('click',()=>window.dispatchEvent(new Event('factory-finish-floor-trip')));speedControl.append(finishTrip);
+  }
   let spawnSample = 0;
   for(const [choice,opponent] of [['rock','scissors'],['paper','rock'],['scissors','paper']] as const){
     const button=document.createElement('button');button.type='button';button.textContent=`${choice} beats ${opponent}`;

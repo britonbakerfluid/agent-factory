@@ -43,21 +43,6 @@
         touch-action: none;
       }
       [hidden] { display: none !important; }
-      .display-study { position: fixed; z-index: 60; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 5px; max-width: calc(100vw - 16px); background: #0a101bea; border: 1px solid #60778e; box-shadow: 0 4px 0 #03071180; }
-      .display-study button { min-width: 44px; min-height: 44px; padding: 8px 12px; border: 0; background: transparent; color: #b7c6d7; white-space: nowrap; font: 12px 'Geist Pixel', monospace; cursor: pointer; }
-      .display-study button[aria-pressed="true"] { color: #e9fff4; background: #294d43; }
-      .display-study button:hover { background: #334355; }
-      .display-study button:focus-visible { outline: 2px solid #b2ecdc; outline-offset: -2px; }
-      .display-study { flex-wrap: wrap; justify-content: center; width: max-content; }
-      .study-row { display: flex; align-items: center; gap: 4px; }
-      .study-row + .study-row { border-left: 1px solid #60778e60; padding-left: 5px; }
-      #display-study-status { flex-basis: 100%; margin: 0; text-align: center; font: 11px/1.4 'Geist Pixel', monospace; }
-      #display-study-status:empty { display: none; }
-      @media (max-width: 740px) {
-        .display-study { max-width: 300px; gap: 0; }
-        .study-row + .study-row { border-left: 0; padding-left: 0; }
-        .display-study button { padding-inline: 10px; }
-      }
       .board-hotspot {
         position: absolute;
         z-index: 1;
@@ -230,7 +215,7 @@
       .weather-open .scene-settings { display: none; }
       .agent-label { position: absolute; left: 0; top: 0; z-index: 2; width: max-content; padding-bottom: 4px; }
       .agent-label:hover, .agent-label:focus-within { z-index: 5; }
-      .agent-name { position: relative; display: block; max-width: 150px; min-height: 24px; padding: 0 4px; border: 0; background: none; color: #f0f2eb; font: 400 clamp(10px, 1.4cqw, 14px)/1.25 'Geist Pixel', monospace; white-space: nowrap; text-shadow: 0 2px 1px #000b, 1px 0 1px #1119, -1px 0 1px #1119; cursor: help; touch-action: manipulation; }
+      .agent-name { position: relative; display: block; max-width: 150px; min-height: 24px; padding: 0 4px; border: 0; background: none; color: #f0f2eb; font: 400 clamp(10px, 1.4cqw, 14px)/1.25 'Geist Pixel', monospace; white-space: nowrap; text-shadow: none; cursor: help; touch-action: manipulation; }
       .agent-name::before { content: ''; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); width: clamp(16px, 2.8cqw, 36px); height: clamp(18px, 3.5cqw, 45px); }
       .agent-name:hover { color: #fff; }
       .agent-name:focus-visible { outline: 1px solid #e0e9ed; outline-offset: 2px; }
@@ -309,20 +294,6 @@
     </style>
   </head>
   <body>
-    <nav id="display-study" class="display-study" aria-label="Compare screen effects" hidden>
-      <div class="study-row" role="group" aria-label="Screen effect">
-      <button type="button" data-display="clean" aria-pressed="true">clean</button>
-      <button type="button" data-display="crt" aria-pressed="false">soft CRT</button>
-      <button type="button" data-display="phosphor" aria-pressed="false">phosphor</button>
-      <button id="display-study-close" type="button" aria-label="End screen comparison" title="Return to the clean view">×</button>
-      </div>
-      <div class="study-row" role="group" aria-label="Mountain landscape">
-        <button type="button" data-landscape="current" aria-pressed="true">current</button>
-        <button type="button" data-landscape="blender" aria-pressed="false">Blender</button>
-        <button id="display-focus" type="button" aria-pressed="false">depth of field</button>
-      </div>
-      <p id="display-study-status" role="status" aria-live="polite"></p>
-    </nav>
     <main class="factory-page" aria-label="Fluid Factory">
       <details class="scene-settings"><summary>weather & light</summary>
         <div class="slice-controls">
@@ -376,9 +347,8 @@
     </nav>
     <nav id="room-navigation" class="pixel-island" aria-label="Room navigation" hidden>
       <button id="room-return" type="button">← factory</button>
-      <div><span class="room-view-title">the patio</span><span class="room-view-status" id="duck-status" aria-live="polite">open sky · string lights</span></div>
-      <button id="duck-play" class="factory-game-action" type="button">duck hunt</button>
-      <button id="duck-reload" type="button" hidden>reload</button>
+      <div><span class="room-view-title">the patio</span><span class="room-view-status duck-hud" id="duck-status">open sky · string lights</span></div>
+      <button id="duck-play" class="factory-game-action duck-play" type="button">duck hunt</button>
     </nav>
     <nav id="inspect-navigation" class="pixel-island" aria-label="Close-up navigation" hidden>
       <button id="inspect-back" type="button">← view</button>
@@ -401,14 +371,13 @@
     </div>
     <div class="scene-sound pixel-island" role="group" aria-label="Scene sound">
       <button id="scene-sound-toggle" type="button" aria-pressed="false" aria-describedby="scene-sound-help">sound off</button>
-      <label id="scene-sound-level" hidden>
-        <span class="sr-only">Scene volume</span>
-        <input id="scene-volume" type="range" min="0" max="100" step="1" value="40" aria-label="Scene volume" />
+      <label class="scene-music-level"><span>Music</span><input id="scene-music-volume" type="range" min="0" max="100" value="40" aria-label="Music volume"><output id="scene-music-value">40%</output></label><div class="scene-volume-row"><label id="scene-sound-level" hidden>
+        <span>SFX</span>
+        <input id="scene-volume" type="range" min="0" max="100" step="1" value="40" aria-label="SFX volume" />
         <output id="scene-volume-value" for="scene-volume" aria-hidden="true">40%</output>
-      </label>
+      </label><a id="scene-sound-credits" href="/audio/factory/credits.html" target="_blank" rel="noopener">credits</a></div>
       <span id="scene-sound-help" class="sr-only">Quiet ambience follows the weather and your room. This control also mutes game sounds.</span>
       <span id="scene-sound-status" class="sr-only" role="status"></span>
-      <a id="scene-sound-credits" href="/audio/factory/credits.html" target="_blank" rel="noopener">credits</a>
     </div>
     <script type="module" src="/prototypes/factory25dSlice.ts"></script>
   </body>

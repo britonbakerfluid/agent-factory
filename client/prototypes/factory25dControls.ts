@@ -1,3 +1,6 @@
+import { savedVolume, rememberVolume } from './factory25dVolumeMemory';
+import { pixelIcon } from './factory25dPixelIcons';
+import { createIslandTransitions } from './factory25dIslandTransitions';
 import { setAvatarTextureFrame } from './factory25dAvatarTexture';
 import { createPickupMotion, updatePickupShadow, pickupLanding, pickupReleaseLanding } from './factory25dPickup';
 import { avatarSheet, AVATAR_ANIMATIONS } from './factory25dAvatar';
@@ -10,7 +13,6 @@ import type { GarageCarId } from '@shared/factory25d-garage';
 import { intersectFactoryFloor } from './factory25dPatioPicking';
 import { createRoomMenu } from './factory25dRoomMenu';
 import { createToolbarTooltip } from './factory25dToolbarTooltip';
-import { createToolbarMotion } from './factory25dToolbarMotion';
 import { factoryToolbarState } from './factory25dToolbarState';
 import { createProfilePortrait } from './factory25dPortrait';
 import { parseAvatarConfig } from '@shared/avatar-customization';
@@ -55,6 +57,101 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     <p class="factory-key-help">W A S D to walk · space to shoot<br>B for emotes · escape to release<br>walk into the lift or through the patio doorway</p></section><p class="factory-control-status" role="status" aria-live="polite"></p></div>`;
   document.body.append(panel);
   const {toolbar,contextIcons,personIcon} = createToolbarElement();
+  const soundPanel = document.querySelector<HTMLElement>('.scene-sound');
+  const soundAnchor = document.createComment('scene sound home');
+  const soundDock = document.createElement('div'); soundDock.className = 'factory-volume-control';
+  const quickMute = document.createElement('button'); quickMute.type = 'button'; quickMute.className = 'factory-audio-mute';
+  let masterRestore: boolean[] | undefined;
+  try { const saved=JSON.parse(localStorage.getItem('factory-master-restore-v1')??'null'); if(Array.isArray(saved)&&saved.length===2&&saved.every(v=>typeof v==='boolean'))masterRestore=saved; } catch {}
+  const saveMasterRestore=()=>{try{localStorage.setItem('factory-master-restore-v1',JSON.stringify(masterRestore??null));}catch{}};
+  let touchSound=false;
+  quickMute.addEventListener('pointerdown',event=>{touchSound=event.pointerType==='touch';});
+  document.addEventListener('pointerdown',event=>{if(!soundDock.contains(event.target as Node))delete soundDock.dataset.open;},options);
+  quickMute.addEventListener('click', () => {
+    if(touchSound&&soundDock.dataset.open!=='true'){soundDock.dataset.open='true';touchSound=false;return;}
+    touchSound=false;
+    const master = soundPanel?.querySelector<HTMLButtonElement>('#scene-sound-toggle');
+    const audible = master?.getAttribute('aria-pressed') === 'true' && channels.some(c => c && Number(c.slider.value) > 0);
+    if (audible) {
+      masterRestore = channels.map(c => !!c && Number(c.slider.value) > 0); saveMasterRestore();
+      for (const c of channels) c?.muteChannel();
+      master?.click();
+    } else {
+      if (channels.every(c => !c || Number(c.slider.value) === 0)) {
+        channels.forEach((c, i) => { if (c && (masterRestore?.[i] ?? true)) c.restoreChannel(); });
+      }
+      masterRestore = undefined; saveMasterRestore();
+      if (master?.getAttribute('aria-pressed') !== 'true') master?.click();
+    }
+  });
+  if (soundPanel) { soundPanel.before(soundAnchor); soundPanel.classList.remove('pixel-island'); soundDock.append(quickMute, soundPanel); toolbar.append(soundDock); }
+  quickMute.innerHTML = '<span class="factory-audio-wave" aria-hidden="true">'+Array.from({length:7},()=>'<i></i>').join('')+'</span>';
+  const channels = ['#scene-music-volume', '#scene-volume'].map((selector) => {
+    const slider = soundPanel?.querySelector<HTMLInputElement>(selector);
+    if (!slider) return undefined;
+    const paintFill = () => {
+      const percent = Math.max(0, Math.min(100, Number(slider.value)));
+      slider.style.setProperty('--volume-fill', `calc(${percent}% + ${4 - percent * .08}px)`);
+    };
+    slider.addEventListener('input', paintFill); paintFill();
+    const name = selector.includes('music') ? 'Music' : 'SFX';
+    const label = slider.closest('label')!;
+    const caption = label.querySelector('span');
+    const mute = document.createElement('button'); mute.type = 'button'; mute.className = 'factory-channel-mute';
+    if (caption) caption.textContent = name;
+    else { const title = document.createElement('span'); title.textContent = name; label.prepend(title); }
+    label.append(mute);
+    const storageKey=name==='Music'?'factory-music-level-v2':'factory-ambient-volume-v1';
+    let previous=savedVolume(storageKey,Number(slider.value),localStorage);
+    const change = (value: number) => { slider.value = String(value); slider.dispatchEvent(new Event('input', {bubbles:true})); };
+    const muteChannel = () => { if (Number(slider.value) > 0) { previous = Number(slider.value); rememberVolume(storageKey,previous,localStorage); } change(0); };
+    mute.addEventListener('click', () => {
+      masterRestore = undefined; saveMasterRestore();
+      const master = soundPanel?.querySelector<HTMLButtonElement>('#scene-sound-toggle');
+      if (master?.getAttribute('aria-pressed') !== 'true') {
+        // Clicking an effectively muted channel enables that channel alone.
+        for (const channel of channels) if (channel && channel.slider !== slider) channel.muteChannel();
+        if (Number(slider.value) === 0) change(previous);
+        master?.click();
+      } else if (Number(slider.value) > 0) muteChannel();
+      else change(previous);
+    });
+    label.addEventListener('wheel', event => { event.preventDefault(); if (event.deltaY) change(Math.max(0, Math.min(100, Number(slider.value) + (event.deltaY < 0 ? 5 : -5)))); }, {passive:false});
+    return {slider, mute, name, muteChannel, restoreChannel: () => change(previous)};
+  });
+  if(soundPanel?.querySelector('#scene-sound-toggle')?.getAttribute('aria-pressed')!=='true' && channels.some(c=>c&&Number(c.slider.value)>0)) {
+    masterRestore=channels.map(c=>!!c&&Number(c.slider.value)>0);saveMasterRestore();
+    channels.forEach(c=>c?.muteChannel());
+  }
+  const audioReducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const syncSound = () => {
+    const enabled = soundPanel?.querySelector('#scene-sound-toggle')?.getAttribute('aria-pressed') === 'true';
+    const audible = enabled && channels.some(c => c && Number(c.slider.value) > 0);
+    quickMute.setAttribute('aria-label', 'Sound'); quickMute.setAttribute('aria-pressed', String(audible)); quickMute.title=audible?'Mute all sound':'Enable sound';
+    for (const c of channels) if (c) {
+      const percent = Math.max(0, Math.min(100, Number(c.slider.value)));
+      c.slider.style.setProperty('--volume-fill', `calc(${percent}% + ${4 - percent * .08}px)`);
+      const muted = !enabled || Number(c.slider.value) === 0;
+      c.slider.closest('label')?.classList.toggle('is-channel-muted', muted);
+      if (c.mute.dataset.muted !== String(muted)) c.mute.innerHTML = pixelIcon(muted ? 'volume-x' : 'volume-2');
+      c.mute.dataset.muted=String(muted); c.mute.setAttribute('aria-pressed', String(!muted)); c.mute.setAttribute('aria-label', `${c.name} sound`); c.mute.title=`${muted?'Unmute':'Mute'} ${c.name}`;
+    }
+    const music = enabled && Number(channels[0]?.slider.value) > 0 && soundPanel?.dataset.playing === 'true';
+    const energy = enabled && Number(channels[1]?.slider.value) > 0 ? Number(soundPanel?.dataset.sfxLevel || 0) : 0;
+    quickMute.classList.toggle('is-silent', !audible);
+    quickMute.querySelectorAll<HTMLElement>('i').forEach((bar, i) => {
+      const time = performance.now();
+      const pulse = !audible || audioReducedMotion.matches || document.hidden ? 0 : music
+        ? (Math.sin(time/180 + i*1.8)+1)*.32+.2
+        : (Math.sin(time/420 + i*1.3)+Math.sin(time/730-i*.8)+2)*.075;
+      const restingHeight = [3, 5, 8, 11, 8, 5, 3][i];
+      bar.style.height = `${Math.round(restingHeight + Math.min(1, pulse + (audioReducedMotion.matches ? 0 : energy) * (1 - Math.abs(i-3)/5))*10)}px`;
+    });
+  };
+  const soundObserver = new MutationObserver(syncSound);
+  if (soundPanel) soundObserver.observe(soundPanel, { attributes:true, subtree:true, attributeFilter:['data-playing','data-sfx-level'] });
+  const soundMeter = window.setInterval(syncSound, 100);
+  syncSound();
   const roomPicker = toolbar.querySelector<HTMLButtonElement>('.factory-room-picker')!;
   const viewTools = toolbar.querySelector<HTMLElement>('.factory-view-tools')!;
   const focusTitle = toolbar.querySelector<HTMLElement>('.factory-focus-title')!;
@@ -97,9 +194,6 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       if (avatar && generation === portraitGeneration && !abort.signal.aborted) portraitSlot.replaceChildren(createProfilePortrait(avatar));
     } catch { /* Keep the agent portrait or guest icon if offline. */ }
   }
-  const agentsShortcut = toolbar.querySelector<HTMLButtonElement>('.factory-agents-shortcut')!;
-  agentsShortcut.addEventListener('click', () => toolbarFocus.run(() => { panel.open = !panel.open; }), options);
-  panel.addEventListener('toggle', () => agentsShortcut.setAttribute('aria-expanded', String(panel.open)), options);
   document.addEventListener('pointerdown', event => {
     if (panel.open && !panel.contains(event.target as Node) && !toolbar.contains(event.target as Node)) panel.open = false;
   }, options);
@@ -166,7 +260,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     if (toolbarFocus.name()) { toolbarFocus.back(); return; }
     if (state.active || state.pending) { state.release(); paint(); return; }
     if (!data.principal) { showConnectionGuide(); return; }
-    if (state.owned().length) { findAgent(); panel.open = true; }
+    if (state.owned().length) { profileMenu.openAgent(state.owned()[0].sessionId); }
     else openAvatar();
   }, options);
   const editAvatar = document.createElement('button'); editAvatar.textContent = 'edit avatar';
@@ -204,9 +298,6 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   function paintAttention() {
     const items = personalAgentAttention(data), summary = agentAttentionSummary(items);
     attentionCount.hidden = !summary; attentionCount.textContent = summary;
-    const toolbarCount = agentsShortcut.querySelector<HTMLElement>('.factory-toolbar-count')!;
-    toolbarCount.hidden = !items.length; toolbarCount.textContent = String(items.length);
-    agentsShortcut.setAttribute('aria-label', summary ? `Agents: ${summary}` : 'Agents');
     attentionCount.dataset.kind = items.some(item => item.kind === 'input' || item.kind === 'permission')
       ? 'input' : items.some(item => item.kind === 'error') ? 'error' : 'ready';
     panel.querySelector<HTMLElement>('.factory-connection')!.hidden = !!summary;
@@ -301,14 +392,32 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     emoteBar.sync(!!state.active, movementAvailable());
   }
   let toolbarSignature = '';
-  const toolbarMotion = createToolbarMotion(toolbar);
+
   const toolbarTooltip = createToolbarTooltip(toolbar);
   const roomMenu = createRoomMenu(toolbar, roomPicker, destination => {
     toolbarFocus.run(() => { state.stop(); panel.open = false; visit(destination); });
-  }, agentsShortcut,undefined,()=>{profileMenu.close();panel.open=false;});
+  }, undefined,()=>{profileMenu.close();panel.open=false;});
+  const menuSize = new ResizeObserver(entries => {
+    for(const {target} of entries) if(!(target as HTMLElement).hidden) toolbar.style.setProperty('--menu-height', `${target.getBoundingClientRect().height}px`);
+  });
+  toolbar.querySelectorAll('.factory-room-menu,.factory-profile-menu').forEach(menu => menuSize.observe(menu));
+  const islandTransitions = createIslandTransitions(toolbar);
   let nextRoomCount = 0, nextProfileUpdate = 0;
   let roomCounts = {factory:0,patio:0,garage:0};
   function paintToolbar() {
+    const basketballTools=document.querySelector<HTMLElement>('.visitor-ball-hint');
+    const basketballFocused=toolbarFocus.name()==='basketball';
+    const basketballDockIndex=docked.findIndex(item=>item.element===basketballTools);
+    if(!basketballFocused&&basketballDockIndex>=0){
+      const [item]=docked.splice(basketballDockIndex,1);
+      item.anchor.replaceWith(item.element);item.element.classList.add('pixel-island');item.group.remove();toolbarSignature='';
+    }
+    if(basketballFocused&&basketballTools&&basketballDockIndex<0){
+      const anchor=document.createComment('basketball controls');basketballTools.before(anchor);
+      const group=document.createElement('div');group.className='factory-view-group';group.hidden=true;
+      basketballTools.classList.remove('pixel-island');group.append(basketballTools);viewTools.append(group);
+      docked.push({element:basketballTools,anchor,group,view:'basketball'});toolbarSignature='';
+    }
     const focused = toolbarFocus.name();
     const now = performance.now();
     if(now >= nextRoomCount) {
@@ -333,7 +442,6 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     // This runs with the scene. Only mutate the DOM when the visible state changes.
     const signature = JSON.stringify(model);
     if (signature === toolbarSignature) { roomMenu.update(currentRoom(),roomCounts,data.connected,!!focused || !available()); return; }
-    const finishMotion = toolbarMotion.capture(!!toolbarSignature);
     roomMenu.update(currentRoom(),roomCounts,data.connected,!!focused || !available());
     toolbarSignature = signature;
     toolbar.dataset.identity = model.identity; toolbar.dataset.view = model.view; toolbar.dataset.control = model.controlMode; toolbar.dataset.reconnecting = String(model.reconnecting);
@@ -346,12 +454,16 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     roomPicker.disabled = model.navigationDisabled;
     avatarShortcut.hidden = !model.showProfile;
     roomPicker.hidden = !model.showRoomTools;
-    agentsShortcut.hidden = !model.showRoomTools;
-    for (const item of docked) item.group.hidden = item.view !== model.tools;
+    for (const item of docked) item.group.hidden = item.view !== model.tools && !(focused === 'duck hunt' && item.view === 'patio');
+    if (avatarShortcut.nextElementSibling !== soundDock) avatarShortcut.after(soundDock);
+    if ((!focused && model.tools === 'patio') || focused === 'duck hunt') soundDock.after(viewTools);
+    else if (!focused) roomPicker.after(viewTools);
     viewTools.hidden = !docked.some(item => !item.group.hidden);
+    const soloBack = model.action === 'back' && !model.showProfile && !model.showRoomTools && viewTools.hidden;
+    toolbar.classList.toggle('factory-solo-back', soloBack);
     focusTitle.textContent = focused ?? '';
-    focusTitle.hidden = !focused || focused === 'window' || focused === 'whiteboard';
-    avatarShortcut.disabled = agentsShortcut.disabled = model.navigationDisabled;
+    focusTitle.hidden = soloBack || !focused || focused === 'window' || focused === 'whiteboard';
+    avatarShortcut.disabled = model.navigationDisabled;
     avatarShortcut.setAttribute('aria-label', model.profileLabel);
     avatarShortcut.setAttribute('aria-pressed', String(model.profileSelected));
     contextAction.hidden = !model.showPrimary;
@@ -359,19 +471,19 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     contextAction.setAttribute('aria-busy',String(model.action==='reconnect'));
     contextAction.dataset.action = model.action;
     contextAction.setAttribute('aria-label', model.label);
-    contextAction.querySelector('.factory-nav-label')!.textContent = model.label;
+    contextAction.querySelector('.factory-nav-label')!.textContent = soloBack ? focused ?? model.label : model.label;
     contextAction.querySelector('.factory-nav-icon')!.innerHTML = contextIcons[model.action === 'release' || model.action === 'cancel' ? 'stop'
       : model.action === 'customize' ? 'help' : model.action];
     contextAction.dataset.tooltip = focused ? `Return from ${focused}` : model.action === 'connect' ? 'Connect this browser to customize your character'
       : model.action === 'customize' ? 'Customize your avatar, even without an active agent'
       : model.action === 'find' ? 'Find your agent and open their controls' : model.action === 'release' ? 'Stop controlling this agent' : model.label;
-    finishMotion();
   }
 
   function selectAgent(sessionId: string) {
     if (!available() || !state.owned().some(agent => agent.sessionId === sessionId)) return;
     picker.value = sessionId; placementNotice = ''; avatarRequested = false;
-    panel.open = true; state.stop(); paint(); claim.focus({ preventScroll: true });
+    panel.open = false; state.stop(); nextProfileUpdate=0; paint(); profileMenu.openAgent(sessionId);
+    const details=agents.entries.get(sessionId)?.label.element.querySelector<HTMLElement>('.agent-details');if(details)details.hidden=true;
   }
   document.addEventListener('click', event => {
     const target = event.target instanceof Element ? event.target.closest<HTMLElement>('.agent-label[data-session-id] .agent-name') : null;
@@ -447,7 +559,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   let agentPress: { id: string; x: number; y: number; worldX: number; worldY: number; moved: boolean } | undefined;
   const pointerOptions = { ...options, capture: true };
   function beginAgentPress(event: PointerEvent, mesh: THREE.Object3D, target: HTMLElement) {
-    if (dragPointer !== undefined) return;
+    if (dragPointer !== undefined || document.body.classList.contains('basketball-input-active') || canvas.classList.contains('holding-basketball')) return;
     lastGrabScreen={x:event.clientX,y:event.clientY};
     const p = pointer(event); if (!p) return;
     agentPress = { id: mesh.userData.sessionId, x: event.clientX, y: event.clientY, worldX: p.worldX, worldY: p.worldY, moved: false };
@@ -614,6 +726,6 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
         if(!held.has(id)&&!motion.active){motion.dispose();pickupMotions.delete(id);pickupFacing.delete(id);}
       }
     },
-    dispose() { for(const motion of pickupMotions.values())motion.dispose();profileMenu.dispose(); roomMenu.dispose(); toolbarTooltip.dispose(); toolbarMotion.dispose(); toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
+    dispose() { islandTransitions.dispose(); menuSize.disconnect(); soundObserver.disconnect(); clearInterval(soundMeter); if(soundPanel) soundAnchor.replaceWith(soundPanel); soundDock.remove(); quickMute.remove(); for(const motion of pickupMotions.values())motion.dispose();profileMenu.dispose(); roomMenu.dispose(); toolbarTooltip.dispose(); toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
   };
 }

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { BRAND_ASSETS, brandAssetUrl, brandPngSize, filterBrandAssets } from '../client/prototypes/factory25dBrandAssets';
 
-it('ships only the eight original self-contained SVGs with their recorded hashes and dimensions', () => {
+it('ships only the nine original self-contained SVGs with their recorded hashes and dimensions', () => {
   const manifest = JSON.parse(readFileSync('client/assets/brand/manifest.json', 'utf8'));
   expect(new Set(BRAND_ASSETS.map(asset => asset.id)).size).toBe(BRAND_ASSETS.length);
   expect(manifest.assets.map((asset: { file: string }) => asset.file).sort()).toEqual(BRAND_ASSETS.map(asset => `${asset.id}.svg`).sort());
@@ -20,7 +20,7 @@ it('combines brand and multi-word searches without changing the originals', () =
   expect(filterBrandAssets('We Commerce', 'BLACK symbol').map(asset => asset.id)).toEqual(['we-commerce-logomark-black']);
   expect(filterBrandAssets('All', '  signature   white ')).toHaveLength(1);
   expect(filterBrandAssets('All', 'does not exist')).toEqual([]);
-  expect(filterBrandAssets('All', '')).toHaveLength(8);
+  expect(filterBrandAssets('All', '')).toHaveLength(9);
 });
 
 it('exports transparent PNGs with bounded resolution and the original aspect ratio', () => {

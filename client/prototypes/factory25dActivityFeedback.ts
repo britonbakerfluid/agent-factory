@@ -210,7 +210,7 @@ export function createActivityFeedback(parent: HTMLElement) {
         const notice = document.createElement('span'); notice.className = 'agent-event-notice'; notice.setAttribute('aria-hidden', 'true');
         const details = document.createElement('span'); details.className = 'agent-feedback-detail';
         label.element.append(badge, notice);
-        (label.element.querySelector('.agent-details') ?? label.element).append(details);
+        (label.element.querySelector('.agent-thought-body') ?? label.element).append(details);
         elements.set(session.sessionId, { label: label.element, badge, notice, details, detailText: '' });
       }
       for (const [id, element] of elements) if (!ids.has(id)) { remove(element); elements.delete(id); }
@@ -238,7 +238,8 @@ export function createActivityFeedback(parent: HTMLElement) {
         // The persistent request bubble already conveys these attention events.
         element.notice.hidden = !visibleNotice || visibleNotice.kind === 'permission' && ['input', 'permission'].includes(visualState);
         if (visibleNotice && element.notice.textContent !== visibleNotice.text) { element.notice.textContent = visibleNotice.text; element.notice.dataset.kind = visibleNotice.kind; }
-        const detailText = [status.label, `${state.tools} tool calls`, notice ? `Latest ${notice.kind}: ${notice.text}` : ''].filter(Boolean).join(' · ');
+        const detailText = notice ? `Latest ${notice.kind}: ${notice.text}` : '';
+        element.details.hidden = !detailText;
         if (element.detailText !== detailText) { element.details.textContent = detailText; element.detailText = detailText; }
       }
     },

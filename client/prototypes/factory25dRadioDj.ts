@@ -1,7 +1,8 @@
+import { DJ_BOOTH, INTERIOR_Z } from '@shared/factory25d-layout';
 import { createStaffPickup, updatePickupShadow } from './factory25dPickup';
 import * as THREE from 'three';
 import { DEFAULT_AVATAR } from '@shared/constants';
-import { avatarTexture, setAvatarTextureFrame } from './factory25dAvatarTexture';
+import { avatarTexture, setAvatarTextureFrame, installAvatarBack } from './factory25dAvatarTexture';
 import { avatarEyePose } from './factory25dAvatarEyes';
 import { createNameTag } from './factory25dLabels';
 import { contactShadow } from './factory25dContactShadows';
@@ -41,14 +42,16 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
   const material = new THREE.MeshStandardMaterial({ map: texture, alphaTest: .08, side: THREE.DoubleSide,
     roughness: 1, emissive: '#101126', emissiveIntensity: .6 });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(SCALE, SCALE), material);
+    installAvatarBack(mesh);
   mesh.name = 'lounge DJ'; mesh.castShadow = true; parent.add(mesh);
-  // To the radio's right: clear of the coffee table, floor lamp, and soccer ball.
-  const point = new THREE.Vector3(3.60, .018, 6.18);
+  // Behind the mixer, clear of the coffee table and soccer ball.
+  const point = new THREE.Vector3(DJ_BOOTH.x, .018, DJ_BOOTH.z - INTERIOR_Z - .60);
   const shadow = contactShadow(parent, { x: point.x, z: point.z, floorY: point.y,
     width: .22, depth: .12, spread: .065, opacity: .3, round: true });
   const label = createNameTag('lounge DJ', false, canvas.parentElement!);
+  label.setAvatar(avatar);
   label.element.classList.add('room-staff-label'); label.element.dataset.roomStaff = 'lounge DJ';
-  label.setDetails('lounge DJ', 'keeping the lounge music flowing', 'room staff · click to open the radio');
+  label.setDetails('lounge DJ', 'keeping the lounge music flowing', 'room staff');
   const button = label.element.querySelector('button')!;
   const pickup=createStaffPickup(mesh,button,canvas,avatar);
   button.setAttribute('aria-label', 'Lounge DJ · open radio');
@@ -90,7 +93,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
       }
       const activity = choosing ? 'choosing the next lounge track'
         : entryId === undefined ? 'keeping the radio ready' : isDj ? 'playing a lounge selection' : 'listening to the shared queue';
-      if (activity !== lastActivity) { lastActivity = activity; label.setDetails('lounge DJ', activity, 'room staff · click to open the radio'); }
+      if (activity !== lastActivity) { lastActivity = activity; label.setDetails('lounge DJ', activity, 'room staff'); }
     },
     dispose() {
       if (disposed) return;

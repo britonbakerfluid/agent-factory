@@ -6,6 +6,12 @@ import type { WebSocket } from '@fastify/websocket';
 const [a,b,c] = DJ_VIDEOS.map(v => v.videoId);
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe('YouTube queue', () => {
+  it('removes queued songs without changing playback and rejects stale edits',()=>{
+    const q=new LoungeRadioQueue();q.enqueue(a,'Alice',0);q.enqueue(b,'Bob',0);
+    const before=q.snapshot(0);expect(q.remove(before.queue[0].id,before.revision).success).toBe(true);
+    expect(q.snapshot(0).current?.id).toBe(before.current?.id);expect(q.snapshot(0).queue).toHaveLength(0);
+    expect(q.remove(before.queue[0].id,before.revision).success).toBe(false);
+  });
   it('accepts supported YouTube links and rejects other hosts, scripts and malformed IDs', () => {
     for (const url of [`https://youtu.be/${a}?t=2`, `https://www.youtube.com/watch?v=${a}&list=x`, `https://music.youtube.com/watch?v=${a}`, `https://youtube.com/shorts/${a}`, a]) expect(youtubeVideoId(url)).toBe(a);
     for (const url of [`https://youtube.com.evil.test/watch?v=${a}`, `javascript:${a}`, 'file:///etc/passwd', 'https://youtube.com/playlist?list=foo', 'too-short', undefined]) expect(youtubeVideoId(url)).toBeUndefined();

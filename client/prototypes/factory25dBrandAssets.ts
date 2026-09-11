@@ -1,5 +1,6 @@
 /** Exact SVG exports from the Fluid design-system brand folder. */
 export const BRAND_ASSETS = [
+  { id: 'mist-mark', brand: 'Mist', title: 'M symbol', variant: 'White', width: 626, height: 208 },
   { id: 'fluid-lockup', brand: 'Fluid', title: 'Full logo', variant: 'White', width: 177, height: 61 },
   { id: 'fluid-logomark', brand: 'Fluid', title: 'Symbol', variant: 'White', width: 62, height: 64 },
   { id: 'we-commerce-logotype-black', brand: 'We Commerce', title: 'Full signature', variant: 'Black', width: 2358, height: 600 },

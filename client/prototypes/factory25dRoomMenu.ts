@@ -1,26 +1,25 @@
+import { pixelIcon } from './factory25dPixelIcons';
 import type { FactoryRoom } from '@shared/factory25d-layout';
 
-export function createRoomMenu(toolbar: HTMLElement, trigger: HTMLButtonElement, visit: (room: FactoryRoom) => void, agentsButton: HTMLButtonElement, id = 'factory-room-menu', onOpen:()=>void=()=>{}) {
+export function createRoomMenu(toolbar: HTMLElement, trigger: HTMLButtonElement, visit: (room: FactoryRoom) => void, id = 'factory-room-menu', onOpen:()=>void=()=>{}) {
   const events = new AbortController(), options = {signal:events.signal};
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const rooms = {factory:'workspace',patio:'patio',garage:'garage'} as const;
-  const svg=(path:string)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${path}</svg>`;
   const icons:Record<FactoryRoom,string>={
-    factory:svg('<path d="M3 21V9h5V5h8v4h5v12ZM9 21v-7h6v7M11 8h2"/>'),
-    patio:svg('<path d="M12 3 7 8h3l-5 6h5v7h4v-7h5l-5-6h3ZM3 21h18"/>'),
-    garage:svg('<path d="M3 21V8l9-5 9 5v13M7 21V11h10v10M7 15h10M7 18h10"/>'),
+    factory:pixelIcon('building'),
+    patio:pixelIcon('tree-pine'),
+    garage:pixelIcon('home'),
   };
   const menu = document.createElement('div'); menu.className = 'factory-room-menu';
-  menu.id = id; menu.hidden = true; menu.setAttribute('role','menu'); menu.setAttribute('aria-label','Rooms and agents');
+  menu.id = id; menu.hidden = true; menu.setAttribute('role','menu'); menu.setAttribute('aria-label','Rooms');
   menu.innerHTML = '<p class="factory-room-menu-heading">explore the factory</p>';
   const rows = (Object.entries(rooms) as [FactoryRoom,string][]).map(([room,label])=>{
     const button = document.createElement('button'); button.type = 'button'; button.setAttribute('role','menuitemradio');
-    button.innerHTML = `<span class="factory-room-icon" aria-hidden="true">${icons[room]}</span><span class="factory-room-name">${label}</span><span class="factory-room-count"></span><span class="factory-room-check" aria-hidden="true">✓</span>`;
+    button.innerHTML = `<span class="factory-room-icon" aria-hidden="true">${icons[room]}</span><span class="factory-room-name">${label}</span><span class="factory-room-count"></span><span class="factory-room-check" aria-hidden="true">${pixelIcon('check')}</span>`;
     button.addEventListener('click',()=>{close(true); visit(room);},options);
     menu.append(button); return {room,label,button,count:button.querySelector<HTMLElement>('.factory-room-count')!};
   });
-  const footer = document.createElement('div'); footer.className='factory-room-menu-footer';
-  agentsButton.setAttribute('role','menuitem'); footer.append(agentsButton); menu.append(footer); toolbar.append(menu);
+  toolbar.append(menu);
   trigger.setAttribute('aria-haspopup','menu'); trigger.setAttribute('aria-controls',menu.id); trigger.setAttribute('aria-expanded','false');
   let current: FactoryRoom = 'factory', motion: Animation | undefined, signature = '';
   function close(restore = false) {
@@ -35,13 +34,13 @@ export function createRoomMenu(toolbar: HTMLElement, trigger: HTMLButtonElement,
     menu.style.left=`${Math.max(8-dock.left,Math.min(button.left-dock.left,innerWidth-menu.offsetWidth-8-dock.left))}px`;
     motion?.cancel();
     if(!reduced.matches) motion=menu.animate([{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],{duration:140,easing:'cubic-bezier(.23,1,.32,1)'});
-    (last ? agentsButton : rows.find(row=>row.room===current)!.button).focus({preventScroll:true});
+    (last ? rows[rows.length - 1].button : rows.find(row=>row.room===current)!.button).focus({preventScroll:true});
   }
   trigger.addEventListener('click',()=>menu.hidden ? open() : close(),options);
   trigger.addEventListener('keydown',event=>{if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();event.stopPropagation();open(event.key==='ArrowUp');}},options);
   menu.addEventListener('keydown',event=>{
     event.stopPropagation();
-    const buttons=[...rows.map(row=>row.button),agentsButton], index=buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const buttons=rows.map(row=>row.button), index=buttons.indexOf(document.activeElement as HTMLButtonElement);
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close(true);}
     else if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)) {
       event.preventDefault(); const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;
@@ -49,7 +48,6 @@ export function createRoomMenu(toolbar: HTMLElement, trigger: HTMLButtonElement,
     } else if(event.key==='Tab') close(true);
   },options);
   menu.addEventListener('focusout',event=>{if(event.relatedTarget && !menu.contains(event.relatedTarget as Node) && event.relatedTarget!==trigger)close();},options);
-  agentsButton.addEventListener('click',()=>close(),options);
   document.addEventListener('pointerdown',event=>{if(!menu.contains(event.target as Node)&&!trigger.contains(event.target as Node))close();},options);
   window.addEventListener('resize',()=>close(),options);
   return {

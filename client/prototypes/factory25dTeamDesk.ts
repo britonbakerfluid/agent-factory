@@ -49,8 +49,6 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   const status = dialog.querySelector<HTMLElement>('.team-desk-status')!;
   const back = dialog.querySelector<HTMLButtonElement>('button')!;
   const soundPanel = document.querySelector<HTMLElement>('.scene-sound');
-  const soundParent = soundPanel?.parentElement, soundSibling = soundPanel?.nextSibling;
-  const restoreSound = () => { if (soundPanel && soundParent) soundParent.insertBefore(soundPanel, soundSibling ?? null); };
   const camera = roomCamera.clone(), reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let active = false, open = false, moving = false, canOpen = false, started = 0, exitOpacity = 0;
   let from = cameraPose(roomCamera), room = cameraPose(roomCamera);
@@ -58,6 +56,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   let data: TeamSnapshot | undefined, unavailable = false, signature = '';
   const emptyMembers: readonly TeamMember[] = [];
   let request: AbortController | undefined;
+  let challengeRows: { signature(memberId: string): string; action(member: TeamMember, close: () => void): HTMLElement | undefined } | undefined;
   function portrait(member: TeamMember) {
     return avatarPortrait(member.avatar);
   }
@@ -68,7 +67,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
     status.textContent = unavailable ? 'reconnecting · showing the last update'
       : data?.historyAvailable === false ? 'live now · visit history is waiting to save'
       : 'people join this list when they connect';
-    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now), contributionFor(member.name), stationTickets && ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name })])) + unavailable;
+    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now), contributionFor(member.name), stationTickets && ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name }), challengeRows?.signature(member.id)])) + unavailable;
     if (signature !== next) {
       signature = next; const scroll = list.scrollTop; list.replaceChildren();
       for (const member of members) {
@@ -92,7 +91,9 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
         const dot = document.createElement('span'); dot.className = 'team-person-dot'; dot.setAttribute('aria-hidden', 'true');
         const tickets = document.createElement('span'); tickets.className = 'team-person-tickets';
         tickets.hidden = !stationTickets; tickets.textContent = `${ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name }).toLocaleString()} tickets`;
-        details.append(heading, seen, tickets); row.append(image, details, dot); list.append(row);
+        details.append(heading, seen, tickets);
+        const challenge = challengeRows?.action(member, exit); if (challenge) details.append(challenge);
+        row.append(image, details, dot); list.append(row);
       }
       if (!members.length) { const empty = document.createElement('p'); empty.className = 'team-desk-empty'; empty.textContent = unavailable ? 'the team list is temporarily unavailable' : data ? 'the first person to connect will appear here' : 'checking who’s here…'; list.append(empty); }
       list.scrollTop = scroll;
@@ -158,7 +159,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
     onOpen(); room = cameraPose(roomCamera); from = cameraPose(roomCamera); const oldHeight = canvas.clientHeight;
     active = open = moving = true; started = performance.now(); document.body.classList.add('team-open');
     sheet.style.opacity = '0'; sheet.inert = true;
-    if (soundPanel) dialog.append(soundPanel);
+    soundPanel?.closest('details')?.removeAttribute('open');
     dialog.showModal(); fit(); from.height *= height / Math.max(1, oldHeight);
     blendCamera(camera, from, closePose(), 0, width / Math.max(1, height), focus); back.focus(); void refresh();
   }
@@ -168,7 +169,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
     open = false; moving = true; started = performance.now(); sheet.inert = true;
   }
   function finishExit() {
-    active = moving = false; dialog.close(); restoreSound(); document.body.classList.remove('team-open'); renderer.setSize(800, 564, false);
+    active = moving = false; dialog.close(); document.body.classList.remove('team-open'); renderer.setSize(800, 564, false);
     trigger.hidden = false; trigger.focus({ preventScroll: true });
   }
   trigger.addEventListener('click', enter, events); back.addEventListener('click', exit, events);
@@ -182,6 +183,8 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   return {
     setTickets(next: StationTicketState | undefined) { if (stationTickets === next) return; stationTickets = next; paint(); },
     members: (): readonly TeamMember[] => data?.members ?? emptyMembers,
+    setChallenges(rows: typeof challengeRows) { challengeRows = rows; paint(); },
+    repaint() { paint(); },
     camera, isActive: () => active, focusPoint: () => desk.localToWorld(focus.set(0, 0, DISPLAY.faceZ)),
     update(now: number, visible: boolean) {
       canOpen = visible && !document.body.classList.contains('inspect-open'); trigger.hidden = active || !canOpen;
@@ -213,6 +216,6 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
         Object.assign(trigger.style, { left: `${(left + right - hitWidth) / 2}px`, top: `${(top + bottom - hitHeight) / 2}px`, width: `${hitWidth}px`, height: `${hitHeight}px` });
       }
     },
-    dispose() { abort.abort(); request?.abort(); stopConnection(); restoreSound(); dialog.remove(); trigger.remove(); document.body.classList.remove('team-open'); texture.dispose(); },
+    dispose() { abort.abort(); request?.abort(); stopConnection(); dialog.remove(); trigger.remove(); document.body.classList.remove('team-open'); texture.dispose(); },
   };
 }

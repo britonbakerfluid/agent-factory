@@ -150,12 +150,13 @@ export class StateManager {
   /** Look ahead before clients reach a conflict. Only changed routes are broadcast. */
   advancePersonalSpace(timestamp=this.now()) {
     if(this.environment!=='factory25d')return;
-    const agents=this.personalSpacePeople().sort((a,b)=>Number(!!b.manualControl)-Number(!!a.manualControl)||a.sessionId.localeCompare(b.sessionId));
+    const settledWorker=(a:WorldAgent)=>a.world.zone==='work'&&a.world.slotIndex!==undefined&&!a.world.movement&&!a.manualControl&&!this.crowdPaused.has(a.sessionId);
+    const agents=this.personalSpacePeople().sort((a,b)=>Number(settledWorker(b))-Number(settledWorker(a))||Number(!!b.manualControl)-Number(!!a.manualControl)||a.sessionId.localeCompare(b.sessionId));
     const changes=new Map<string,WorldAgent>(), placed:Position[]=[];
     for(const agent of agents){
       let from=this.currentWorldPosition(agent,timestamp);
       // Repair imported overlaps once and keep same-floor, scenery-safe positions.
-      const separated=freeStandingPoint(from,placed);
+      const separated=settledWorker(agent)?slotPosition(this.environment,'work',agent.world.slotIndex!):freeStandingPoint(from,placed);
       if(personDistance(from,separated)>.01&&!agent.manualControl){
         const target=agent.world.movement?.to;
         agent.world.position=separated;delete agent.world.movement;

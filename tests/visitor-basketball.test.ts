@@ -60,6 +60,14 @@ describe('visitor shot physics', () => {
       expect(baskets).toBe(1); expect(ball.position.y).toBeGreaterThanOrEqual(VISITOR_BALL_RADIUS);
     }
   });
+  it('reaches the rim from hovering balls at different room positions', () => {
+    for(const x of [-2,.5,1.3,3])for(const z of [-5,-3,0])for(const dt of [1/60,.1]){
+      const position={x,y:1.05,z};
+      const ball: FlyingBall={position:{...position},velocity:visitorShotVelocity(position),scored:false};
+      for(let t=0;t<2;t+=dt)stepVisitorBall(ball,dt);
+      expect(ball.scored,`shot from ${x}, ${z} at ${dt}`).toBe(true);
+    }
+  });
   it('does not award a sideways miss or upward pass and keeps finite bounded positions', () => {
     const p = { ...position, x: 2.2 }, ball: FlyingBall = { position: p, velocity: visitorShotVelocity(p, { ...VISITOR_BALL_RIM, x: 2.2 }), scored: false };
     for (let i = 0; i < 60; i++) stepVisitorBall(ball, .1);
@@ -125,4 +133,13 @@ describe('manual pull-back shots and room travel', () => {
     s.relay.receive(s.a,{phase:'throw',room:'garage',position:p,velocity:{x:0,y:5,z:2}});
     expect(s.messages().at(-1)).toMatchObject({phase:'throw',room:'garage'});
   });
+});
+
+it('reports rim impact separately from clean baskets and floor bounces', () => {
+  const ball = (x: number, y: number): FlyingBall => ({position:{x,y,z:VISITOR_BALL_RIM.z},velocity:{x:0,y:-3,z:0},scored:false,room:'factory'});
+  const hit = stepVisitorBall(ball(VISITOR_BALL_RIM.x + .13, VISITOR_BALL_RIM.y + .01), .02);
+  expect(hit.rimImpact).toBeGreaterThan(0);
+  expect(hit.swish).toBe(false);
+  expect(stepVisitorBall(ball(VISITOR_BALL_RIM.x, VISITOR_BALL_RIM.y + .01), .02).rimImpact).toBe(0);
+  expect(stepVisitorBall(ball(0, VISITOR_BALL_RADIUS + .01), .02).rimImpact).toBe(0);
 });

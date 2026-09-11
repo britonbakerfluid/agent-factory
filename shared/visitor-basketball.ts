@@ -41,8 +41,8 @@ export function visitorShotVelocity(start: BallVector, aim: BallVector = VISITOR
 }
 export interface FlyingBall { position: BallVector; velocity: BallVector; scored: boolean; room?: FactoryRoom }
 /** Fixed substeps keep floor, glass and rim contacts consistent on slow frames. */
-export function stepVisitorBall(ball: FlyingBall, seconds: number): { swish: boolean; bounce: number } {
-  let remaining = Math.max(0, Math.min(.1, seconds)), swish = false, bounce = 0;
+export function stepVisitorBall(ball: FlyingBall, seconds: number): { swish: boolean; bounce: number; rimImpact: number; floorHit: boolean } {
+  let remaining = Math.max(0, Math.min(.1, seconds)), swish = false, bounce = 0, rimImpact = 0, floorHit = false;
   const p = ball.position, v = ball.velocity, rim = VISITOR_BALL_RIM;
   const room = ball.room ?? 'factory';
   while (remaining > 0) {
@@ -53,7 +53,7 @@ export function stepVisitorBall(ball: FlyingBall, seconds: number): { swish: boo
       const t = (before.y - rim.y) / (before.y - p.y);
       const distance = Math.hypot(before.x + (p.x - before.x) * t - rim.x, before.z + (p.z - before.z) * t - rim.z);
       if (distance < .15 * .84 - .035) { ball.scored = true; swish = true; }
-      else if (distance < .15 * .84 + VISITOR_BALL_RADIUS && distance > .075) { p.y = rim.y + .01; v.y = Math.abs(v.y) * .48; bounce = Math.max(bounce, .4); }
+      else if (distance < .15 * .84 + VISITOR_BALL_RADIUS && distance > .075) { rimImpact = Math.max(rimImpact, Math.min(1, Math.abs(v.y) / 6)); p.y = rim.y + .01; v.y = Math.abs(v.y) * .48; bounce = Math.max(bounce, .4); }
     }
     const back = room === 'factory' ? -6.12 : -4.3;
     if (p.z < back) { p.z = back; v.z = Math.abs(v.z) * .62; bounce = Math.max(bounce, .3); }
@@ -77,6 +77,7 @@ export function stepVisitorBall(ball: FlyingBall, seconds: number): { swish: boo
       if (v[hit.axis] * hit.sign < 0) { bounce = Math.max(bounce, Math.min(1, Math.abs(v[hit.axis]) / 6)); v[hit.axis] *= -.55; }
     }
     if (p.y < floor + VISITOR_BALL_RADIUS) {
+      floorHit = true;
       p.y = floor + VISITOR_BALL_RADIUS; bounce = Math.max(bounce, Math.min(1, Math.abs(v.y) / 5));
       v.y = Math.abs(v.y) > .5 ? Math.abs(v.y) * .6 : 0;
       const friction = Math.exp(-2.2 * dt); v.x *= friction; v.z *= friction;
@@ -88,5 +89,5 @@ export function stepVisitorBall(ball: FlyingBall, seconds: number): { swish: boo
     const front = room === 'garage' ? 15.95 : room === 'factory' ? 11.7 : 13.65;
     if (p.z > front) { p.z = front; v.z = -Math.abs(v.z) * .5; }
   }
-  return { swish, bounce };
+  return { swish, bounce, rimImpact, floorHit };
 }

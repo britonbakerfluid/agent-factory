@@ -7,7 +7,7 @@ export function createToolbarMotion(toolbar: HTMLElement) {
   document.addEventListener('pointerdown', () => { keyboard = false; }, {capture:true,signal:events.signal});
   const animations = new Set<Animation>();
   const ghosts = new Set<HTMLElement>();
-  const selectors = '.factory-control-identity,.factory-room-picker,.factory-context-action,.factory-agents-shortcut,.factory-avatar-shortcut,.factory-focus-title,.window-heading,.window-scroll,.board-heading,#board-navigation > button,#room-navigation > button,.garage-nav > button,.factory-emote-bar > summary';
+  const selectors = '.factory-control-identity,.factory-room-picker,.factory-context-action,.factory-avatar-shortcut,.factory-focus-title,.window-heading,.window-scroll,.board-heading,#board-navigation > button,#room-navigation > button,.garage-nav > button,.factory-emote-bar > summary';
   const elements = () => [...toolbar.querySelectorAll<HTMLElement>(selectors)].filter(el => !el.closest('[hidden],.factory-toolbar-ghost') && el.getBoundingClientRect().width > 0);
   const key = (el: HTMLElement) => el.matches('.factory-room-picker,.factory-focus-title,.window-heading,.board-heading') ? 'view-title' : el.id || el.className || el;
   function cancel() {

@@ -72,7 +72,7 @@ export function createWindowInteraction({
   }
 
   function enter(event: MouseEvent) {
-    if (open || moving) return;
+    if (open || moving || trigger.hidden || trigger.disabled) return;
     const bounds = trigger.getBoundingClientRect();
     const entryX = event.detail ? ((event.clientX - bounds.left) / bounds.width - 0.5) * width : 0;
     room = cameraPose(camera);
@@ -197,6 +197,7 @@ export function createWindowInteraction({
       ? THREE.MathUtils.clamp((room.position.z - weatherCamera.position.z) / Math.max(0.01, room.position.z - destination.z), 0, 1) : 0,
     update(now: number, canOpen: boolean) {
       trigger.hidden = open || moving || !canOpen;
+      trigger.disabled = !canOpen;
       if (open || moving) {
         if (lastWidth !== canvas.clientWidth || lastHeight !== canvas.clientHeight) fit();
         if (open) scroll.update((now - previousTime) / 1000, reducedMotion.matches);

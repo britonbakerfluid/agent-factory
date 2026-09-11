@@ -34,7 +34,8 @@ export class LoungeRadio {
       } catch { reply('YouTube did not respond. Try that link again in a moment.'); return; }
       if (this.broadcast.getSocketPrincipal(socket)?.ownerId !== principal.ownerId) return;
       result = this.queue.enqueue(id, principal.username, Date.now(), title);
-    } else if (message.action === 'reorder') result = this.queue.reorder(message.ids, message.revision);
+    } else if (message.action === 'remove') result = this.queue.remove(message.entryId, message.revision);
+    else if (message.action === 'reorder') result = this.queue.reorder(message.ids, message.revision);
     else if (message.action === 'duration') result = this.queue.duration(message.entryId, message.seconds, now);
     else if (message.action === 'skip') result = this.queue.skip(message.entryId, now);
     else { reply('That radio action is unavailable.'); return; }

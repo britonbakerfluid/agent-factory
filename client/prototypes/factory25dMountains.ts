@@ -12,7 +12,6 @@ import { createUtahLandscape } from './factory25dLandscape';
 import { createRidgeBear } from './factory25dBear';
 import { createValleyBirds } from './factory25dBirds';
 import { createMeadowElk } from './factory25dElk';
-import { createLandscapeFocus } from './factory25dFocus';
 import type { TeamMember } from '@shared/team';
 
 /** A solid, separately lit landscape viewed through the factory glass. */
@@ -21,12 +20,9 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   const camera = new THREE.OrthographicCamera(-7.92, 7.92, viewHeight / 2, -viewHeight / 2, 0.1, 50);
   camera.position.set(0, viewHeight / 2 + 1.15, 14);
   camera.lookAt(0, viewHeight / 2, 0);
-  let landscape = createUtahLandscape();
+  const portalCamera=new THREE.PerspectiveCamera();
+  const landscape = createUtahLandscape();
   const originalLandscape = landscape;
-  let blenderLandscape: Promise<ReturnType<typeof createUtahLandscape>> | undefined;
-  let requestedLandscape = 'current';
-  const focus = createLandscapeFocus(renderer);
-  let depthOfField = false;
   scene.add(landscape.group);
   const bear = createRidgeBear(scene, originalLandscape.hazeColor, (x, z) => landscape.heightAt(x, z));
   const elk = createMeadowElk(scene, originalLandscape.hazeColor, (x, z) => landscape.heightAt(x, z));
@@ -56,7 +52,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   let currentWeather = CLEAR_WEATHER;
   let currentPalette = paletteForElevation(45, true);
   let lastWindFrame = -1;
-  let previousElapsed = 0;
+  let previousElapsed = 0,lastPerspectiveRender=-Infinity;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const haze = new THREE.Color();
   const fog = new THREE.Fog(haze, 10, 80);
@@ -88,32 +84,12 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   const previousClearColor = new THREE.Color();
   return {
     texture: target.texture,
-    dispose() { climbers.dispose(); canoe.dispose(); elk.dispose(); birds.dispose(); focus.dispose(); target.dispose(); },
+    dispose() { climbers.dispose(); canoe.dispose(); elk.dispose(); birds.dispose(); target.dispose(); },
     setLightning(pulse:number){const intensity=THREE.MathUtils.clamp(pulse,0,1)*2.4;if(Math.abs(intensity-lightningLight.intensity)>.002){lightningLight.intensity=intensity;dirty=true;}},
     setVisitors(members: readonly TeamMember[]) {
       const cast = landscapeVisitors(members, visitorIds);
       visitorIds = { climbers: cast.climbers.map(member => member.id), canoe: cast.canoe.map(member => member.id) };
       climbers.setVisitors(cast.climbers); canoe.setVisitors(cast.canoe); dirty = true;
-    },
-    async setLandscape(style: 'current' | 'blender') {
-      requestedLandscape = style;
-      let next = originalLandscape;
-      if (style === 'blender') {
-        blenderLandscape ??= import('./factory25dBlender').then(module => module.loadBlenderTerrain())
-          .then(asset => createUtahLandscape(asset)).catch(error => { blenderLandscape = undefined; throw error; });
-        next = await blenderLandscape;
-      }
-      if (requestedLandscape !== style) return;
-      scene.remove(landscape.group);
-      landscape = next;
-      scene.add(landscape.group);
-      bear.resetGround();
-      elk.resetGround();
-      applyEnvironment();
-    },
-    setDepthOfField(enabled: boolean) {
-      if (depthOfField === enabled) return;
-      depthOfField = enabled; dirty = true;
     },
     setDetail(immersive: boolean) {
       const width = immersive ? 1440 : 800;
@@ -125,7 +101,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
       moonlight = THREE.MathUtils.clamp(lunarLight, 0, 1);
       applyEnvironment();
     },
-    render(elapsed = 0, visible = true) {
+    render(elapsed = 0, visible = true, roomView?: THREE.Camera, windowCenterY = viewHeight/2) {
       const dt = elapsed - previousElapsed;
       previousElapsed = elapsed;
       if (!visible || document.hidden) return;
@@ -134,21 +110,41 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
       birds.update(dt, currentWeather, isNight, reducedMotion.matches);
       climbers.update(dt, isNight, reducedMotion.matches);
       canoe.update(dt, currentWeather, isNight, reducedMotion.matches);
-      const windFrame = Math.floor(elapsed * 12);
+      const windFrame = Math.floor(elapsed * 30);
       if (!reducedMotion.matches && windFrame !== lastWindFrame) {
         landscape.windTime.value = elapsed;
         lastWindFrame = windFrame;
         dirty = true;
       }
+      const perspective=roomView instanceof THREE.PerspectiveCamera;
+      if(perspective){const frame=Math.floor(elapsed*30);if(frame===lastPerspectiveRender)return;lastPerspectiveRender=frame;dirty=true;}
       if (!dirty) return;
       const previousTarget = renderer.getRenderTarget();
       const previousAlpha = renderer.getClearAlpha();
       renderer.getClearColor(previousClearColor);
       renderer.setClearColor(0x000000, 0);
-      focus.render(scene, camera, target, depthOfField);
+      renderer.setRenderTarget(target);
+      if(perspective){
+        // Off-axis window projection: render the actual terrain from the viewer,
+        // with the window edges as the frustum, rather than tilting a fixed photo.
+        const eye=roomView.position,depth=Math.max(.1,eye.z+4.55),near=.1;
+        portalCamera.position.set(eye.x,eye.y-windowCenterY+viewHeight/2,depth);
+        portalCamera.quaternion.identity();
+        portalCamera.near=near;portalCamera.far=depth+150;
+        const y=portalCamera.position.y;
+        portalCamera.projectionMatrix.makePerspective((-7.92-eye.x)*near/depth,(7.92-eye.x)*near/depth,
+          (viewHeight-y)*near/depth,-y*near/depth,near,portalCamera.far);
+        portalCamera.projectionMatrixInverse.copy(portalCamera.projectionMatrix).invert();
+        portalCamera.updateMatrixWorld();
+        // The nearest meadow ends at z=5.4: place it just outside the glass.
+        scene.position.z=-6;
+        renderer.render(scene,portalCamera);
+        scene.position.z=0;
+        dirty=true;
+      }else renderer.render(scene, camera);
       renderer.setRenderTarget(previousTarget);
       renderer.setClearColor(previousClearColor, previousAlpha);
-      dirty = false;
+      dirty = perspective;
     },
   };
 }

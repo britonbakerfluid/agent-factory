@@ -1,3 +1,6 @@
+/** Local playground playback rate; live passenger timing remains server-owned. */
+export const floorTransitionDebug = { speed: 1 };
+
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
 /** A continuous floor descent; reduced motion keeps a short stationary fade. */

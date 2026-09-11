@@ -5,7 +5,7 @@
 .agent-label.room-staff-label > .agent-name {
   position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
   width: var(--staff-hit-width, 24px); height: var(--staff-hit-height, 34px);
-  min-height: 0; max-width: none; padding: 0; cursor: pointer;
+  min-height: 0; max-width: none; padding: 0; cursor: grab;
 }
 .agent-label.room-staff-label > .agent-name::before { display: none; }
 .room-staff-label .agent-name-text {

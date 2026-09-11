@@ -1,3 +1,5 @@
+import { registerRadioSearch } from './radio-search.js';
+import { BasketballChallenges } from './basketball-challenges.js';
 import { GitHubApp, registerGitHubRoutes } from './github/app.js';
 import { loadGitHubConfig, contributionCacheScope } from './github/config.js';
 import { TeamRoster } from './team-roster.js';
@@ -153,7 +155,11 @@ async function main() {
   const grabs = new GrabManager(state, broadcast);
   state.setGrabbedSessionCheck(sessionId => grabs.activeGrabs().some(grab => grab.sessionId === sessionId));
   const loungeRadio = new LoungeRadio(broadcast);
+  registerRadioSearch(app, request => readBrowserPrincipal(request, auth)?.ownerId);
   const visitorBalls = new VisitorBasketball(broadcast);
+  // Challenges address durable people from the roster, never sessions; the challenger is the signed-in principal.
+  const challenges = new BasketballChallenges(repository, broadcast, ownerId => { const member = team.member(ownerId); return member && { ownerId: member.id, name: member.name }; });
+  await challenges.initialize();
   const garageDriving = new GarageDrivingManager(state, broadcast);
 
   // HTTP routes
@@ -184,6 +190,7 @@ async function main() {
     visitorBalls.sendActive(socket);
     loungeRadio.sendActive(socket);
     garageDriving.sendActive(socket);
+    challenges.sendActive(socket);
     if (principal) {
       broadcast.sendTo(socket, {
         type: 'auth_result',
@@ -216,10 +223,14 @@ async function main() {
           case 'visitor_ball':
             visitorBalls.receive(socket, msg);
             break;
+          case 'challenge':
+            if (!request.headers.origin || isSameHostOrigin(request.headers.origin, request.headers.host)) challenges.receive(socket, msg);
+            break;
           case 'request_state':
             broadcast.sendWorldSnapshot(socket, state.getSnapshot());
             garageDriving.sendActive(socket);
             loungeRadio.sendActive(socket);
+            challenges.sendActive(socket);
             break;
 
 
@@ -383,7 +394,7 @@ async function main() {
   // Start stale cleanup, lifecycle pruning, and manual-control simulation.
   const staleTimer = startStaleReaper(state);
   const teamTimer = setInterval(() => void team.flush(), 5_000);
-  const worldTimer = setInterval(() => { state.advanceWorld(); visitorBalls.expire(); loungeRadio.tick(); }, 1_000);
+  const worldTimer = setInterval(() => { state.advanceWorld(); visitorBalls.expire(); loungeRadio.tick(); challenges.tick(); }, 1_000);
   const personalSpaceTimer = setInterval(() => state.advancePersonalSpace(), 50);
   controls.start();
   grabs.start();
@@ -408,6 +419,7 @@ async function main() {
     grabs.stop();
     garageDriving.stop();
     await team.flush();
+    await challenges.flush();
     await persistence.close();
   });
 

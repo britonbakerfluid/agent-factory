@@ -7,7 +7,7 @@ import type { WorldAgent, WorldSnapshot } from '@shared/types';
 import { factoryRoomAt, factoryScenePoint, factoryWorldPoint, fromFactoryWorld, GARAGE_LEVEL, GARAGE_WORLD_Z } from '@shared/factory25d-layout';
 import { DEFAULT_AVATAR } from '@shared/constants';
 import { avatarSheet, AVATAR_ANIMATIONS } from './factory25dAvatar';
-import { avatarTexture, setAvatarTextureFrame } from './factory25dAvatarTexture';
+import { avatarTexture, setAvatarTextureFrame, installAvatarBack } from './factory25dAvatarTexture';
 import { avatarEyePose } from './factory25dAvatarEyes';
 import { agentPosition, garageElevatorPose } from './factory25dWorld';
 import { createNameTag } from './factory25dLabels';
@@ -52,6 +52,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
     const material = new THREE.MeshStandardMaterial({ map: texture, alphaTest: 0.08, side: THREE.DoubleSide,
       emissive: '#101126', emissiveIntensity: 0.6, roughness: 1 });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.86 * scale, 0.86 * scale), material);
+    installAvatarBack(mesh);
     mesh.castShadow = true; mesh.userData.sessionId = agent.sessionId; factory.add(mesh);
     const shadow = contactShadow(factory, { width: 0.22 * scale, depth: 0.12 * scale, spread: 0.065, opacity: 0.3, round: true });
     return { pickup:createPickupFold(mesh,agent.avatar??DEFAULT_AVATAR), mesh, texture, shadow, sheet, signature: JSON.stringify(agent.avatar), labelFeet: new THREE.Vector3(), walk: new AvatarWalkCycle(),
@@ -188,6 +189,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
             manualMotion: new ManualMotionBuffer(), garageWalk: new AvatarWalkCycle(), seatBlend: 0, poseTime: 0 };
           place(entry, point.x, point.z); entries.set(agent.sessionId, entry);
         }
+        entry.label.setAvatar(agent.avatar ?? DEFAULT_AVATAR);
         entry.session = agent;
         entry.manualMotion.push(next.environment === 'factory25d' ? agent.manualControl : undefined, next.serverTime, performance.now());
         const childIds = new Set(agent.subagents.map(child => child.agentId));
@@ -209,7 +211,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
           [...effectState.tombstones.values()].flatMap(stone => [WORKSTATIONS[stone.slotIndex ?? -1]?.id].filter((id): id is string => !!id))));
     },
     update(elapsed: number, camera: THREE.Camera, showFactory: boolean, showPatio: boolean,
-      floor: (point: {x: number; z: number}) => number, occluder: THREE.Object3D) {
+      floor: (point: {x: number; z: number}) => number, occluder: THREE.Object3D, garageCamera?: THREE.Camera) {
       view = { camera, factory: showFactory, patio: showPatio, occluder, floor };
       eyeTime = elapsed;
       if (!snapshot) return;
@@ -289,7 +291,7 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
         entry.mesh.material.transparent = entry.mesh.material.opacity < 1;
         entry.label.element.classList.toggle('patio-agent', factoryRoomAt(point) === 'patio');
         entry.label.element.classList.toggle('garage-agent', factoryRoomAt(point) === 'garage');
-        entry.label.update(entry.mesh, floorY, camera, canvas, visible, factoryRoomAt(point) === 'factory' ? occluder : undefined, entry.labelFeet);
+        entry.label.update(entry.mesh, floorY, factoryRoomAt(point)==='garage'&&garageCamera?garageCamera:camera, canvas, visible, factoryRoomAt(point) === 'factory' ? occluder : undefined, entry.labelFeet);
         let index = 0;
         for (const child of entry.children.values()) {
           const parentPoint = factoryWorldPoint(entry.mesh.position, elevator?.room ?? factoryRoomAt(point));
@@ -300,6 +302,23 @@ export function createLiveAgents(factory: THREE.Scene, patio: THREE.Scene, canva
           setFrame(child, working ? 5 : moving ? row : 0, moving && !effect ? childWalkFrame : reduced ? 0 : frame, elevator?.floor ?? floorAt(follower), 0.58);
         }
         if (!elevator?.hidden) anchors.set(agent.sessionId, { x: entry.mesh.position.x, y: entry.mesh.position.y - baseHeight * entry.mesh.scale.y, z: entry.mesh.position.z });
+      }
+      // Keep labels at their own horizontal anchors; use another row only when
+      // nearby players would otherwise paint their names over each other.
+      const labels=[...entries.values()].map(entry=>entry.label.element).filter(el=>!el.hidden);
+      for(const el of labels)el.style.translate='';
+      if(labels.some(el=>el.dataset.performing==='rps')){
+        const boxes=labels.map(el=>({el,rect:el.getBoundingClientRect()})).sort((a,b)=>a.rect.top-b.rect.top||a.rect.left-b.rect.left);
+        const placed:{left:number;right:number;top:number;bottom:number}[]=[];
+        for(const {el,rect} of boxes){
+          let top=rect.top;
+          for(const other of placed){
+            if(rect.left<other.right+8&&rect.right>other.left-8&&top<other.bottom+5&&top+rect.height>other.top-5)top=other.bottom+5;
+          }
+          el.style.translate=`0 ${Math.round(top-rect.top)}px`;
+          placed.push({left:rect.left,right:rect.right,top,bottom:top+rect.height});
+          placed.sort((a,b)=>a.top-b.top);
+        }
       }
       effects.update(effectState, now, anchors, snapshot.environment, reduced);
       tombstones.update(effectState.tombstones, snapshot.environment, now, camera, showFactory, showPatio, floor, occluder, reduced);

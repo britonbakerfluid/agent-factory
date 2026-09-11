@@ -15,13 +15,12 @@ vi.mock('../client/prototypes/factory25dBirds', () => ({ createValleyBirds: () =
 vi.mock('../client/prototypes/factory25dElk', () => ({ createMeadowElk: () => ({ update: calls.elk }) }));
 vi.mock('../client/prototypes/factory25dClimbers', () => ({ createMountainClimbers: () => ({ update: calls.climbers }) }));
 vi.mock('../client/prototypes/factory25dCanoe', () => ({ createLakeCanoe: () => ({ update: calls.canoe }) }));
-vi.mock('../client/prototypes/factory25dFocus', () => ({ createLandscapeFocus: () => ({ render: calls.render }) }));
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 it('does no landscape rendering or visitor animation offscreen, then applies the latest weather on return', () => {
   const document = { hidden: false };
   vi.stubGlobal('document', document); vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
-  const renderer = { getRenderTarget: () => null, getClearAlpha: () => 1, getClearColor() {}, setClearColor() {}, setRenderTarget() {} };
+  const renderer = { render: calls.render, getRenderTarget: () => null, getClearAlpha: () => 1, getClearColor() {}, setClearColor() {}, setRenderTarget() {} };
   const view = createMountainView(renderer as unknown as THREE.WebGLRenderer, 6);
   view.render(0, true); expect(calls.render).toHaveBeenCalledOnce();
   for (let i = 1; i <= 120; i++) view.render(i / 60, false);

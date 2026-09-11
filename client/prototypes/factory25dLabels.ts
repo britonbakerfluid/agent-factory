@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { AvatarConfig } from '@shared/types';
+import { createProfilePortrait } from './factory25dPortrait';
 import { contributionLevel, type ContributionRecord } from '@shared/factory-contributions';
 import './factory25dContributions.css';
 
@@ -98,6 +100,8 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
   title.textContent = name;
   const heading = document.createElement('div'); heading.className = 'agent-detail-heading';
   heading.append(title, badge);
+  let portraitKey = '';
+  let portrait: HTMLElement | undefined;
   const activity = document.createElement('span');
   activity.className = 'agent-activity';
   activity.textContent = working ? 'working at the station' : 'relaxing in the lounge';
@@ -110,7 +114,8 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
   const provenance = document.createElement('small');
   contributions.append(total, progress, nextLevel, provenance);
   const tickets = document.createElement('small'); tickets.className = 'agent-ticket-total'; tickets.hidden = true;
-  details.append(heading, activity, source, contributions, tickets);
+  const thoughtBody = document.createElement('div'); thoughtBody.className = 'agent-thought-body';
+  thoughtBody.append(heading, activity, source, contributions, tickets); details.append(thoughtBody);
   details.hidden = true;
   element.append(button, details);
   parent.append(element);
@@ -146,11 +151,19 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
     if (event.target instanceof Node && !element.contains(event.target)) close();
   }, { signal: events.signal });
   const point = new THREE.Vector3();
+  let labelWidth=0,lastLayout='';
+  const resize=typeof ResizeObserver==='function'?new ResizeObserver(()=>{labelWidth=element.offsetWidth;lastLayout='';}):undefined;
+  resize?.observe(element);
   const bounds = new THREE.Box3();
   const corner = new THREE.Vector3();
   return {
     element,
-    dispose() { events.abort(); element.remove(); },
+    setAvatar(avatar: AvatarConfig) {
+      const key = JSON.stringify(avatar); if (key === portraitKey) return;
+      portraitKey = key; portrait?.remove();
+      portrait = createProfilePortrait(avatar); heading.prepend(portrait);
+    },
+    dispose() { resize?.disconnect();events.abort(); element.remove(); },
     setDetails(name: string, activityText: string, sourceText: string) {
       nameText.textContent = title.textContent = name;
       activity.textContent = activityText; source.textContent = sourceText;
@@ -185,12 +198,20 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
     ) {
       element.hidden = !visible;
       if (!visible) {
-        close();
+        close();lastLayout='';
         return;
       }
       projectNameTagAnchor(object, floorY, camera, point, localFeet);
+      // A perspective close-up projects props behind the viewer onto the screen; never place a label for them.
+      if (point.z < -1 || point.z > 1) { element.hidden = true; lastLayout = ''; close(); return; }
       const x = ((point.x + 1) * canvas.clientWidth) / 2;
       const y = ((1 - point.y) * canvas.clientHeight) / 2;
+      if(!labelWidth)labelWidth=element.offsetWidth;
+      occluder?.updateWorldMatrix(true,false);
+      const layout=[x,y,point.z,canvas.clientWidth,canvas.clientHeight,labelWidth,
+        ...camera.matrixWorld.elements,...(occluder?.matrixWorld.elements??[])].join(',');
+      if(details.hidden&&lastLayout===layout)return;
+      lastLayout=layout;
       if (occluder) {
         bounds.setFromObject(occluder);
         const depth = bounds.getCenter(corner).project(camera).z;
@@ -201,14 +222,14 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
             const px = (corner.x + 1) * canvas.clientWidth / 2, py = (1 - corner.y) * canvas.clientHeight / 2;
             left = Math.min(left, px); right = Math.max(right, px); top = Math.min(top, py); bottom = Math.max(bottom, py);
           }
-          if (x + element.offsetWidth / 2 > left && x - element.offsetWidth / 2 < right && y + 20 > top && y + 3 < bottom) {
-            element.hidden = true; close(); return;
+          if (x + labelWidth / 2 > left && x - labelWidth / 2 < right && y + 20 > top && y + 3 < bottom) {
+            element.hidden = true;lastLayout=''; close(); return;
           }
         }
       }
       // Anchor to the actual painted boots, including an airborne pose. Lettering stays sharp
       // independently of the intentionally low-resolution room canvas.
-      const halfWidth = element.offsetWidth / 2;
+      const halfWidth = labelWidth / 2;
       const labelX = Math.max(halfWidth + 4, Math.min(canvas.clientWidth - halfWidth - 4, x));
       element.style.transform = `translate(${Math.round(labelX)}px, ${Math.round(y + 2)}px) translateX(-50%)`;
       details.style.setProperty(

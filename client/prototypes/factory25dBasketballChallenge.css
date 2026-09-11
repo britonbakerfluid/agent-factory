@@ -1,0 +1,116 @@
+/* HORSE uses a floor marker and a single turn line inside the island. */
+.horse-spot-hotspot { position:absolute; width:44px; height:44px; padding:0; border:0; background:transparent; cursor:pointer; z-index:5; touch-action:manipulation; }
+.horse-spot-hotspot:focus-visible { outline:2px dashed #aec8ba; outline-offset:-4px; border-radius:50%; }
+.horse-spot-hotspot[hidden] { display:none; }
+.basketball-mode .horse-spot-hotspot, .inspect-open .horse-spot-hotspot, .chat-open .horse-spot-hotspot, .team-open .horse-spot-hotspot, .brand-open .horse-spot-hotspot { display:none; }
+
+/* Turn text inside the shared island: same 44px control, concentric corners, instant hover, no tooltip. */
+.factory-toolbar .horse-turn { flex:0 1 auto; min-width:0; max-width:220px; height:44px; padding:0 14px; border:0; background:transparent; color:#f2c96a;
+  font:12px 'Geist Pixel',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; clip-path:var(--island-control-cut); }
+.factory-toolbar .horse-turn:disabled { color:#aebbb4; cursor:default; }
+.factory-toolbar .horse-turn:hover:not(:disabled) { background:var(--island-hover,#242626); color:#ffd97d; }
+.factory-toolbar .horse-turn:focus-visible { outline:2px solid var(--island-focus,#aeb6b1); outline-offset:-3px; }
+.factory-toolbar .horse-turn:active:not(:disabled) { background:var(--island-pressed,#343636); }
+.factory-toolbar .horse-turn[hidden], .basketball-mode .horse-turn, .factory-toolbar.factory-solo-back .horse-turn, .factory-toolbar[data-focus]:not([data-focus=""]) .horse-turn { display:none; }
+@media (max-width:600px) { .factory-toolbar .horse-turn { max-width:140px; padding:0 8px; } }
+
+/* Team desk: standing, action and the one-line rules. */
+.team-person-challenge { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; margin-top:6px; font:11px/1.4 'Geist Pixel',monospace; color:#a8b8b1; }
+.team-person-challenge button { min-height:34px; padding:0 10px; border:1px solid #6b8f80; background:#1c2f2a; color:#dbe8df; font:11px 'Geist Pixel',monospace; cursor:pointer; }
+.team-person-challenge button.challenge-primary { background:#2b4a3f; }
+.team-person-challenge button.team-person-challenge-help { border-color:transparent; background:transparent; color:#8fa39b; text-decoration:underline; }
+.team-person-challenge button:hover { background:#345a4d; }
+.team-person-challenge button:focus-visible { outline:2px solid #c4d9a2; outline-offset:2px; }
+.team-person-challenge-quiet { color:#7f8f89; }
+.horse-help { position:fixed; left:50%; bottom:calc(var(--factory-toolbar-height,70px) + 16px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); z-index:60; margin:0; max-width:min(560px,calc(100vw - 32px));
+  padding:12px 16px; background:#000; color:#e1e7e4; font:12px/1.5 'Geist Pixel',monospace; }
+.horse-help[hidden] { display:none; }
+
+.factory-toolbar .horse-turn.horse-play { display:flex; align-items:center; gap:8px; background:#ffd85d; color:#29210f; flex:none; }
+.factory-toolbar .horse-turn.horse-play svg { width:20px; height:20px; flex:none; }
+.factory-toolbar .horse-turn.horse-play:hover:not(:disabled) { background:#ffe58e; color:#29210f; }
+.factory-toolbar .horse-turn.horse-play[hidden],.basketball-mode .horse-turn.horse-play { display:none; }
+
+/* This control owns its fill; the legacy inset face must not cover it. */
+.factory-toolbar .horse-turn::before,.factory-toolbar .horse-turn::after { display:none; }
+.factory-toolbar .horse-turn.horse-play { --pixel-face:#f5a34a; box-shadow:none; }
+.factory-toolbar .horse-turn.horse-play { font-weight:600; }
+
+.factory-toolbar .horse-play-ball {
+  display:block; flex:none; width:22px; height:22px; overflow:hidden;
+}
+.factory-toolbar .horse-turn.horse-play .horse-play-ball svg { display:block; width:100%; height:100%; }
+
+.factory-toolbar .horse-play-ball { border-radius:0; background:linear-gradient(135deg,#ffbd57 0 25%,#ec8525 25% 65%,#b94b16 65%); box-shadow:none; clip-path:polygon(30% 0,70% 0,70% 10%,90% 10%,90% 30%,100% 30%,100% 70%,90% 70%,90% 90%,70% 90%,70% 100%,30% 100%,30% 90%,10% 90%,10% 70%,0 70%,0 30%,10% 30%,10% 10%,30% 10%); image-rendering:pixelated; }
+.factory-toolbar .horse-play-ball svg { shape-rendering:crispEdges; }
+.factory-toolbar .horse-turn.horse-play:hover:not(:disabled) { background:#ffb764; color:#30200f; }
+.factory-toolbar .horse-turn.horse-play:active:not(:disabled) { background:#df8c35; color:#30200f; }
+.factory-toolbar .horse-turn.horse-replay-progress,
+.factory-toolbar .horse-turn.horse-replay-progress:hover:not(:disabled),
+.factory-toolbar .horse-turn.horse-replay-progress:active:not(:disabled) {
+  background:linear-gradient(to right,#ffcb84 0 var(--replay-progress,0%),#e79843 var(--replay-progress,0%) 100%);
+  color:#30200f;
+}
+.basketball-challenge-picker { position:fixed; bottom:90px; left:50%; transform:translateX(-50%); z-index:40; width:260px; max-width:calc(100vw - 32px); background:#111916; color:#e9eee7; font:12px/1.5 'Geist Pixel',monospace; padding:12px; }
+.basketball-challenge-picker[hidden] { display:none; }
+.basketball-challenge-picker summary { cursor:pointer; color:#ffbc70; }
+.basketball-challenge-picker>div { max-height:220px; overflow:auto; }
+.basketball-challenge-picker button { display:block; width:100%; margin-top:8px; padding:10px; border:0; text-align:left; background:#28332d; color:inherit; font:inherit; cursor:pointer; }
+.basketball-challenge-picker button:disabled { opacity:.5; cursor:default; }
+
+/* The floor mesh owns the marker; the HTML hit target adds no second circle. */
+.horse-spot-hotspot::after { display:none; }
+
+/* A local invitation can be accepted directly from its ghost ball. */
+.horse-accept-thought { display:none; position:absolute; left:50%; bottom:calc(100% + 20px); transform:translateX(-50%); white-space:nowrap; color:#202a27; font:12px/1.4 'Geist Pixel',monospace; pointer-events:none; --ui-pixel:3px; }
+.horse-accept-thought .factory-thought-body { clip-path:polygon(8px 0,calc(100% - 8px) 0,calc(100% - 8px) 4px,calc(100% - 4px) 4px,calc(100% - 4px) 8px,100% 8px,100% calc(100% - 8px),calc(100% - 4px) calc(100% - 8px),calc(100% - 4px) calc(100% - 4px),calc(100% - 8px) calc(100% - 4px),calc(100% - 8px) 100%,8px 100%,8px calc(100% - 4px),4px calc(100% - 4px),4px calc(100% - 8px),0 calc(100% - 8px),0 8px,4px 8px,4px 4px,8px 4px); }
+.horse-spot-hotspot[data-accepting="true"]:is(:hover,:focus-visible) .horse-accept-thought { display:block; }
+
+/* Challenge selection lives in the island, using its expanding shared surface. */
+.factory-toolbar .basketball-challenge-picker { position:static; transform:none; width:auto; max-width:none; padding:0; background:transparent; z-index:auto; flex:none; }
+.factory-toolbar .basketball-challenge-picker summary { display:flex; align-items:center; justify-content:center; height:38px; padding:0 12px; box-sizing:border-box; list-style:none; border:0; clip-path:var(--island-control-cut); }
+.factory-toolbar .basketball-challenge-picker summary::-webkit-details-marker { display:none; }
+.factory-toolbar .basketball-challenge-picker summary:hover { background:#242626; }
+.factory-toolbar .basketball-challenge-picker>div { position:absolute; left:0; right:0; bottom:60px; max-height:min(220px,calc(100dvh - 140px)); overflow:auto; padding:12px 16px; box-sizing:border-box; background:transparent; }
+.factory-toolbar .basketball-challenge-picker button { margin:0; padding:12px; background:transparent; clip-path:var(--dock-cut); }
+.factory-toolbar .basketball-challenge-picker button:hover { background:#242626; }
+.factory-toolbar:has(.basketball-challenge-picker[open]:not([hidden])) { min-width:min(360px,calc(100vw - 24px)); }
+.factory-toolbar.pixel-island:has(.basketball-challenge-picker[open]:not([hidden]))::after { top:calc(-1 * var(--challenge-height,120px)); }
+.factory-toolbar:has(.basketball-challenge-picker:not([hidden])) .visitor-ball-hint>span { display:none; }
+
+.factory-toolbar .basketball-challenge-picker summary {
+  background:#ffd85d; color:#29210f; font-weight:600; padding-inline:14px; margin-inline:6px;
+}
+.factory-toolbar .basketball-challenge-picker summary:hover { background:#ffe58e; color:#29210f; }
+.factory-toolbar .basketball-challenge-picker summary:active { background:#e8bd43; }
+.factory-toolbar .basketball-challenge-picker summary:focus-visible { outline:2px solid #fff0b0; outline-offset:-3px; }
+
+.factory-toolbar .basketball-challenge-picker[open] summary { background:transparent; color:#dce5df; font-weight:500; gap:10px; }
+.factory-toolbar .basketball-challenge-picker[open] summary:hover { background:#242626; }
+.factory-toolbar .basketball-challenge-picker summary svg { width:16px; height:16px; flex:none; }
+
+.factory-toolbar .basketball-challenge-picker[open] { flex:1 1 auto; min-width:0; }
+.factory-toolbar .basketball-challenge-picker[open] summary { width:100%; margin-inline:0; }
+
+/* Swap labels in the same layout update as details closes, without a toggle-event frame. */
+.horse-picker-open-label { display:none; }
+.basketball-challenge-picker[open] .horse-picker-open-label { display:inline; }
+.basketball-challenge-picker[open] .horse-picker-closed-label { display:none; }
+
+/* Both labels share the same button throughout its width morph. */
+.factory-toolbar .basketball-challenge-picker summary { position:relative; transition:background-color 240ms cubic-bezier(.22,1,.36,1),color 240ms cubic-bezier(.22,1,.36,1); }
+.factory-toolbar .basketball-challenge-picker summary .horse-picker-closed-label { display:block; opacity:1; transition:opacity 120ms ease-out; }
+.factory-toolbar .basketball-challenge-picker summary .horse-picker-open-label { display:block; position:absolute; inset:0; align-content:center; text-align:center; opacity:0; transition:opacity 120ms ease-out; }
+.factory-toolbar .basketball-challenge-picker[open] summary { background:#242626; }
+.factory-toolbar .basketball-challenge-picker[open] .horse-picker-closed-label { opacity:0; }
+.factory-toolbar .basketball-challenge-picker[open] .horse-picker-open-label { opacity:1; }
+@media(prefers-reduced-motion:reduce) {
+  .factory-toolbar .basketball-challenge-picker summary,.factory-toolbar .basketball-challenge-picker summary span { transition:none; }
+}
+
+@keyframes horse-opponents-enter { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+.factory-toolbar .basketball-challenge-picker[open]>div { animation:horse-opponents-enter 240ms cubic-bezier(.22,1,.36,1) both; }
+@media(prefers-reduced-motion:reduce) { .factory-toolbar .basketball-challenge-picker[open]>div { animation:none; } }
+
+/* Center status messages while opponent rows keep their own left alignment. */
+.factory-toolbar .basketball-challenge-picker>div:not(:has(button)) { text-align:center; }

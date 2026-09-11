@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createPothosFoliage, createPothosStrand, pothosMaterial, pothosSway } from './factory25dPothosFoliage';
+import { createPothosFoliage, createPothosStrand, pothosMaterial } from './factory25dPothosFoliage';
 
 /** Heart-shaped, unsplit pothos leaves and hanging vines, all solid geometry. */
 export function createHangingPothos(scene: THREE.Scene, hookHeight: number) {
@@ -23,7 +23,7 @@ export function createHangingPothos(scene: THREE.Scene, hookHeight: number) {
     const curve = new THREE.LineCurve3(new THREE.Vector3(0, hookHeight, 0), new THREE.Vector3(Math.cos(angle) * 0.23, potY + 0.09, Math.sin(angle) * 0.23));
     add(new THREE.TubeGeometry(curve, 1, 0.009, 4, false), rope, new THREE.Vector3());
   }
-  const vines: THREE.Group[] = [];
+
   for (let vine = 0; vine < 6; vine += 1) {
     const angle = vine / 6 * Math.PI * 2;
     const length = 0.78 + (vine % 3) * 0.37;
@@ -34,13 +34,11 @@ export function createHangingPothos(scene: THREE.Scene, hookHeight: number) {
       new THREE.Vector3(x * 1.5 + Math.cos(vine) * 0.15, -length, z * 1.3 + 0.13),
     ]);
     // Same authored leaf/vein transforms and colours; each strand now needs
-    // three draws instead of nineteen. The vine still owns the whole sway.
+    // three draws instead of nineteen. Indoor vines keep their resting pose.
     const trail = createPothosStrand(foliage, curve, vine, angle);
     trail.position.y = potY + 0.15;
-    group.add(trail); vines.push(trail);
+    group.add(trail);
   }
   scene.add(group);
-  return { update(time: number, reducedMotion: boolean) {
-    for (const [index, vine] of vines.entries()) vine.rotation.z = pothosSway(time, index, reducedMotion);
-  } };
+  return { update(_time: number, _reducedMotion: boolean) {} };
 }

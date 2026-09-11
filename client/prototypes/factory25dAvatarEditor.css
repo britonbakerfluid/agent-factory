@@ -2,11 +2,14 @@
   --avatar-edge: #607876;
   position: fixed; inset: 20px 20px 20px auto;
   width: min(380px, 38vw); max-height: calc(100dvh - 40px);
-  padding: 0; margin: 0; overflow: auto; box-sizing: border-box;
+  padding: 0; margin: 0; overflow: hidden; box-sizing: border-box;
   background: #152329; color: #e0e9df; border: 2px solid var(--avatar-edge);
   box-shadow: 0 0 0 4px #10191f, 0 12px 36px #0004;
   font: 12px/1.5 'Geist Pixel', monospace;
 }
+.avatar-editor[open] { display: flex; flex-direction: column; }
+.avatar-editor > form { display: flex; flex-direction: column; min-height: 0; }
+.avatar-editor header, .avatar-editor footer { flex: none; }
 .avatar-editor::backdrop { background: transparent; }
 .avatar-editor * { box-sizing: border-box; }
 .avatar-editor [hidden] { display: none !important; }
@@ -24,7 +27,7 @@
 .avatar-editor :focus-visible { outline: 2px solid #e1ecc7; outline-offset: 3px; }
 .avatar-editor :disabled { cursor: default; opacity: .45; }
 .avatar-editor .avatar-close { background: none; border: 0; font-size: 24px; min-width: 40px; }
-.avatar-editor-body { display: flex; flex-direction: column; gap: 20px; padding: 4px 24px 20px; }
+.avatar-editor-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 20px; padding: 4px 24px 20px; }
 .avatar-preview { align-self: start; text-align: center; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .avatar-preview-name { grid-column: 1 / -1; padding: 0; text-align: left; overflow-wrap: anywhere; }
 .avatar-turn { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -66,7 +69,7 @@
 .avatar-stage-open .slice-shell { position: fixed; inset: 0; width: 100vw; height: 100dvh; aspect-ratio: auto; z-index: 20; border: 0; }
 .avatar-stage-open #slice-canvas { width: 100%; height: 100%; }
 .avatar-stage-open .factory-controls, .avatar-stage-open .factory-preview-tools,
-.avatar-stage-open .scene-sound, .avatar-stage-open .agent-label,
+.avatar-stage-open .agent-label,
 .avatar-stage-open .factory-name-tag, .avatar-stage-open .scene-settings { visibility: hidden; }
 .avatar-stage-open :is(.board-hotspot,.window-hotspot,.mobile-explore,.basket-call,.room-doorway,.lounge-chat-view,.team-desk-hotspot,#keyboard-walk,.visitor-ball-pickup) { display: none !important; }
 @media (max-width: 679px) {

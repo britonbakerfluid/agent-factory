@@ -9,3 +9,29 @@
 .visitor-ball-hint input { width: 76px; accent-color: #bcd5bb; }
 .visitor-ball-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 @media(max-width:600px) { .visitor-ball-hint span { max-width: 140px; } }
+
+.basketball-mode .visitor-ball-hint [data-action="move"], .basketball-mode .visitor-ball-hint [data-action="home"] { display:none; }
+.basketball-mode .visitor-ball-pickup { width:72px;height:72px;transform:translate(-14px,-14px); }
+.basketball-mode #window-open,.basketball-mode #board-open { pointer-events:none; }
+
+.factory-toolbar .visitor-ball-hint { position:static;transform:none;padding:0;margin:0;width:auto;max-width:none;background:none;border:0;box-shadow:none;gap:8px; }
+.factory-toolbar .visitor-ball-hint [data-action="back"] { display:none; }
+.factory-toolbar[data-view="basketball"] .factory-focus-title { display:none; }
+.factory-toolbar .visitor-ball-hint button { background:transparent;border:0; }
+.factory-toolbar .visitor-ball-hint button:hover { background:#ffffff12; }
+
+#slice-canvas.holding-basketball,body:has(#slice-canvas.holding-basketball) .visitor-ball-pickup { cursor:grabbing !important; }
+.visitor-ball-pickup { cursor:grab !important; }
+.visitor-ball-placement { position:fixed; z-index:35; width:200px; transform:translateX(-50%); text-align:center; pointer-events:none; color:#f1f5ef; font:12px/1.5 'Geist Pixel',monospace; text-shadow:0 1px 3px #000,0 0 6px #000b; }
+.visitor-ball-placement[hidden] { display:none; }
+.visitor-ball-placement button { pointer-events:auto; display:block; margin:5px auto 0; padding:5px 12px; border:0; background:#f5a34a; color:#30200f; font:inherit; font-weight:600; cursor:pointer; }
+.visitor-ball-placement button[hidden] { display:none; }
+
+/* The ball owns pointer input during pickup, aiming, and camera travel. */
+.basketball-input-active .agent-label, .basketball-input-active .agent-label *,
+.basketball-input-active .team-desk-hotspot { pointer-events:none !important; }
+.visitor-ball-pickup { z-index:16; }
+
+.horse-turn-letters { display:inline-flex; gap:3px; margin-left:12px; font-weight:700; letter-spacing:0; }
+.horse-turn-letters > span { color:#586974; }
+.horse-turn-letters > .is-earned { color:#ffbd58; }

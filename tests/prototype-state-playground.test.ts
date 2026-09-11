@@ -8,7 +8,7 @@ class Element extends EventTarget {
   className='';innerHTML='';textContent='';value='';hidden=false;disabled=false;open=false;dataset={state:'ready'};
   children=new Map<string,Element>(); options: unknown[]=[];
   querySelector(selector:string) { if(!this.children.has(selector)) this.children.set(selector,new Element()); return this.children.get(selector)!; }
-  setAttribute() {} append() {} remove() {} add(option:unknown) { this.options.push(option); }
+  setAttribute() {} append() {} after() {} remove() {} add(option:unknown) { this.options.push(option); }
 }
 function setup() {
   vi.useFakeTimers();vi.setSystemTime(new Date('2026-09-06T12:00:00Z'));

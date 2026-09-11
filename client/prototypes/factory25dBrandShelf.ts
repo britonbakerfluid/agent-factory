@@ -11,7 +11,7 @@ export function createBrandShelf(parent: THREE.Group) {
   root.rotation.y = BRAND_SHELF.rotationY;
   const frame = standard('#70551c'), wood = standard('#a57e51'), cap = standard('#c4991a');
   const cream = standard('#eee5ce'), white = standard('#f4f4f5'), ink = standard('#1b2330');
-  const green = standard('#356756'), brass = standard('#ac8c52', .65), blue = standard('#4d6286');
+  const green = standard('#356756'), brass = standard('#ac8c52', .65);
   const height = BRAND_SHELF.height;
   propPart(root, [BRAND_SHELF.width-.14, .055, .37], [0, .0275, 0], standard('#4b3b1c'));
   propPart(root, [BRAND_SHELF.width, .07, BRAND_SHELF.depth], [0, .09, 0], frame);
@@ -46,10 +46,10 @@ export function createBrandShelf(parent: THREE.Group) {
   }
 
   // Top: a tiny cast Fluid symbol. Geometry comes directly from the original SVG.
-  propPart(top, [.39, .042, .19], [-.30, 1.279, .025], ink);
-  const sculpture = new THREE.Group(); sculpture.name = 'fluid-logo-sculpture'; sculpture.position.set(-.455, 1.61, .015); sculpture.scale.set(.005, -.005, .005); top.add(sculpture);
+  propPart(top, [.39, .12, .19], [-.30, 1.317, .025], ink);
+  const sculpture = new THREE.Group(); sculpture.name = 'fluid-logo-sculpture'; sculpture.position.set(-.455, 1.687, .015); sculpture.scale.set(.005, -.005, .005); top.add(sculpture);
   // A decal on the plinth keeps the identity readable if the optional extrusion cannot load.
-  mark(top, 'fluid-lockup', .28, 177 / 61, [-.30, 1.28, .123]);
+  mark(top, 'fluid-lockup', .28, 177 / 61, [-.30, 1.317, .123]);
   void fetch('/brand/fluid-logomark.svg', { signal:abort.signal }).then(response => {
     if (!response.ok) throw new Error('Logo unavailable'); return response.text();
   }).then(svg => {
@@ -94,14 +94,28 @@ export function createBrandShelf(parent: THREE.Group) {
   propPart(tee, [.39, .018, .295], [0, .051, 0], standard('#2c3441'));
   propPart(tee, [.13, .006, .025], [0, .063, -.10], ink);
   const teeMark = mark(tee, 'we-commerce-logomark-white', .17, 1, [0, .064, .015]); teeMark.rotation.x = -Math.PI / 2;
-  for (const [x, z] of [[.25, .04], [.40, -.035]]) {
-    mesh(new THREE.CylinderGeometry(.055, .055, .23, 10), cream, [x, .275, z], bottom);
-    mesh(new THREE.CylinderGeometry(.025, .025, .002, 8), wood, [x, .391, z], bottom);
-    mesh(new THREE.CylinderGeometry(.056, .056, .045, 10), blue, [x, .27, z], bottom);
-  }
-  root.userData.artifacts = ['fluid-logo-sculpture', 'we-commerce-postcard', 'fluid-mug', 'identity-cards', 'we-commerce-enamel-badge', 'folded-we-commerce-tee', 'print-rolls'];
-  return { root, target:root, dispose() {
-    if (disposed) return; disposed = true; abort.abort(); for (const image of images) image.onload = null;
+  const mist=new THREE.Group();mist.name='mist-logo-plaque';mist.position.set(.29,.277,.12);mist.scale.setScalar(.85);bottom.add(mist);
+  propPart(mist,[.36,.22,.025],[0,0,0],ink);
+  propPart(mist,[.33,.195,.006],[0,0,.016],ink);
+  const mistMark=mark(mist,'mist-mark',.28,16/9,[0,0,.020]);
+  const mistSource=document.createElement('iframe');mistSource.src='/brand/mist-logo-original.html?renderer=1';
+  mistSource.title='Mist animation renderer';mistSource.tabIndex=-1;mistSource.setAttribute('aria-hidden','true');
+  mistSource.style.cssText='position:fixed;left:-1200px;top:0;width:1024px;height:576px;border:0;pointer-events:none';
+  document.body.append(mistSource);
+  let animatedMist:THREE.CanvasTexture|undefined,mistCanvas:HTMLCanvasElement|undefined,lastMistFrame=-1;
+  const mistUpload=document.createElement('canvas');mistUpload.width=384;mistUpload.height=216;
+  const mistContext=mistUpload.getContext('2d')!;
+  mistSource.addEventListener('load',()=>{
+    const logo=mistSource.contentDocument?.querySelector('mist-logo');logo?.setAttribute('color','#fff');
+    const source=logo?.shadowRoot?.querySelector('canvas');if(!source||disposed)return;
+    mistCanvas=source;animatedMist=new THREE.CanvasTexture(mistUpload);animatedMist.generateMipmaps=false;animatedMist.minFilter=THREE.LinearFilter;animatedMist.colorSpace=THREE.SRGBColorSpace;
+    animatedMist.repeat.set(.65,.65);animatedMist.offset.set(.25,.175);
+    mistMark.material.map=animatedMist;mistMark.material.needsUpdate=true;
+  },{signal:abort.signal});
+  propPart(bottom,[.25,.025,.14],[.29,.171,.025],ink);
+  root.userData.artifacts = ['fluid-logo-sculpture', 'we-commerce-postcard', 'fluid-mug', 'identity-cards', 'we-commerce-enamel-badge', 'folded-we-commerce-tee', 'mist-logo-plaque'];
+  return { root, target:root, update(){const frame=Math.floor(performance.now()/ (1000/15));if(animatedMist&&mistCanvas&&frame!==lastMistFrame&&!document.hidden){lastMistFrame=frame;mistContext.clearRect(0,0,384,216);mistContext.drawImage(mistCanvas,0,0,384,216);animatedMist.needsUpdate=true;}}, dispose() {
+    if (disposed) return; disposed = true; mistSource.remove();animatedMist?.dispose(); abort.abort(); for (const image of images) image.onload = null;
     root.removeFromParent(); const geometry = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
     root.traverse(object => { if (object instanceof THREE.Mesh && object !== shadow) { geometry.add(object.geometry); for (const material of Array.isArray(object.material) ? object.material : [object.material]) materials.add(material); } });
     // The white sculpture material may have been created before its SVG arrives.
