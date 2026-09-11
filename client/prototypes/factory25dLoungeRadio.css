@@ -29,3 +29,37 @@
 .lounge-radio-panel ol li span { display:block; overflow-wrap:anywhere; }
 .lounge-radio-panel ol button { min-width:44px; margin-right:6px; }
 .lounge-radio-panel button { background:#293b3c; border:1px solid #526e62; color:#dbe8df; }
+.dj-station-screen { position:fixed;pointer-events:none;z-index:20;overflow:hidden; }
+.dj-station-screen[hidden] { display:none; }
+.lounge-radio-panel.dj-mounted-panel { position:absolute;left:0;top:0;bottom:auto;width:640px;height:360px;max-width:none;max-height:none;box-sizing:border-box;overflow:auto;pointer-events:auto;padding:16px;background:#10202b;border:0;box-shadow:none;font-size:14px; }
+.dj-mounted-panel .radio-video { width:260px;float:left;margin:8px 14px 8px 0; }
+.dj-mounted-panel .radio-video iframe { width:100%;height:146px; }
+.dj-mounted-panel .radio-actions { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%); }
+.dj-mounted-panel form { clear:both; }
+.dj-mounted-panel small { display:none; }
+.dj-station-open .agent-label { visibility:hidden; }
+.dj-mounted-panel .radio-video { height:146px;min-width:0; }
+.dj-physical-target { position:fixed;z-index:21;transform:translate(-50%,-50%);border:0;background:transparent;cursor:pointer;color:transparent; }
+.dj-physical-target:focus-visible { outline:2px solid #d5edda; }
+.dj-physical-target[hidden] { display:none; }
+.dj-mounted-panel .radio-browser {display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;height:266px;}
+.dj-mounted-panel .radio-browser aside,.dj-mounted-panel .radio-browser main {min-width:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#53605b #10202b;}
+.dj-mounted-panel h3 {font-size:12px;font-weight:400;color:#a8b8b1;margin:8px 0;}
+.dj-mounted-panel .radio-video {float:none;width:100%;height:102px;margin:0;}
+.dj-mounted-panel .radio-video iframe {height:102px;}
+.dj-mounted-panel .radio-playing {font-size:12px;}
+.dj-mounted-panel .radio-add {margin:0;gap:4px;}
+.dj-mounted-panel .radio-add input {width:100%;font-size:12px;}
+.dj-mounted-panel ol {padding:0;margin:0;list-style:none;}
+.dj-mounted-panel ol li,.radio-search-row {display:flex;align-items:center;gap:5px;padding:7px 0;border-bottom:1px solid #ffffff15;font-size:11px;}
+.dj-mounted-panel ol li {cursor:grab;flex-wrap:wrap;}
+.dj-mounted-panel ol li>span,.radio-search-row>span {flex:1;min-width:100px;}
+.dj-mounted-panel ol img,.radio-search-row img {width:48px;height:36px;object-fit:cover;}
+.dj-mounted-panel ol button {min-width:24px;margin:0;}
+.dj-mounted-panel button {border:0;padding:7px;background:transparent;cursor:pointer;}
+.dj-mounted-panel button:hover {background:#ffffff15;}
+.dj-mounted-panel .radio-feedback {font-size:11px;margin:6px 0;}
+.dj-mounted-panel .radio-results:not([hidden])~h3,.dj-mounted-panel .radio-results:not([hidden])~ol {display:none;}
+
+/* Room overlays belong to the room camera, not the focused DJ camera. */
+.dj-station-open :is(.window-hotspot,.board-hotspot,.room-doorway,.mobile-explore,#keyboard-walk,.team-desk-hotspot,.visitor-ball-pickup) { display:none !important; }

@@ -135,16 +135,17 @@ export function createGlassWater(renderer: THREE.WebGLRenderer, width: number, w
       material.uniforms.uActive.value = 1;
       paintGlassHeight(sim, heights, pixels); texture.needsUpdate = true; dirty = true;
     },
-    render(viewCamera: THREE.Camera, factoryVisible: boolean, garageVisible = false) {
+    render(viewCamera: THREE.Camera, factoryVisible: boolean, garageVisible = false, garageCamera?: THREE.Camera) {
       if ((!factoryVisible && !garageVisible) || material.uniforms.uActive.value === 0 || disposed) return;
       viewCamera.getWorldDirection(direction);
-      if (!dirty && captureElapsed < 1 / 30 && direction.distanceToSquared(previousDirection) < 1e-9) return;
-      const z = Math.abs(direction.z) < .05 ? -.05 : direction.z;
+      if (!garageCamera && !dirty && captureElapsed < 1 / 30 && direction.distanceToSquared(previousDirection) < 1e-9) return;
       const previous = renderer.getRenderTarget(), alpha = renderer.getClearAlpha(), autoClear = renderer.autoClear;
       renderer.getClearColor(clear);
       try {
         for (const garage of [false, true]) {
           if (garage ? !garageVisible : !factoryVisible) continue;
+          (garage&&garageCamera?garageCamera:viewCamera).getWorldDirection(direction);
+          const z=Math.abs(direction.z)<.05?-.05:direction.z;
           for (const { source, copy, garageDepth } of copies) {
             copy.position.copy(source.position); copy.quaternion.copy(source.quaternion); copy.scale.copy(source.scale);
             copy.visible = source.visible && (!garage || garageDepth !== undefined);

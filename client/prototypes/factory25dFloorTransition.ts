@@ -20,7 +20,7 @@ export function upperFloorLift(progress: number) {
   return 20 * THREE.MathUtils.clamp(progress, 0, 1);
 }
 
-export function floorTravelCamera(camera: THREE.OrthographicCamera, home: THREE.OrthographicCamera, garage01: number, section: boolean) {
+export function floorTravelCamera(camera: THREE.OrthographicCamera, home: THREE.OrthographicCamera, garage01: number, section: boolean, trackUpperFloor = true) {
   const t = THREE.MathUtils.clamp(garage01, 0, 1), shift = section ? GARAGE_SECTION_X : 0;
   const floorY = GARAGE_LEVEL + (section ? GARAGE_SECTION_Y : 0);
   destination.copy(home);
@@ -30,14 +30,42 @@ export function floorTravelCamera(camera: THREE.OrthographicCamera, home: THREE.
   camera.copy(home);
   camera.position.lerpVectors(home.position, destination.position, t);
   camera.quaternion.slerpQuaternions(home.quaternion, destination.quaternion, t);
-  camera.zoom = THREE.MathUtils.lerp(home.zoom, destination.zoom, t);
-  // Dip toward an eye-level view during the ride, like entering the window.
-  // Orbit the current framing center so lowering the angle does not lose the room.
-  const dip = Math.sin(Math.PI*t)**2;
-  const direction=camera.getWorldDirection(new THREE.Vector3());
-  const focus=camera.position.clone().addScaledVector(direction,18);
-  camera.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),.32*dip));
-  camera.getWorldDirection(direction);camera.position.copy(focus).addScaledVector(direction,-18);
+  // Each separately rendered floor keeps its settled scale for the whole ride.
+  camera.zoom = trackUpperFloor && t < 1 ? home.zoom : destination.zoom;
+  if (trackUpperFloor && section && t > 0 && t < 1) {
+    // Read the upper slab from below as it arrives, edge-on as we pass its
+    // height, then from above. This is tied to the moving floor, not a bob
+    // added to the camera independently of the building.
+    const homeDirection = home.getWorldDirection(new THREE.Vector3());
+    const depth = 18;
+    const homeFocus = home.position.clone().addScaledVector(homeDirection, depth);
+    const upperHeight = homeFocus.y + upperFloorLift(t);
+    const upperPitch = Math.atan2(upperHeight - camera.position.y, -homeDirection.z * depth);
+    const direction = camera.getWorldDirection(new THREE.Vector3());
+    const settledPitch = Math.asin(direction.y);
+    // Once the upper slab is above the frame, hand the framing to the garage.
+    const garageWeight = THREE.MathUtils.smoothstep(t, .68, 1);
+    const pitch = THREE.MathUtils.lerp(upperPitch, settledPitch, garageWeight);
+    const focus = camera.position.clone().addScaledVector(direction, depth);
+    camera.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0), pitch - settledPitch,
+    ));
+    camera.getWorldDirection(direction);
+    camera.position.copy(focus).addScaledVector(direction, -depth);
+  }
+  if (!trackUpperFloor && t < 1) {
+    // As we rise away from the garage, see MORE of its floor. Reversing the
+    // same path lowers us toward it and gradually reduces that downward angle.
+    const direction = camera.getWorldDirection(new THREE.Vector3());
+    const focus = camera.position.clone().addScaledVector(direction, 18);
+    const settledPitch = Math.asin(direction.y);
+    const pitch = -Math.atan2(17.37 + STOREY_HEIGHT * (1 - t), 18);
+    camera.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0), pitch - settledPitch,
+    ));
+    camera.getWorldDirection(direction);
+    camera.position.copy(focus).addScaledVector(direction, -18);
+  }
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
 }

@@ -7,7 +7,7 @@ export const DJ_VIDEOS = [
 export interface RadioEntry { id: number; videoId: string; title: string; queuedBy: string; dj: boolean }
 export interface RadioState { type: 'radio_state'; serverTime: number; revision: number; current: (RadioEntry & { startedAt: number; duration: number; durationKnown: boolean }) | null; queue: RadioEntry[] }
 export type RadioRequest = { type: 'radio_queue' } & (
-  { action: 'add'; videoId: string } | { action: 'reorder'; ids: number[]; revision: number } |
+  { action: 'add'; videoId: string } | { action: 'remove'; entryId: number; revision: number } | { action: 'reorder'; ids: number[]; revision: number } |
   { action: 'duration'; entryId: number; seconds: number } | { action: 'skip'; entryId: number });
 export interface RadioResult { type: 'radio_result'; success: boolean; error?: string; silent?: boolean }
 export const RADIO_QUEUE_LIMIT = 8;
@@ -66,6 +66,12 @@ export class LoungeRadioQueue {
     if (revision !== this.revision) return fail('The queue changed. Try moving that song again.');
     if (!Array.isArray(ids) || ids.length !== this.queue.length || new Set(ids).size !== ids.length || ids.some(id => !this.queue.some(entry => entry.id === id))) return fail('That queue order is no longer available.');
     this.queue = ids.map(id => this.queue.find(entry => entry.id === id)!); this.revision++; return ok();
+  }
+  remove(id: unknown, revision: unknown): RadioResult {
+    if (revision !== this.revision) return fail('The queue changed. Try again.');
+    const index = this.queue.findIndex(entry => entry.id === id);
+    if (index < 0) return fail('That song has already left the queue.');
+    this.queue.splice(index, 1); this.revision++; return ok();
   }
   duration(id: unknown, seconds: unknown, now: number): RadioResult {
     if (!this.current || id !== this.current.id || typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 5 || seconds > 10800) return fail('That video duration is unavailable.');

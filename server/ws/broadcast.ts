@@ -56,6 +56,11 @@ export class BroadcastManager {
     }
   }
 
+  /** Every tab this person has open, so a result lands on each device at once. */
+  sendToOwner(ownerId: string, msg: WSMessageToClient) {
+    for (const [client, meta] of this.clients) if (meta.principal?.ownerId === ownerId) this.sendTo(client, msg);
+  }
+
   sendWorldSnapshot(ws: WebSocket, snapshot: WorldSnapshot) {
     this.sendTo(ws, { type: 'world_snapshot', snapshot, buildId: SERVER_BUILD_ID });
   }

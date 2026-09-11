@@ -577,6 +577,7 @@ export function drawCharacter(
     colors: { hairStyle: number; hairColor: string; skinTone: string; shirtColor: string; pantsColor: string; shoeColor: string; facialHair: number; mouthStyle: number; faceAccessory: number; headAccessory: number; shirtDesign: number },
     eyes?: AvatarEyes,
     frontFacing = false,
+    backView = false,
   ) {
     const r = (color >> 16) & 0xff;
     const g = (color >> 8) & 0xff;
@@ -589,7 +590,7 @@ export function drawCharacter(
     const climbing = anim === 'climb';
     const sitting = anim === 'sit' || anim === 'sit_up';
     const holding = anim.startsWith('hold_');
-    const facesAway = !frontFacing && (anim === 'work' || anim === 'walk_up' || anim === 'sit_up' || anim === 'board' || anim === 'hold_up' || climbing);
+    const facesAway = backView !== (!frontFacing && (anim === 'work' || anim === 'walk_up' || anim === 'sit_up' || anim === 'board' || anim === 'hold_up' || climbing));
 
     ctx.clearRect(x, y, size, size);
 
@@ -598,7 +599,7 @@ export function drawCharacter(
         ctx,
         x,
         y,
-        anim.endsWith('right') ? 'right' : 'left',
+        (anim.endsWith('right') !== backView) ? 'right' : 'left',
         frame,
         colors,
         bodyColor,
@@ -607,6 +608,26 @@ export function drawCharacter(
         holding,
         eyes,
       );
+      return;
+    }
+
+    if(anim==='hero_land'){
+      // Keep the actual face, hair and hat; articulate a three-point landing below it.
+      drawCharacter(ctx,x,y,size,color,'idle',0,colors,eyes,true);
+      if(frame===3)return;
+      const head=ctx.getImageData(x,y,32,15),rise=[0,2,6][frame%3];
+      ctx.clearRect(x,y,size,size);
+      ctx.fillStyle=colors.pantsColor;
+      ctx.fillRect(x+8,y+25-rise,9,5); // folded rear thigh
+      ctx.fillRect(x+6,y+28,10,3); // knee on the floor
+      ctx.fillRect(x+20,y+23-rise,5,8+rise); // forward planted leg
+      ctx.fillStyle=colors.shoeColor;ctx.fillRect(x+5,y+30,9,2);ctx.fillRect(x+20,y+30,8,2);
+      ctx.fillStyle=bodyColor;ctx.fillRect(x+10,y+22-rise,12,5);ctx.fillRect(x+8,y+20-rise,12,5);
+      ctx.fillStyle=darkColor;ctx.fillRect(x+8,y+23-rise,4,7+rise);
+      ctx.fillStyle=skinColor;ctx.fillRect(x+6,y+29,6,3); // fist braced on the ground
+      ctx.fillStyle=darkColor;ctx.fillRect(x+21,y+22-rise,5,4);
+      ctx.fillStyle=skinColor;ctx.fillRect(x+23,y+25-rise,4,3);
+      ctx.putImageData(head,x-2,y+9-rise);
       return;
     }
 
@@ -776,7 +797,14 @@ export function drawCharacter(
 
     // ── Arms ──
     ctx.fillStyle = darkColor;
-    if (holding) {
+    if (anim === 'basketball_throw') {
+      const handY = [10, 6, 3, 6][frame % 4];
+      ctx.fillRect(x + 5, y + handY + 2, 4, 18 - handY);
+      ctx.fillRect(x + 23, y + handY + 2, 4, 18 - handY);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(x + 6, y + handY, 3, 3);
+      ctx.fillRect(x + 23, y + handY, 3, 3);
+    } else if (holding) {
       // Both hands keep contact with the frame while the feet take short steps.
       ctx.fillRect(x + 5, y + 14, 4, 6);
       ctx.fillRect(x + 23, y + 14, 4, 6);

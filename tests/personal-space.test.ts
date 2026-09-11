@@ -3,7 +3,7 @@ import { StateManager } from '../server/state';
 import { DEFAULT_AVATAR } from '../shared/constants';
 import { PERSONAL_SPACE, peopleCross,freeStandingPoint,passingDetour,distance } from '../shared/personal-space';
 import { toFactoryWorld,factoryMovementIsClear,clearFactorySegment,fromFactoryWorld } from '../shared/factory25d-layout';
-import { positionAt } from '../shared/world-layouts';
+import { positionAt,slotPosition } from '../shared/world-layouts';
 
 const p=(x:number,z:number)=>toFactoryWorld({x,z});
 const hook=(id:string)=>({hook_event_name:'SessionStart',session_id:id,username:id,cwd:'/fixture',avatar:DEFAULT_AVATAR});
@@ -54,4 +54,21 @@ describe('Personal Space update',()=>{
   }
   for(const [id,target] of [['a',p(2,3.6)],['b',p(-2,3.6)]] as const){const w=state.get(id)!.world;expect(distance(w.movement?positionAt(w.movement,now):w.position,target)).toBeLessThan(1);}
  });
+});
+
+it('keeps a working agent at their station when an idle agent overlaps it',()=>{
+ const state=new StateManager('factory25d',()=>1000);state.handleHookEvent(hook('a-idle'));state.handleHookEvent(hook('z-worker'));
+ const station=slotPosition('factory25d','work',0);
+ state.get('z-worker')!.world={zone:'work',slotIndex:0,facing:'up',position:{...station}};
+ state.get('a-idle')!.world={zone:'idle',facing:'down',position:{...station}};
+ state.advancePersonalSpace();
+ expect(state.get('z-worker')!.world.position).toEqual(station);
+ expect(distance(state.get('a-idle')!.world.position,station)).toBeGreaterThanOrEqual(PERSONAL_SPACE-.01);
+});
+
+it('repairs a settled worker displaced from their reserved station by an older spacing pass',()=>{
+ const state=new StateManager('factory25d',()=>1000);state.handleHookEvent(hook('worker'));
+ const station=slotPosition('factory25d','work',0);
+ state.get('worker')!.world={zone:'work',slotIndex:0,facing:'up',position:{x:station.x+48,y:station.y+24}};
+ state.advancePersonalSpace();expect(state.get('worker')!.world.position).toEqual(station);
 });

@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mist</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #f2efe9;
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+  }
+  mist-logo { width: min(80vw, 720px); }
+</style>
+</head>
+<body>
+  <mist-logo mode="live" color="#000" cols="90"></mist-logo>
+
+  <script type="module">
+const CW = 1024, CH = 576, FPS = 30;
+const EMPTY = 0, STATIC = 1;
+
+// grain-audio presets — the `sound-shuffle` button cycles these so the sound
+// can be auditioned and dialed in. type "noise" = filtered noise tick,
+// "tone" = a short tonal blip (optionally pitch-gliding). f0/f1 filter sweep,
+// q0/q1 resonance, d0/d1 grain length (s), r0/r1 noise playback rate, wet/dry
+// + decay/pre = the reverb send that makes it echoey.
+const SND_PRESETS = [
+  { name: "fine sand",     type: "noise", flt: "bandpass", f0: 2600, f1: 6000, q0: 0.6, q1: 1.6, d0: 0.006, d1: 0.02,  r0: 0.9, r1: 1.8, wet: 0.35, dry: 0.7,  decay: 1.2, pre: 0.015, gain: 0.9 },
+  { name: "airy mist",     type: "noise", flt: "bandpass", f0: 1400, f1: 3600, q0: 0.4, q1: 1.1, d0: 0.012, d1: 0.045, r0: 0.8, r1: 1.6, wet: 1.15, dry: 0.4,  decay: 2.8, pre: 0.035, gain: 0.8 },
+  { name: "coarse grit",   type: "noise", flt: "lowpass",  f0: 500,  f1: 1600, q0: 0.3, q1: 0.8, d0: 0.01,  d1: 0.03,  r0: 0.7, r1: 1.3, wet: 0.6,  dry: 0.6,  decay: 1.8, pre: 0.02,  gain: 1.0 },
+  { name: "wind wash",     type: "noise", flt: "highpass", f0: 2800, f1: 5200, q0: 0.2, q1: 0.6, d0: 0.03,  d1: 0.09,  r0: 0.8, r1: 1.4, wet: 1.4,  dry: 0.3,  decay: 3.4, pre: 0.05,  gain: 0.7 },
+  { name: "water drops",   type: "tone",  flt: "lowpass",  f0: 380,  f1: 1200, q0: 1,   q1: 1,   d0: 0.04,  d1: 0.11,  r0: 1,   r1: 1,   wet: 0.9,  dry: 0.5,  decay: 2.2, pre: 0.03,  gain: 0.6, glide: 0.45 },
+  { name: "glass shimmer", type: "tone",  flt: "bandpass", f0: 2600, f1: 6200, q0: 1,   q1: 1,   d0: 0.05,  d1: 0.14,  r0: 1,   r1: 1,   wet: 1.5,  dry: 0.35, decay: 3.6, pre: 0.04,  gain: 0.4, glide: 0 },
+  { name: "paper rustle",  type: "noise", flt: "bandpass", f0: 1000, f1: 2600, q0: 0.8, q1: 1.8, d0: 0.004, d1: 0.012, r0: 0.9, r1: 1.7, wet: 0.3,  dry: 0.8,  decay: 0.9, pre: 0.01,  gain: 0.9 },
+  { name: "deep cave",     type: "noise", flt: "lowpass",  f0: 600,  f1: 1400, q0: 0.4, q1: 0.9, d0: 0.02,  d1: 0.06,  r0: 0.6, r1: 1.1, wet: 1.6,  dry: 0.25, decay: 4.2, pre: 0.06,  gain: 0.8 },
+];
+
+// ---- deterministic helpers (identical to the studio) ----
+const fract = x => x - Math.floor(x);
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const hash = (a, b) => fract(Math.sin(a * 127.1 + b * 311.7) * 43758.5453);
+function vnoise2(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+
+// ---- pen stroke (same points as src/logo/stroke.ts) ----
+const STROKE = [[0.239, 0.605], [0.425, 0.422], [0.416, 0.602], [0.597, 0.42], [0.592, 0.605], [0.78, 0.42]];
+const STROKE_CUM = (() => {
+  const seg = []; let total = 0;
+  for (let i = 0; i < STROKE.length - 1; i++) {
+    const d = Math.hypot(STROKE[i + 1][0] - STROKE[i][0], STROKE[i + 1][1] - STROKE[i][1]);
+    seg.push(d); total += d;
+  }
+  const cum = [0]; let acc = 0;
+  for (const d of seg) { acc += d; cum.push(acc / total); }
+  return cum;
+})();
+function capsuleUp(dx, dy, halfW, halfH) {
+  const r = halfW, hh = Math.max(halfH - r, 0);
+  dy -= Math.max(-hh, Math.min(hh, dy));
+  return Math.hypot(dx, dy) - r;
+}
+function projArcLen(u, v) {
+  let best = 1e9, bestT = 0;
+  for (let s = 0; s < STROKE.length - 1; s++) {
+    const a = STROKE[s], b = STROKE[s + 1];
+    const abx = b[0] - a[0], aby = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((u - a[0]) * abx + (v - a[1]) * aby) / (abx * abx + aby * aby || 1e-6)));
+    const px = a[0] + abx * t, py = a[1] + aby * t;
+    const d = Math.hypot(u - px, v - py);
+    if (d < best) { best = d; bestT = STROKE_CUM[s] + (STROKE_CUM[s + 1] - STROKE_CUM[s]) * t; }
+  }
+  return bestT;
+}
+const shapeRect = () => { const s = 0.8 * CH; return { x: 0.42 * CW - s / 2, y: (CH - s) / 2, s }; };
+
+// Briton's hand-tuned letterform (painted in edit mode over the real mark,
+// 2026-07-20). Applies at the full 90-col grid; other resolutions fall back to
+// the pen-path stamp.
+const DEFAULT_SHAPE = "90:0,1653,1,3,0,4,1,3,0,4,1,4,0,71,1,5,0,2,1,5,0,2,1,5,0,70,1,6,0,1,1,6,0,1,1,6,0,69,1,21,0,68,1,22,0,67,1,23,0,66,1,24,0,65,1,25,0,64,1,25,0,64,1,25,0,65,1,24,0,66,1,23,0,67,1,22,0,68,1,7,0,1,1,13,0,69,1,6,0,2,1,6,0,1,1,5,0,70,1,5,0,3,1,5,0,2,1,4,0,72,1,3,0,5,1,3,0,4,1,2,0,1578";
+
+// Decode an RLE shape string ("cols:v,run,v,run,…") into { cols, rows, grid }.
+function decodeShape(str) {
+  const [sc, csv] = str.split(":");
+  const cols = parseInt(sc, 10);
+  const nums = csv.split(",").map(Number);
+  let total = 0;
+  for (let p = 1; p < nums.length; p += 2) total += nums[p];
+  const rows = Math.round(total / cols);
+  const grid = new Uint8Array(cols * rows);
+  let k = 0;
+  for (let p = 0; p + 1 < nums.length && k < grid.length; p += 2) {
+    for (let n = 0; n < nums[p + 1] && k < grid.length; n++) grid[k++] = nums[p];
+  }
+  return { cols, rows, grid };
+}
+// The canonical baked M, decoded once, plus the canvas mapping it was authored
+// against (cols=90). We resample this to whatever grid resolution is requested
+// so the real letterform reads at every DPI — not just at exactly 90 cols.
+const BAKED = decodeShape(DEFAULT_SHAPE);
+const BAKED_CS = Math.max(2, Math.floor(CW / BAKED.cols));
+const BAKED_OFFX = Math.floor((CW - BAKED_CS * BAKED.cols) / 2);
+const BAKED_OFFY = Math.floor((CH - BAKED_CS * BAKED.rows) / 2);
+
+class MistLogo extends HTMLElement {
+  static observedAttributes = ["cols", "mode", "color", "interactive", "variant", "tune", "edit", "shape", "field"];
+
+  // tuned look (Mist Studio defaults)
+  drawEnd = 30; blowLen = 42; loopDur = 150; blowStartF = 108;
+  stagger = 0.5; speed = 1; reach = 0.35; spread = 0.8;
+  emitReach = 1;       // target multiplier on how far SHED mist carries right
+                       // (eased internally — ramp it up on hover for a gust)
+  blowReach = 1;       // multiplier on how far the BLOW-away carries right
+                       // (>1 = wider, more cinematic dispersal on click)
+  buoy = 0.3; depthAmt = 0.5; slant = 0.8; stretchAmt = 0.4;
+  brushW = 0.1; brushH = 0.24;
+  // living pulse (the noise-smoke moving through the M) + interaction feel —
+  // all tunable via the tune panel (add the `tune` attribute)
+  // (Briton's picks, 2026-07-20, via the tune panel)
+  noiseScale = 0.09;   // spatial frequency of the pulse field
+  noiseSpeed = 1;      // how fast the smoke drifts through
+  noiseDepth = 0.2;    // how much the pulse swings pixel size
+  retStiff = 0.05;     // return spring: pull toward home (lower = slower return)
+  retDamp = 0.81;      // return spring: settle (lower = heavier, less wobble)
+  couple = 0.19;       // neighbor drag: displaced pixels tug the cells around them
+  sizeLevels = 12;     // largeness steps per pixel (12 = smooth/continuous;
+                       // lower = chunkier, stop-motion-feeling size changes)
+  scale = 1;           // overall mark scale about its center (1 = golden)
+  corner = 0;          // pixel shape detail: 0 = crisp squares (golden),
+                       // 1 = corners fully gone. Size-aware — small mist
+                       // pixels round off first, big solid ones stay square
+  melt = 0;            // Otsu-style bonding: full cells grow + neck into
+                       // adjacent lit cells so the dense M reads as one mass
+  shapeRes = 0;        // shape raster resolution: 0 = smooth vector shapes;
+                       // 2-10 = rounded pixels drawn as chunky PIXELATED
+                       // circles on an n×n subgrid (hard steps, no dithering)
+
+  #fr = 0; #raf = 0; #last = 0; #acc = 0;
+  #blowAt = null;          // live mode: frame the blow was triggered at
+  #px = -1; #py = -1;      // pointer in grid coords (-1 = away)
+  #refImg = null;          // reference mark image for edit mode
+  #painting = false; #paintVal = STATIC;   // edit-mode drag painting
+  #driveFrame = null;      // external playhead (seek()); null = free-running
+  #emitR = 1;              // eased current value chasing emitReach
+  #energy = 0;             // smoothed cursor speed (0 resting .. 1 sweeping fast)
+  #agit = 0;               // accumulated agitation — keep sweeping and it BUILDS, displacing further; decays slowly
+  #moveT = 0;              // timestamp of the last pointer move
+  #drawT = 0;              // timestamp of the last draw (spring dt normalization)
+  #springAcc = 0;          // fractional 60hz-substep accumulator for the springs
+  // CARRY-stream particle pool: real persistent pixels launched only during a
+  // gust. They travel the (wide) grid to the right at a FIXED speed and grid-
+  // lock on draw, so a longer reach = a longer RUN, never a stretch or speed-up.
+  #pCap = 1400;
+  #pX = null; #pY = null; #pV = null; #pVY = null; #pA = null; #pL = null; #pR = null; #pX0 = null; #pAcc = null;
+  #pHead = 0;
+  #appliedScale = 1;       // last CSS scale written to the canvas element
+  #dpr = 1;                // device pixel ratio the canvas raster is sized for
+  #cw = CW;                // canvas raster width in CSS px (CW * `field`; M stays left-aligned)
+  // grain audio: tiny bandpassed-noise ticks that fire as the cursor disturbs
+  // the pixels, so the mist "sounds like sand moving." Silent until the first
+  // pointerdown (browser autoplay policy). Disable with the `sound="off"` attr.
+  #audio = null; #noiseBuf = null; #master = null; #lastGrainT = 0;
+  #sndIdx = 6;             // active SND_PRESETS index (6 = "paper rustle")
+  #revNodes = [];          // current reverb-send nodes, torn down on preset change
+  #markBox = null;         // grid bbox of the letterform, so grains only fire over it
+
+  connectedCallback() {
+    const root = this.attachShadow({ mode: "open" });
+    root.innerHTML = `<style>
+      :host { display: block; aspect-ratio: ${CW} / ${CH}; }
+      :host([tune]), :host([edit]), :host([sound-shuffle]) { aspect-ratio: auto; }
+      canvas { width: 100%; height: 100%; display: block; }
+      :host([tune]) canvas, :host([edit]) canvas, :host([sound-shuffle]) canvas { aspect-ratio: ${CW} / ${CH}; height: auto; }
+      :host([edit]) canvas { cursor: crosshair; }
+    </style><canvas></canvas>`;
+    this.canvas = root.querySelector("canvas");
+    this.#dpr = Math.min(devicePixelRatio || 1, 2);
+    this.ctx = this.canvas.getContext("2d");
+    // #rebuild sizes the canvas raster (honoring the `field` width multiplier)
+
+    this.#rebuild();
+    this.canvas.addEventListener("pointerdown", e => {
+      this.#ensureAudio();   // unlock/resume audio on the first real gesture
+      if (!this.hasAttribute("edit")) return;
+      const [gi, gj] = this.#cellFromEvent(e);
+      if (gi < 0 || gi >= this.cols || gj < 0 || gj >= this.rows) return;
+      this.#paintVal = this.grid[gj * this.cols + gi] ? EMPTY : STATIC;
+      this.#painting = true;
+      try { this.canvas.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+      this.#paintAt(e);
+    });
+    this.canvas.addEventListener("pointerup", () => { this.#painting = false; });
+    this.canvas.addEventListener("pointermove", e => {
+      if (this.hasAttribute("edit")) { if (this.#painting) this.#paintAt(e); return; }
+      if (this.getAttribute("interactive") === "off") return;
+      this.stir(e.clientX, e.clientY);
+    });
+    this.canvas.addEventListener("pointerleave", () => { this.unstir(); });
+    this.canvas.addEventListener("click", () => {
+      this.#ensureAudio();
+      if (this.hasAttribute("edit")) return;
+      if (this.hasAttribute("no-click-blow")) return;   // caller handles click itself
+      if (this.getAttribute("mode") === "live") this.blow(); else this.replay();
+      this.#burst();   // a scatter of grains for the blow-away — a fistful of sand
+    });
+
+    this.#buildTune();
+    this.#buildEdit();
+    this.#buildSoundShuffle();
+    this.#last = performance.now() / 1000;
+    const embeddedRenderer=new URLSearchParams(location.search).has("renderer");
+    const tick = () => {
+      const now = performance.now() / 1000;
+      if(embeddedRenderer&&now-this.#last<1/15){this.#raf=requestAnimationFrame(tick);return;}
+      this.#acc += (now - this.#last) * FPS; this.#last = now;
+      const steps = Math.floor(this.#acc);
+      if (steps > 0) { this.#acc -= steps; this.#fr += steps; this.#energy *= Math.pow(0.955, steps); this.#agit *= Math.pow(0.982, steps); }
+      if (this.#driveFrame !== null) this.#fr = this.#driveFrame;   // external playhead owns time
+      else if (this.getAttribute("mode") !== "live" && this.#fr >= this.loopDur) this.#fr %= this.loopDur;
+      this.#draw();
+      this.#raf = requestAnimationFrame(tick);
+    };
+    this.#raf = requestAnimationFrame(tick);
+  }
+  disconnectedCallback() { cancelAnimationFrame(this.#raf); }
+  attributeChangedCallback(name) {
+    if ((name === "cols" || name === "variant" || name === "shape" || name === "field") && this.ctx) this.#rebuild();
+    if (name === "tune" && this.ctx) this.#buildTune();
+    if (name === "edit" && this.ctx) this.#buildEdit();
+  }
+
+  // shape edit mode (`edit` attribute): the animation pauses and the real mark
+  // renders behind the grid; click or drag toggles cells. "copy shape" exports
+  // an RLE string for the `shape` attribute, so the exact letterform you paint
+  // becomes the one the component animates.
+  #cellFromEvent(e) {
+    const r = this.canvas.getBoundingClientRect();
+    return [
+      Math.floor(((e.clientX - r.left) / r.width * CW - this.offX) / this.cs),
+      Math.floor(((e.clientY - r.top) / r.height * CH - this.offY) / this.cs),
+    ];
+  }
+  #paintAt(e) {
+    const [gi, gj] = this.#cellFromEvent(e);
+    if (gi < 0 || gi >= this.cols || gj < 0 || gj >= this.rows) return;
+    this.grid[gj * this.cols + gi] = this.#paintVal;
+  }
+  #shapeString() {
+    const out = [];
+    let v = this.grid[0] ? 1 : 0, c = 0;
+    for (let k = 0; k < this.grid.length; k++) {
+      const b = this.grid[k] ? 1 : 0;
+      if (b === v) c++;
+      else { out.push(v, c); v = b; c = 1; }
+    }
+    out.push(v, c);
+    return this.cols + ":" + out.join(",");
+  }
+  #buildEdit() {
+    const existing = this.shadowRoot.querySelector(".editbar");
+    if (this.getAttribute("edit") === null) { existing?.remove(); return; }
+    if (existing) return;
+    const bar = document.createElement("div");
+    bar.className = "editbar";
+    bar.innerHTML = `<style>
+      .editbar { font-family: ui-monospace, monospace; font-size: 10.5px; color: #8b98a8;
+        background: rgba(13, 17, 22, 0.92); border: 1px solid #232c38; border-radius: 10px;
+        padding: 8px 12px; margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+      .editbar button { font: inherit; color: #c7d3e0; background: none;
+        border: 1px solid #2c3645; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+      .editbar span { margin-left: auto; }
+    </style>
+    <button class="cp">copy shape</button>
+    <button class="rs">reset to stamp</button>
+    <span>click / drag toggles pixels · the real mark is behind</span>`;
+    bar.querySelector(".cp").addEventListener("click", () => {
+      navigator.clipboard.writeText(this.#shapeString());
+      const b = bar.querySelector(".cp");
+      b.textContent = "copied";
+      setTimeout(() => b.textContent = "copy shape", 1200);
+    });
+    bar.querySelector(".rs").addEventListener("click", () => {
+      this.removeAttribute("shape");
+      this.#rebuild();
+    });
+    this.shadowRoot.appendChild(bar);
+  }
+  #drawEdit() {
+    const { ctx, cols, rows, cs, offX, offY } = this;
+    ctx.clearRect(0, 0, CW, CH);
+    if (!this.#refImg) {
+      this.#refImg = new Image();
+      this.#refImg.src = this.getAttribute("ref-src") || "/public/mist-mark.png";
+    }
+    const R = shapeRect();
+    if (this.#refImg.complete && this.#refImg.naturalWidth) {
+      ctx.globalAlpha = 0.3;
+      ctx.drawImage(this.#refImg, R.x, R.y, R.s, R.s);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = this.getAttribute("color") || "#fff";
+    const inset = Math.max(1, Math.round(cs * 0.12));
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      if (!this.grid[j * cols + i]) continue;
+      ctx.globalAlpha = 0.95;
+      ctx.fillRect(offX + i * cs + inset, offY + j * cs + inset, cs - 2 * inset, cs - 2 * inset);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // tuning panel (`tune` attribute): sliders for the living pulse and the
+  // interaction feel, plus a copy button that exports the current values —
+  // for dialing in parameters, not for production embeds.
+  #buildTune() {
+    if (this.shadowRoot.querySelector(".tune")) return;
+    if (this.getAttribute("tune") === null) return;
+    const FIELDS = [
+      ["noiseScale", "pulse scale", 0.05, 0.8, 0.01],
+      ["noiseSpeed", "pulse speed", 0, 2.5, 0.05],
+      ["noiseDepth", "pulse depth", 0, 1, 0.05],
+      ["retStiff", "return pull", 0.02, 0.15, 0.005],
+      ["retDamp", "return settle", 0.7, 0.95, 0.01],
+      ["couple", "neighbor drag", 0, 0.4, 0.01],
+      ["sizeLevels", "size steps", 2, 12, 1],
+      ["scale", "scale", 0.5, 1.6, 0.05],
+      ["corner", "pixel corner", 0, 1, 0.05],
+    ];
+    const panel = document.createElement("div");
+    panel.className = "tune";
+    panel.innerHTML = `<style>
+      .tune { font-family: ui-monospace, monospace; font-size: 10.5px; color: #8b98a8;
+        background: rgba(13, 17, 22, 0.92); border: 1px solid #232c38; border-radius: 10px;
+        padding: 10px 14px 12px; margin-top: 8px; display: grid; gap: 6px; }
+      .tune .row { display: grid; grid-template-columns: 92px 1fr 44px; gap: 10px; align-items: center; }
+      .tune input[type=range] { width: 100%; accent-color: #a8c9e6; }
+      .tune .v { text-align: right; color: #c7d3e0; }
+      .tune button { justify-self: start; font: inherit; color: #c7d3e0; background: none;
+        border: 1px solid #2c3645; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+    </style>`;
+    for (const [key, label, min, max, step] of FIELDS) {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `<span>${label}</span><input type="range" min="${min}" max="${max}" step="${step}" value="${this[key]}"><span class="v">${this[key]}</span>`;
+      const input = row.querySelector("input"), val = row.querySelector(".v");
+      input.addEventListener("input", () => { this[key] = parseFloat(input.value); val.textContent = input.value; });
+      panel.appendChild(row);
+    }
+    const copy = document.createElement("button");
+    copy.textContent = "copy values";
+    copy.addEventListener("click", () => {
+      const out = Object.fromEntries(FIELDS.map(([k]) => [k, this[k]]));
+      navigator.clipboard.writeText(JSON.stringify(out));
+      copy.textContent = "copied";
+      setTimeout(() => copy.textContent = "copy values", 1200);
+    });
+    panel.appendChild(copy);
+    this.shadowRoot.appendChild(panel);
+  }
+
+  blow() { if (this.#blowAt === null) this.#blowAt = this.#fr; }
+  replay() { this.#fr = 0; this.#blowAt = null; }
+  // external drive (timeline scrubbing): once seek() is called the internal
+  // clock stops and the caller owns the playhead; release() resumes free-run
+  seek(frame) { this.#driveFrame = Math.max(0, Math.round(frame)); }
+  release() { this.#driveFrame = null; }
+
+  // drive the disturbance from client coords, regardless of `interactive` — so
+  // a caller (e.g. a fake auto-cursor) can stir the mist programmatically
+  stir(clientX, clientY) {
+    const r = this.canvas.getBoundingClientRect();
+    if (!r.width) return;
+    const R = shapeRect();
+    const cxm = R.x + R.s / 2, cym = CH / 2;
+    const sx2 = cxm + ((clientX - r.left) / r.width * CW - cxm) / this.scale;
+    const sy2 = cym + ((clientY - r.top) / r.height * CH - cym) / this.scale;
+    const nx = (sx2 - this.offX) / this.cs;
+    const ny = (sy2 - this.offY) / this.cs;
+    const now = performance.now();
+    if (this.#px >= 0 && this.#moveT) {
+      const dt = Math.max(8, now - this.#moveT);
+      const sp = Math.hypot(nx - this.#px, ny - this.#py) / dt;
+      const target = clamp(sp / 0.09, 0, 1);
+      if (target > this.#energy) this.#energy += (target - this.#energy) * 0.5;
+      this.#agit = Math.min(2.2, this.#agit + target * 0.12);   // each sweep adds; it stacks the more you keep going
+      this.#maybeGrain(target, nx, ny);   // sandy grain ticks tied to how fast you're stirring
+    }
+    this.#moveT = now;
+    this.#px = nx; this.#py = ny;
+  }
+  unstir() { this.#px = this.#py = -1; this.#energy = 0; }
+
+  #rebuild() {
+    if (!this.#pX) {
+      const n = this.#pCap;
+      this.#pX = new Float32Array(n); this.#pY = new Float32Array(n);
+      this.#pV = new Float32Array(n); this.#pVY = new Float32Array(n);
+      this.#pA = new Float32Array(n); this.#pL = new Float32Array(n);
+      this.#pR = new Float32Array(n); this.#pX0 = new Float32Array(n); this.#pAcc = new Float32Array(n);
+    }
+    // horizontal field: extend the canvas raster to the RIGHT (empty room for
+    // emitted mist to fly into) while the M stays in the original CW region at
+    // the same cell size. `field`=1 is the normal square-ish canvas.
+    const field = Math.max(1, parseFloat(this.getAttribute("field")) || 1);
+    this.#cw = CW * field;
+    const dpr = this.#dpr;
+    const wantW = Math.round(this.#cw * dpr);
+    if (this.canvas.width !== wantW) {
+      this.canvas.width = wantW;
+      this.canvas.height = Math.round(CH * dpr);
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.scale(dpr, dpr);
+      this.style.aspectRatio = `${this.#cw} / ${CH}`;
+    }
+    // size presets: fewer, chunkier cells and less mist as the mark shrinks —
+    // at header size, fine mist reads as noise, so the small variants keep the
+    // letterform mostly solid and shed only a few particles.
+    const variant = this.getAttribute("variant") || "full";
+    const preset = variant === "glyph" ? { cols: 30, solid: 0.88, shed: 0.35, wisp: false }
+      : variant === "mark" ? { cols: 52, solid: 0.74, shed: 0.7, wisp: false }
+      : { cols: 90, solid: 0.62, shed: 1, wisp: true };
+    this.solidEdge = preset.solid;
+    this.shedMul = preset.shed;
+    this.wispOn = preset.wisp;
+    const cols = clamp(parseInt(this.getAttribute("cols") || String(preset.cols), 10) || preset.cols, 16, 180);
+    this.cols = cols;
+    this.cs = Math.max(2, Math.floor(CW / cols));
+    this.rows = Math.floor(CH / this.cs);
+    this.offX = Math.floor((CW - this.cs * cols) / 2);
+    this.offY = Math.floor((CH - this.cs * this.rows) / 2);
+    this.totalCols = Math.floor(this.#cw / this.cs);   // includes the extended field; edgeFade fades near here
+    const R = shapeRect(), halfW = this.brushW * 0.5, halfH = this.brushH * 0.5, STEPS = 12;
+    this.grid = new Uint8Array(cols * this.rows);
+    this.revealT = new Float32Array(cols * this.rows);
+    // per-cell displacement springs: pixels carry MOMENTUM — pushed cells ease
+    // out and swing back with a little overshoot instead of teleporting
+    this.sx = new Float32Array(cols * this.rows);
+    this.sy = new Float32Array(cols * this.rows);
+    this.svx = new Float32Array(cols * this.rows);
+    this.svy = new Float32Array(cols * this.rows);
+    this.bfBuf = new Float32Array(cols * this.rows);   // per-cell size for melt necks
+    for (let j = 0; j < this.rows; j++) for (let i = 0; i < cols; i++) {
+      const u = (this.offX + (i + 0.5) * this.cs - R.x) / R.s;
+      const v = (this.offY + (j + 0.5) * this.cs - R.y) / R.s;
+      this.revealT[j * cols + i] = projArcLen(u, v);
+      let hit = false;
+      for (let s = 0; s < STROKE.length - 1 && !hit; s++) {
+        const a = STROKE[s], b = STROKE[s + 1];
+        for (let k = 0; k < STEPS; k++) {
+          const f = k / (STEPS - 1);
+          const ccx = a[0] + (b[0] - a[0]) * f, ccy = a[1] + (b[1] - a[1]) * f;
+          if (capsuleUp(u - ccx, v - ccy, halfW, halfH) <= 0) { hit = true; break; }
+        }
+      }
+      if (hit) this.grid[j * cols + i] = STATIC;
+    }
+    // Letterform seeding. An explicit `shape` attribute (an RLE grid painted in
+    // edit mode at a specific cols) wins at its own resolution. Otherwise the
+    // canonical baked M is resampled into the current grid in canvas space, so
+    // the real letterform reads at ANY dpi — full res looks like the true mark,
+    // lower res is the same mark pixelated, not a rough path stamp.
+    const explicit = this.getAttribute("shape");
+    if (explicit && parseInt(explicit.split(":")[0], 10) === cols) {
+      try {
+        this.grid.fill(EMPTY);
+        const nums = explicit.split(":")[1].split(",").map(Number);
+        let k = 0;
+        for (let p = 0; p + 1 < nums.length && k < this.grid.length; p += 2) {
+          for (let n = 0; n < nums[p + 1] && k < this.grid.length; n++) this.grid[k++] = nums[p];
+        }
+      } catch (e) { /* bad shape string: keep the path stamp */ }
+    } else {
+      // resample the baked M: map each cell's canvas center back to a baked cell
+      this.grid.fill(EMPTY);
+      for (let j = 0; j < this.rows; j++) for (let i = 0; i < cols; i++) {
+        const cx = this.offX + (i + 0.5) * this.cs;
+        const cy = this.offY + (j + 0.5) * this.cs;
+        const bi = Math.floor((cx - BAKED_OFFX) / BAKED_CS);
+        const bj = Math.floor((cy - BAKED_OFFY) / BAKED_CS);
+        if (bi >= 0 && bi < BAKED.cols && bj >= 0 && bj < BAKED.rows
+          && BAKED.grid[bj * BAKED.cols + bi]) this.grid[j * cols + i] = STATIC;
+      }
+    }
+    // letterform bounding box (grid coords) so grain audio only fires when the
+    // cursor is actually over/near the mark, not anywhere on the empty canvas
+    let i0 = cols, i1 = -1, j0 = this.rows, j1 = -1;
+    for (let j = 0; j < this.rows; j++) for (let i = 0; i < cols; i++) {
+      if (!this.grid[j * cols + i]) continue;
+      if (i < i0) i0 = i; if (i > i1) i1 = i;
+      if (j < j0) j0 = j; if (j > j1) j1 = j;
+    }
+    this.#markBox = i1 >= 0 ? { i0, i1, j0, j1 } : null;
+  }
+
+  // ---- grain audio (sand-shifting ticks), preset-driven so it can be shuffled ----
+  #ensureAudio() {
+    if (this.getAttribute("sound") === "off") return null;
+    if (!this.#audio) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        const ctx = new AC();
+        const buf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        const master = ctx.createGain();
+        master.gain.value = 0.6;
+        this.#audio = ctx; this.#noiseBuf = buf; this.#master = master;
+        this.#buildReverb(SND_PRESETS[this.#sndIdx]);
+      } catch { return null; }
+    }
+    if (this.#audio.state === "suspended") this.#audio.resume();
+    return this.#audio;
+  }
+  // (re)build the reverb send for a preset. Every grain feeds a convolution
+  // tail (synthetic stereo decaying-noise impulse) so the sound reads echoey;
+  // routing is  master -> dry -> out  and  master -> predelay -> tail -> wet -> out.
+  #buildReverb(P) {
+    const ctx = this.#audio; if (!ctx) return;
+    try { this.#master.disconnect(); } catch { /* nothing wired yet */ }
+    for (const n of this.#revNodes) { try { n.disconnect(); } catch { /* already gone */ } }
+    const conv = ctx.createConvolver();
+    const len = Math.max(1, Math.floor(ctx.sampleRate * P.decay));
+    const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const id = ir.getChannelData(ch);
+      for (let i = 0; i < len; i++) id[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
+    }
+    conv.buffer = ir;
+    const pre = ctx.createDelay(0.5); pre.delayTime.value = P.pre;
+    const wet = ctx.createGain(); wet.gain.value = P.wet;
+    const dry = ctx.createGain(); dry.gain.value = P.dry;
+    this.#master.connect(dry); dry.connect(ctx.destination);
+    this.#master.connect(pre); pre.connect(conv); conv.connect(wet); wet.connect(ctx.destination);
+    this.#revNodes = [conv, pre, wet, dry];
+  }
+  // one super-short grain, shaped by the active preset: a filtered-noise tick
+  // ("noise") or a short tonal blip ("tone", optionally pitch-gliding down)
+  #grain(intensity) {
+    const ctx = this.#audio;
+    if (!ctx || ctx.state !== "running") return;
+    const P = SND_PRESETS[this.#sndIdx];
+    const t0 = ctx.currentTime;
+    const flt = ctx.createBiquadFilter();
+    flt.type = P.flt;
+    const f = P.f0 + Math.random() * (P.f1 - P.f0);
+    flt.frequency.value = f;
+    flt.Q.value = P.q0 + Math.random() * (P.q1 - P.q0);
+    const g = ctx.createGain();
+    const dur = P.d0 + Math.random() * (P.d1 - P.d0);
+    const peak = (0.05 + 0.16 * intensity) * (0.6 + 0.4 * Math.random()) * P.gain;
+    let node;
+    if (P.type === "tone") {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(f, t0);
+      if (P.glide) osc.frequency.exponentialRampToValueAtTime(Math.max(60, f * (1 - P.glide)), t0 + dur);
+      node = osc;
+    } else {
+      const src = ctx.createBufferSource();
+      src.buffer = this.#noiseBuf; src.loop = true;
+      src.playbackRate.value = P.r0 + Math.random() * (P.r1 - P.r0);
+      node = src;
+    }
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(peak, t0 + 0.0015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    node.connect(flt); flt.connect(g); g.connect(this.#master);
+    node.start(t0); node.stop(t0 + dur + 0.02);
+  }
+  // rate-limited grains while stirring — faster cursor => denser, louder sand
+  #maybeGrain(intensity, nx, ny) {
+    if (intensity < 0.05) return;
+    const b = this.#markBox;
+    if (b && (nx < b.i0 - 3 || nx > b.i1 + 3 || ny < b.j0 - 3 || ny > b.j1 + 3)) return;
+    const ctx = this.#ensureAudio();
+    if (!ctx || ctx.state !== "running") return;
+    const now = performance.now();
+    const gap = 46 - 34 * clamp(intensity, 0, 1);        // ms between grains
+    if (now - this.#lastGrainT < gap) return;
+    this.#lastGrainT = now;
+    this.#grain(intensity);
+    if (Math.random() < intensity * 0.6) this.#grain(intensity * 0.7);   // grainier texture
+  }
+  // a scattered handful of grains for the click blow-away
+  #burst() {
+    const ctx = this.#ensureAudio();
+    if (!ctx || ctx.state !== "running") return;
+    for (let k = 0; k < 14; k++) setTimeout(() => this.#grain(0.5 + Math.random() * 0.5), k * 12 * Math.random());
+  }
+  // audition the active preset: a ~0.8s flurry like a stir, so shuffling lets
+  // you HEAR each version immediately without moving the cursor
+  #demo() {
+    const ctx = this.#ensureAudio();
+    if (!ctx || ctx.state !== "running") return;
+    let t = 0;
+    for (let k = 0; k < 26; k++) { t += 18 + Math.random() * 30; setTimeout(() => this.#grain(0.4 + Math.random() * 0.5), t); }
+  }
+  #setSound(idx) {
+    this.#sndIdx = (idx % SND_PRESETS.length + SND_PRESETS.length) % SND_PRESETS.length;
+    this.#ensureAudio();
+    if (this.#audio) this.#buildReverb(SND_PRESETS[this.#sndIdx]);
+    return SND_PRESETS[this.#sndIdx].name;
+  }
+  // shuffle UI (`sound-shuffle` attribute): a button that jumps to a random
+  // preset and plays a demo, plus a readout of which one is active — so a
+  // preset can be picked by ear, then baked in as the default #sndIdx.
+  #buildSoundShuffle() {
+    if (this.getAttribute("sound-shuffle") === null) return;
+    if (this.shadowRoot.querySelector(".sndbar")) return;
+    const bar = document.createElement("div");
+    bar.className = "sndbar";
+    bar.innerHTML = `<style>
+      .sndbar { font-family: ui-monospace, monospace; font-size: 12px;
+        display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 16px; }
+      .sndbar button { font: inherit; color: #f2efe9; background: #2a2622;
+        border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+      .sndbar button:hover { background: #000; }
+      .sndbar .again { color: #2a2622; background: none; border: 1px solid #cfc8bd; }
+      .sndbar .again:hover { background: #e7e1d6; color: #000; }
+      .sndbar .nm { color: #6b645c; min-width: 150px; }
+      .sndbar .idx { color: #a89f95; }
+    </style>
+    <button class="sh">shuffle sound</button>
+    <button class="again">replay</button>
+    <span class="nm"></span>`;
+    const nm = bar.querySelector(".nm");
+    const show = () => { nm.innerHTML = `<span class="idx">${this.#sndIdx + 1}/${SND_PRESETS.length}</span> ${SND_PRESETS[this.#sndIdx].name}`; };
+    show();
+    bar.querySelector(".sh").addEventListener("click", () => {
+      let n = this.#sndIdx;
+      while (SND_PRESETS.length > 1 && n === this.#sndIdx) n = Math.floor(Math.random() * SND_PRESETS.length);
+      this.#setSound(n); show(); this.#demo();
+    });
+    bar.querySelector(".again").addEventListener("click", () => { this.#ensureAudio(); this.#demo(); });
+    this.shadowRoot.appendChild(bar);
+  }
+
+  #drag() {
+    const { cols, rows, svx, svy } = this;
+    const c = this.couple * 0.25;   // per-neighbor share
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const k = j * cols + i;
+        let ax = 0, ay = 0, n = 0;
+        if (i > 0) { ax += svx[k - 1]; ay += svy[k - 1]; n++; }
+        if (i < cols - 1) { ax += svx[k + 1]; ay += svy[k + 1]; n++; }
+        if (j > 0) { ax += svx[k - cols]; ay += svy[k - cols]; n++; }
+        if (j < rows - 1) { ax += svx[k + cols]; ay += svy[k + cols]; n++; }
+        svx[k] += c * (ax / n - svx[k]);
+        svy[k] += c * (ay / n - svy[k]);
+      }
+    }
+  }
+
+  // launch one carry-stream pixel from grid cell (gi,gj). It leaves at a FIXED
+  // rightward speed (~the golden shed's speed) and lives `life` frames; a
+  // stronger gust only lengthens the life, so distance = speed*life carries
+  // further without the pixel ever moving faster or spreading out.
+  #spawnP(gi, gj, revA, life, accel) {
+    const n = this.#pHead; this.#pHead = (n + 1) % this.#pCap;
+    const cs = this.cs;
+    this.#pX[n] = this.offX + (gi + 0.5) * cs;
+    this.#pY[n] = this.offY + (gj + 0.5) * cs;
+    this.#pX0[n] = this.#pX[n];                                 // spawn x, for the beyond-golden fade-in
+    this.#pV[n] = cs * (0.4 + 0.14 * Math.random());           // rightward speed (px/frame) — golden-ish drift
+    this.#pVY[n] = (Math.random() - 0.5) * cs * 0.14 - this.buoy * cs * 0.05;
+    this.#pL[n] = life;                                        // longer life = travels further (set by caller)
+    this.#pAcc[n] = accel || 0;                               // >0 on a click puff => visibly accelerates right
+    this.#pA[n] = 0;
+    this.#pR[n] = revA;
+  }
+
+  // advance + draw the live carry-stream pixels. Position is integrated at a
+  // constant velocity and snapped to the grid on draw, so spacing stays uniform
+  // (no stretch). Each pixel holds full size for most of its run, then shrinks
+  // and fades over the last stretch — "travels further before going small."
+  #drawP(dtn) {
+    if (!this.#pL) return;
+    const cs = this.cs, offX = this.offX, offY = this.offY;
+    // carry pixels fade IN only once they pass the golden shed's reach, so the
+    // near edge stays golden (twinkling) and these just extend the trail
+    const nearPx = this.reach * CW;
+    for (let n = 0; n < this.#pCap; n++) {
+      const life = this.#pL[n];
+      if (life <= 0) continue;
+      const a = this.#pA[n] + dtn;
+      if (a >= life) { this.#pL[n] = 0; continue; }
+      this.#pA[n] = a;
+      this.#pV[n] += this.#pAcc[n] * dtn;                     // click-puff pixels speed up as they blow out
+      this.#pX[n] += this.#pV[n] * dtn;
+      this.#pY[n] += this.#pVY[n] * dtn;
+      const tail = clamp((a / life - 0.6) / 0.4, 0, 1);        // full size for 60% of the run, then shrink
+      const sf = 0.4 - 0.28 * tail;                            // a touch thinner than the golden shed dots
+      if (sf < 0.14) continue;
+      const gi = Math.round((this.#pX[n] - offX) / cs);
+      const gj = Math.round((this.#pY[n] - offY) / cs);
+      const fadeIn = smoothstep(nearPx * 0.6, nearPx * 1.1, this.#pX[n] - this.#pX0[n]);
+      this.#cell(gi, gj, sf, this.#pR[n] * (1 - tail * tail) * 0.7 * fadeIn, true);
+    }
+  }
+
+  // fade to nothing over the last ~10 columns so departing mist dissolves in
+  // the air instead of clipping against the canvas edge as a hard line.
+  // `soft` = tiny shed dots that should carry almost to the edge (they dissolve
+  // by their own life anyway) — only fade the last ~2 columns.
+  #edgeFade(gi, soft) {
+    const edge = this.totalCols;   // right edge of the (possibly extended) canvas
+    return soft
+      ? 1 - smoothstep(edge - 2.5, edge - 0.5, gi)
+      : 1 - smoothstep(edge - 11, edge - 1.5, gi);
+  }
+
+  // quantize a size fraction to the configured number of largeness steps
+  // (12 = pass through; the pixel grid itself is the only quantizer then)
+  #q(s) {
+    return this.sizeLevels >= 12 ? s : Math.round(s * this.sizeLevels) / this.sizeLevels;
+  }
+
+  #cell(gi, gj, sizeFrac, alpha, softEdge) {
+    const { ctx, cs, offX, offY } = this;
+    const edge = this.#edgeFade(gi, softEdge);
+    if (edge <= 0.02) return;
+    sizeFrac = this.#q(sizeFrac);
+    if (sizeFrac <= 0.001) return;
+    const inset = Math.round(cs * (1 - sizeFrac) * 0.5);
+    const near = clamp((sizeFrac - 0.14) / 0.76, 0, 1);
+    ctx.globalAlpha = alpha * (1 - this.depthAmt * (1 - near) * 0.6) * edge;
+    const x = offX + gi * cs + inset, y = offY + gj * cs + inset, w = cs - 2 * inset;
+    // corner rounds size-aware (small pixels first); melt rounds EVERYTHING
+    // uniformly like Otsu — at high melt even isolated dots are near-circles
+    const rFrac = Math.max(this.corner * ((1 - near) + near * this.corner), this.melt);
+    if (rFrac > 0.001 && w > 2) {
+      const r = rFrac * w * 0.5;
+      if (this.shapeRes >= 2) {
+        // PIXELATED shape: rasterize the rounded square on an n×n subgrid —
+        // each subcell is fully on or fully off (hard steps, no dithering),
+        // so high corner gives chunky retro circles
+        const n = Math.round(this.shapeRes);
+        const sub = w / n;
+        const half = w / 2, rr = Math.min(r, half);
+        for (let sy = 0; sy < n; sy++) {
+          for (let sxp = 0; sxp < n; sxp++) {
+            const px = (sxp + 0.5) * sub - half, py = (sy + 0.5) * sub - half;
+            const ddx = Math.abs(px) - (half - rr), ddy = Math.abs(py) - (half - rr);
+            const sd = Math.hypot(Math.max(ddx, 0), Math.max(ddy, 0)) - rr;
+            if (sd <= 0) ctx.fillRect(Math.round(x + sxp * sub), Math.round(y + sy * sub), Math.ceil(sub), Math.ceil(sub));
+          }
+        }
+      } else {
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, w, r);
+        ctx.fill();
+      }
+    } else {
+      ctx.fillRect(x, y, w, w);
+    }
+  }
+
+  #draw() {
+    if (this.hasAttribute("edit")) { this.#drawEdit(); return; }
+    const { ctx, cols, rows, cs, offX, offY } = this;
+    const fr = this.#fr, t = fr / FPS;
+    // frame-rate-normalized timestep for the displacement springs (1 = 60fps),
+    // so the momentum feels identical on 30hz panes and 120hz displays
+    const nowD = performance.now();
+    const dtn = clamp((nowD - (this.#drawT || nowD - 16.7)) / 16.7, 0.25, 3);
+    this.#drawT = nowD;
+    // fractional substep accumulator: springs advance in whole 60hz steps no
+    // matter the display rate (120hz runs a step every other draw, 30hz two)
+    this.#springAcc = (this.#springAcc || 0) + dtn;
+    const springSub = Math.floor(this.#springAcc);
+    this.#springAcc -= springSub;
+    // neighbor drag: a moving pixel tugs the cells around it by sharing a bit
+    // of its velocity with them (viscosity over the spring field), so a push
+    // reads as displacing a connected body of mist, not isolated dots
+    if (this.couple > 0.001) for (let n = 0; n < springSub; n++) this.#drag();
+    ctx.clearRect(0, 0, this.#cw, CH);
+    ctx.fillStyle = this.getAttribute("color") || "#fff";
+
+    const live = this.getAttribute("mode") === "live";
+    const REDGE = 0.12;
+    const drawProg = clamp(fr / this.drawEnd, 0, 1) * (1 + REDGE);
+    let blowProg = 0;
+    if (live) {
+      if (this.#blowAt !== null) {
+        blowProg = clamp((fr - this.#blowAt) / this.blowLen, 0, 1);
+        if (fr - this.#blowAt > this.blowLen + 24) this.replay();   // regrow after the blow
+      }
+    } else {
+      blowProg = clamp((fr - this.blowStartF) / Math.max(1, this.loopDur - this.blowStartF), 0, 1);
+    }
+    const travel = this.reach * CW;
+    // ease the shed-carry multiplier toward its target (dt-normalized) so
+    // ramping emitReach on hover reads as a gust that settles back
+    this.#emitR += (this.emitReach - this.#emitR) * Math.min(1, 0.12 * dtn);
+    const gustStr = clamp(this.#emitR - 1, 0, 6);   // 0 at rest; drives the carry stream
+    const R = shapeRect();
+    if (this.melt > 0.001) this.bfBuf.fill(0);
+    // overall scale (1 = golden). Applied as a CSS zoom of the whole canvas
+    // element, anchored at the mark's center — NOT an in-canvas transform — so
+    // large sizes are never clipped by the fixed canvas raster. The raster is
+    // high-res, so zooming it stays crisp. Grid-locked motion is untouched; the
+    // finished frame just scales up as a unit.
+    if (this.scale !== this.#appliedScale) {
+      this.canvas.style.transformOrigin = "center";
+      this.canvas.style.transform = Math.abs(this.scale - 1) > 0.001 ? `scale(${this.scale})` : "";
+      this.#appliedScale = this.scale;
+    }
+    // pointer disturbance field (grid coords), sized by cursor speed: resting
+    // = a small dimple, sweeping fast = a wide wake that settles as it fades
+    const en = this.#energy;
+    const pxi = this.#px, pyj = this.#py;
+    // accumulated agitation widens + deepens the bulge, so repeated sweeps push
+    // the pixels further and further before it settles back
+    const PR = cols * 0.15 * (0.35 + 0.75 * en) * (1 + this.#agit * 0.6);
+    const HOLE = PR * 0.42;
+    // the shed mist's drift rate (cells per 60hz frame) — the return home is
+    // capped to this, so a displaced pixel settles back over the SAME time a
+    // particle takes to drift that far off to the right (more buildup = longer)
+    const vDrift = travel * this.speed / (cs * 120);
+
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        if (this.grid[j * cols + i] === EMPTY) continue;
+        const revA = clamp((drawProg - this.revealT[j * cols + i]) / REDGE, 0, 1);
+        if (revA <= 0.001) continue;
+        const hv = hash(i, j);
+
+        const u = (offX + (i + 0.5) * cs - R.x) / R.s;
+        const v = (offY + (j + 0.5) * cs - R.y) / R.s;
+        const tx = ((u - 0.239) + (v - 0.5) * this.slant) / 0.542;
+        const rightness = smoothstep(this.solidEdge, 1.02, tx);
+        const wob = vnoise2(i * this.noiseScale + t * 0.5 * this.noiseSpeed,
+          j * this.noiseScale + t * 0.2 * this.noiseSpeed);
+        const pulse = (0.9 - this.noiseDepth * 0.5) + this.noiseDepth * wob;
+        let baseFrac = clamp((0.84 - 0.55 * rightness) * pulse, 0.12, 0.9);
+
+        // pointer: a radial BULGE field (liquify-style push). r -> sqrt(r²+a²)
+        // is strictly increasing, so pixels never land on each other: the ones
+        // at the cursor push out hard, the next ring shifts to make room, and
+        // every original pixel stays visible — crowded, not merged. Each pixel
+        // keeps its identity: it still breathes, emits, and blows away the
+        // same as before, just from its displaced spot.
+        // the bulge field gives each cell a TARGET displacement; a per-cell
+        // spring chases it, so pixels have weight — they get shoved out, then
+        // swing back home with momentum and a little overshoot when released.
+        let tdx = 0, tdy = 0, prox = 0;
+        if (pxi >= 0) {
+          const rr = Math.hypot(i - pxi, j - pyj);
+          if (rr < PR * 1.3) {
+            const nx = rr > 0.001 ? (i - pxi) / rr : Math.cos(hv * 6.283);
+            const ny = rr > 0.001 ? (j - pyj) / rr : Math.sin(hv * 6.283);
+            // the hole is gently NOISY, not a disc: its radius wobbles a little
+            // around the rim (noise over the push direction + time), so the
+            // opening reads as a soft organic blob — wavy, but still roundish
+            const rim = vnoise2(nx * 2.1 + t * 0.55, ny * 2.1 + 7.3 + t * 0.4);
+            const hole = HOLE * (0.78 + 0.44 * rim);
+            const R2 = PR * (0.88 + 0.24 * rim);
+            if (rr < R2) {
+              prox = 1 - rr / R2;
+              const fall = 1 - smoothstep(0.55, 1, rr / R2);   // full push inside, eases to 0 at the edge
+              const disp = (Math.sqrt(rr * rr + hole * hole) - rr) * fall;
+              // a touch of swirl: pixels smear AROUND the hole as well as away
+              // from it, so the crowding looks stirred, not stamped
+              const sw = (vnoise2(i * 0.16 + t * 0.5, j * 0.16 - t * 0.3) - 0.5) * disp * 0.4;
+              tdx = nx * disp - ny * sw;
+              tdy = ny * disp + nx * sw;
+              baseFrac *= 1 - 0.2 * prox;
+            }
+          }
+        }
+        // spring integration, dt-normalized so it feels the same at any frame
+        // rate: the push chases the cursor fast, the return home is slower and
+        // heavier (underdamped, so it settles with a little swing). Rendering
+        // stays grid-locked via the final round().
+        const k = j * cols + i;
+        {
+          const pushing = (Math.abs(tdx) + Math.abs(tdy)) > 0.01;
+          const stiff = pushing ? 0.08 : this.retStiff;
+          const damp = pushing ? 0.84 : this.retDamp;
+          const sx0 = this.sx[k], sy0 = this.sy[k];
+          // substep for frame-rate independence: whole stable 60hz steps only
+          // (never scale one step up — that makes the spring oscillate apart)
+          for (let n = 0; n < springSub; n++) {
+            this.svx[k] = (this.svx[k] + (tdx - this.sx[k]) * stiff) * damp;
+            this.svy[k] = (this.svy[k] + (tdy - this.sy[k]) * stiff) * damp;
+            this.sx[k] += this.svx[k];
+            this.sy[k] += this.svy[k];
+          }
+          if (!pushing) {
+            // cap the return step to the mist drift rate — it eases toward home
+            // but never snaps back faster than a shed particle drifts away
+            const dxm = this.sx[k] - sx0, dym = this.sy[k] - sy0;
+            const mv = Math.hypot(dxm, dym), cap = vDrift * dtn;
+            if (mv > cap && mv > 1e-4) { const s = cap / mv; this.sx[k] = sx0 + dxm * s; this.sy[k] = sy0 + dym * s; this.svx[k] *= s; this.svy[k] *= s; }
+          }
+          if (Math.abs(this.sx[k]) < 0.01 && Math.abs(this.svx[k]) < 0.01) { this.sx[k] = 0; this.svx[k] = 0; }
+          if (Math.abs(this.sy[k]) < 0.01 && Math.abs(this.svy[k]) < 0.01) { this.sy[k] = 0; this.svy[k] = 0; }
+        }
+        const dx = Math.round(this.sx[k]), dy = Math.round(this.sy[k]);
+
+        const stag = hash(i + 5.2, j + 8.1);
+        const delay = clamp((stag * 0.7 + (1 - rightness) * 0.3) * this.stagger, 0, 0.9);
+        const bp = clamp((blowProg - delay) / Math.max(0.08, 1 - delay), 0, 1);
+        if (bp > 0.001) {
+          const sp = (0.45 + 0.55 * hv) * (0.7 + 0.7 * baseFrac);
+          const fl = sp * bp * bp;
+          const trav = smoothstep(0.08, 0.85, fl);
+          if (hash(i + 4.3, j + 2.1) < trav) continue;
+          const curl = Math.sin(fl * 4.0 + hv * 6.283) * 1.6 * fl;
+          const offc = fl * cols * 1.5 * this.blowReach;
+          const rawX = offc;
+          const wide = this.blowReach > 1.05;   // wide dispersal: carry to the canvas edge before dissolving
+          const rawY = (hash(i + 7.1, j + 3.7) - 0.5) * 4 * fl + curl - this.buoy * fl * 7;
+          // blow FROM the displaced spot: the cursor moved this pixel, and it
+          // leaves from wherever it currently sits
+          const gjc = j + dy + Math.round(rawY);
+          const szf = baseFrac * (1 - 0.9 * trav) * (0.55 + 0.45 * hash(i + 5.5, j + 6.6));
+          if (hash(i + 8.7, j + 1.3) < this.stretchAmt) {
+            // gum stretch: grid-locked widen (right edge leads, left lags), thinner the wider
+            const rC = Math.round(rawX + 0.75);
+            const lC = Math.round(rawX - 0.45);
+            const stretchW = rC - lC;
+            const thin = 1 / (1 + 0.45 * stretchW);
+            const szfQ = this.#q(szf);
+            const insetX = Math.round(cs * (1 - szfQ) * 0.5);
+            const insetY = Math.round(cs * (1 - szfQ * thin) * 0.5);
+            const edge = this.#edgeFade(i + dx + rC, wide);
+            if (edge <= 0.02) continue;
+            ctx.globalAlpha = edge;
+            ctx.fillRect(offX + (i + dx + lC) * cs + insetX, offY + gjc * cs + insetY,
+              (rC - lC + 1) * cs - 2 * insetX, cs - 2 * insetY);
+          } else {
+            this.#cell(i + dx + Math.round(rawX), gjc, szf, 1, wide);
+          }
+          continue;
+        }
+
+        // melt grows the living cell toward filling its slot so dense cells
+        // bond; its size registers for the neck connectors drawn after the loop
+        let drawSize = baseFrac;
+        if (this.melt > 0.001) {
+          // Otsu-style: any solidly-lit cell goes FULL SLOT (no gutters), so
+          // the dense body fuses into one liquid mass; faint mist cells stay
+          // small separate dots. Ramps in with the slider.
+          const solid = smoothstep(0.2, 0.5, baseFrac) * Math.min(1, this.melt * 1.6);
+          drawSize = Math.max(baseFrac, solid);
+          const gi2 = i + dx, gj2 = j + dy;
+          if (gi2 >= 0 && gi2 < cols && gj2 >= 0 && gj2 < rows) this.bfBuf[gj2 * cols + gi2] = drawSize;
+        }
+        this.#cell(i + dx, j + dy, drawSize, revA);
+
+        // shed mist: burst while revealing, steady stream from the right side;
+        // pointer proximity sheds extra (you're blowing on it)
+        const rt2 = this.revealT[j * cols + i];
+        const frontBurst = clamp(1 - (drawProg - rt2) / 0.18, 0, 1) * (0.12 + 0.88 * rt2);
+        const gust = this.#emitR > 1.05;
+        const shed = Math.max(Math.max(rightness * 0.95, frontBurst), prox * 0.85) * this.shedMul;
+        if (shed > 0.05) {
+          // GOLDEN shed — the resting stream, ALWAYS on so the M's right edge
+          // keeps twinkling in every state. It reaches ~restCells and fades.
+          for (let k = 0; k < 3; k++) {
+            if (hash(i + k * 11, j + 3.1) > shed) continue;
+            const p = fract(t * this.speed * 0.5 + hv + k * 0.6180339);
+            const ez = p * p;
+            const gi = i + dx + Math.round(ez * travel / cs);
+            const gj = j + dy + Math.round((hash(i + k * 13, j + k * 7) - 0.5) * this.spread * 3 * ez
+              + Math.sin(ez * 5.0 + hv * 6.283) * 1.4 * ez
+              - this.buoy * ez * 5);
+            const sf = 0.55 - 0.42 * p;
+            if (sf < 0.14) continue;
+            this.#cell(gi, gj, sf, revA * (1 - p * p) * 0.8, gust);
+          }
+          // CARRY stream — only on a gust, and it only becomes VISIBLE beyond the
+          // golden shed's reach (see #drawP fade-in), so it doesn't pile on top
+          // of the near edge (that stays golden/twinkling). It just extends the
+          // trail further right. Spawn rate ~1/life keeps the far count sparse.
+          if (gustStr > 0.02) {
+            const life = 20 + 170 * gustStr;   // long run => at the slow golden drift, still reaches ~4x further
+            const pFade = clamp(gustStr * 0.7, 0, 1);
+            // a strong (click-level) gust accelerates its pixels rightward so
+            // the burst animates OUT like the real blow; a hover stays constant
+            const accel = gustStr > 5 ? cs * 0.02 * (gustStr - 5) : 0;
+            if (Math.random() < (3 / life) * shed * pFade * dtn) {
+              this.#spawnP(i + dx, j + dy, revA, life, accel);
+            }
+          }
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // carry-stream pixels (launched by gusts above) fly and draw here
+    this.#drawP(dtn);
+
+    // top-right wisp off the shoulder
+    {
+      const sh = STROKE[STROKE.length - 1];
+      const si = Math.round((R.x + sh[0] * R.s - offX) / cs);
+      const sj = Math.round((R.y + sh[1] * R.s - offY) / cs);
+      const on = this.wispOn ? smoothstep(0.85, 1.0, drawProg) * (1 - smoothstep(0.65, 1.0, blowProg)) : 0;
+      if (on > 0.02) {
+        for (let k = 0; k < 7; k++) {
+          const seed = hash(k * 12.9 + 4.7, k * 3.1 + 8.3);
+          const p = fract(t * 0.32 + seed);
+          const ez = p * p;
+          const gi = si + 1 + Math.round(ez * (8 + seed * 16));
+          const gj = sj - 1 + Math.round((seed - 0.5) * 3 + ez * 3 + Math.sin(ez * 5 + seed * 6.28) * 1.2);
+          const sf = (0.3 - 0.2 * p) * (0.55 + 0.45 * seed);
+          if (sf < 0.12) continue;
+          this.#cell(gi, gj, sf, on * (1 - p * p) * 0.7);
+        }
+      }
+    }
+
+    // melt necks: crisp tangent-arc connectors bonding adjacent living cells
+    // (ported from Otsu's path builder via Mist Studio). Cells that blow away
+    // stop registering, so bonds dissolve naturally as the mark leaves.
+    if (this.melt > 0.001) {
+      const p = this.#connectors(this.melt);
+      if (p) { ctx.globalAlpha = 1; ctx.fillStyle = this.getAttribute("color") || "#fff"; ctx.fill(p); }
+    }
+
+  }
+
+  #connectors(d) {
+    const { cols, rows, cs, offX, offY, bfBuf } = this;
+    const path = new Path2D();
+    let any = false;
+    const rad = (i, j) => cs * bfBuf[j * cols + i] * 0.5;
+    const lit = (i, j) => i >= 0 && j >= 0 && i < cols && j < rows && bfBuf[j * cols + i] > 0.001;
+    const arcSeg = (cx, cy, from, to, r) => {
+      const a0 = Math.atan2(from[1] - cy, from[0] - cx);
+      let dlt = Math.atan2(to[1] - cy, to[0] - cx) - a0;
+      while (dlt <= -Math.PI) dlt += Math.PI * 2;
+      while (dlt > Math.PI) dlt -= Math.PI * 2;
+      path.arc(cx, cy, r, a0, a0 + dlt, dlt < 0);
+    };
+    const neck = (ai, aj, bi, bj) => {
+      const Pcx = offX + (ai + 0.5) * cs, Pcy = offY + (aj + 0.5) * cs;
+      const Fcx = offX + (bi + 0.5) * cs, Fcy = offY + (bj + 0.5) * cs;
+      const U = Math.min(rad(ai, aj), rad(bi, bj));
+      if (U <= 0) return;
+      const G = Math.hypot(Fcx - Pcx, Fcy - Pcy);
+      if (G <= 0) return;
+      const V = (2 + 2 * d) * U;
+      const Y = clamp((V - G) / (V - 2 * U), 0, 1);
+      const X = G < 2 * U ? Math.sqrt(U * U - G * G / 4) : 0;
+      let te = d * U * 0.9 * Y;
+      if (X > 0) te = Math.max(te, Math.min(U * 0.95, X + d * 0.9 * (U - X)));
+      else if (Y < 0.35) return;
+      if (te <= X || te >= U) return;
+      const ve = (G * G / 4 + te * te - U * U) / (2 * (U - te));
+      if (ve <= 0) return;
+      const gx = (Fcx - Pcx) / G, gy = (Fcy - Pcy) / G;
+      const mx = (Pcx + Fcx) / 2, my = (Pcy + Fcy) / 2, Ae = te + ve;
+      const n1x = mx - gy * Ae, n1y = my + gx * Ae, n2x = mx + gy * Ae, n2y = my - gx * Ae;
+      const ke = (hx, hy, ox, oy) => [hx + (ox - hx) * U / (U + ve), hy + (oy - hy) * U / (U + ve)];
+      const rn = ke(Pcx, Pcy, n1x, n1y), De = ke(Fcx, Fcy, n1x, n1y);
+      const bt = ke(Fcx, Fcy, n2x, n2y), Pt = ke(Pcx, Pcy, n2x, n2y);
+      path.moveTo(rn[0], rn[1]);
+      arcSeg(n1x, n1y, rn, De, ve);
+      path.lineTo(bt[0], bt[1]);
+      arcSeg(n2x, n2y, bt, Pt, ve);
+      path.closePath();
+      any = true;
+    };
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      if (!lit(i, j)) continue;
+      if (lit(i + 1, j)) neck(i, j, i + 1, j);
+      if (lit(i, j + 1)) neck(i, j, i, j + 1);
+      if (lit(i + 1, j + 1)) neck(i, j, i + 1, j + 1);
+      if (lit(i - 1, j + 1)) neck(i, j, i - 1, j + 1);
+    }
+    return any ? path : null;
+  }
+}
+
+customElements.define("mist-logo", MistLogo);
+  </script>
+</body>
+</html>

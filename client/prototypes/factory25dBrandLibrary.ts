@@ -21,7 +21,7 @@ export function createBrandLibrary(parent: THREE.Group, canvas: HTMLCanvasElemen
   const urls = new Set<string>(), timers = new Set<ReturnType<typeof setTimeout>>();
   const dialog = document.createElement('dialog'); dialog.className = 'brand-library';
   dialog.setAttribute('aria-labelledby', 'brand-library-title');
-  dialog.innerHTML = `<section class="brand-library-sheet"><header class="brand-library-header"><div><p>FLUID FACTORY / BRAND SHELF</p><h2 id="brand-library-title">the brand shelf</h2><span>Fluid + We Commerce logos, ready for your next thing.</span></div><a class="brand-bundle" href="/brand/fluid-we-commerce-logos.zip" download="fluid-we-commerce-logos.zip">download all ↓ <small>8 originals · ZIP</small></a></header><div class="brand-library-tools"><div class="brand-library-filters" role="group" aria-label="Filter by brand"></div><input type="search" aria-label="Find a logo" placeholder="find a logo…"></div><p class="brand-library-count" role="status"></p><div class="brand-library-grid"></div><footer>Original SVGs stay crisp at any size. PNGs have a transparent background.</footer></section><nav class="brand-library-dock pixel-island"><button type="button">← room</button><span>brand shelf</span></nav>`;
+  dialog.innerHTML = `<section class="brand-library-sheet"><header class="brand-library-header"><div><p>FLUID FACTORY / BRAND SHELF</p><h2 id="brand-library-title">the brand shelf</h2><span>Fluid, We Commerce + Mist logos, ready for your next thing.</span></div><a class="brand-bundle" href="/brand/factory-brand-assets.zip" download="factory-brand-assets.zip">download all ↓ <small>9 logos + Mist HTML · ZIP</small></a></header><div class="brand-library-tools"><div class="brand-library-filters" role="group" aria-label="Filter by brand"></div><input type="search" aria-label="Find a logo" placeholder="find a logo…"></div><p class="brand-library-count" role="status"></p><div class="brand-library-grid"></div><footer>Original SVGs stay crisp at any size. PNGs have a transparent background.</footer></section><nav class="brand-library-dock pixel-island"><button type="button">← room</button><span>brand shelf</span></nav>`;
   document.body.append(dialog);
   const grid = dialog.querySelector<HTMLElement>('.brand-library-grid')!;
   const count = dialog.querySelector<HTMLElement>('.brand-library-count')!;
@@ -104,11 +104,14 @@ export function createBrandLibrary(parent: THREE.Group, canvas: HTMLCanvasElemen
       const raster = document.createElement('button'); raster.type = 'button'; raster.textContent = 'PNG ↓'; raster.setAttribute('aria-label', `Download ${asset.brand} ${asset.title} ${asset.variant} PNG`);
       // Cards are replaced when filtering; local listeners are collected with them.
       raster.addEventListener('click', () => { void png(asset, raster); });
-      actions.append(svg, raster); details.append(label, title, actions); card.append(preview, details); grid.append(card);
+      actions.append(svg, raster);
+      if(asset.brand==='Mist'){
+        const html=document.createElement('a');html.href='/brand/mist-logo-original.html';html.download='mist-logo-original.html';html.textContent='HTML ↓';html.setAttribute('aria-label','Download animated Mist HTML');actions.append(html);
+      } details.append(label, title, actions); card.append(preview, details); grid.append(card);
     }
     if (!assets.length) { const empty = document.createElement('p'); empty.className = 'brand-library-empty'; empty.textContent = 'No logos match that. Try Fluid, We Commerce, white, or black.'; grid.append(empty); }
   }
-  for (const name of ['All', 'Fluid', 'We Commerce']) {
+  for (const name of ['All', 'Fluid', 'We Commerce', 'Mist']) {
     const button = document.createElement('button'); button.type = 'button'; button.textContent = name; button.setAttribute('aria-pressed', String(name === brand));
     button.addEventListener('click', () => { brand = name; for (const item of filters.querySelectorAll('button')) item.setAttribute('aria-pressed', String(item === button)); paint(); }, events); filters.append(button);
   }
@@ -119,6 +122,7 @@ export function createBrandLibrary(parent: THREE.Group, canvas: HTMLCanvasElemen
   for (const [name, label, selectedBrand, query] of [
     ['fluid-logo-sculpture', 'Fluid sculpture', 'Fluid', 'symbol'],
     ['we-commerce-postcard', 'We Commerce postcard', 'We Commerce', 'signature'],
+    ['mist-logo-plaque', 'Mist plaque', 'Mist', ''],
     ['fluid-mug', 'Fluid mug', 'Fluid', ''],
     ['we-commerce-enamel-badge', 'We Commerce badge', 'We Commerce', 'symbol'],
     ['folded-we-commerce-tee', 'We Commerce shirt', 'We Commerce', 'symbol'],
@@ -143,6 +147,7 @@ export function createBrandLibrary(parent: THREE.Group, canvas: HTMLCanvasElemen
   const bounds = new THREE.Box3(), point = new THREE.Vector3();
   return { camera, focusPoint: () => focus, isActive: () => active, addTrigger,
     update(now: number, viewCamera: THREE.OrthographicCamera, room?: Room) {
+      shelf.update();
       available = room;
       if (!active) sourceCamera = viewCamera;
       if (active) {

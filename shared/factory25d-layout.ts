@@ -10,6 +10,7 @@ export const MINI_WORK_PACK_MS = 4_500;
 export const MINI_WORK_RETRIEVAL_MS = 2_300;
 // These matching door landings are connected by the elevator shaft.
 export const GARAGE_MINI_LOOKOUTS = [-1.15, .35].map(x => ({ x, z: GARAGE_WORLD_Z + 3.05 }));
+export const ELEVATOR_BODY = { width: 1.36, near: -4.5, far: -3.8 } as const;
 export const FACTORY_ELEVATOR = { x: -7.1, z: -2.9 };
 export const GARAGE_ELEVATOR = { x: -10.5, z: GARAGE_WORLD_Z - 2.9 };
 // New arrivals enter through the visible, open patio doorway.
@@ -21,6 +22,7 @@ export const INDOOR_COLUMNS = [-5.5, -3.3, -1.1, 1.1, 3.3, 5.5];
 export const INDOOR_ROWS = [-3.8, 0.33];
 export const INTERIOR_Z = 1.95;
 export const FRONT_COUNTER = { x: -2.42, z: 6.65, width: 3.36, depth: .42, topY: .53 } as const;
+export const DJ_BOOTH = { x: 3.5, z: 7.84, width: 1.48, depth: 1.1 } as const;
 export const BRAND_SHELF = { x: -4.84, z: 6.61, width: 1.48, depth: .5, height: 1.18, rotationY: 0 } as const;
 export const FRONT_VENDING = { x: -1, z: 9.65, rotationY: -Math.PI / 3, halfWidth: .54, halfDepth: .59 } as const;
 export type Workstation = { id: string; room: FactoryRoom; x: number; z: number; label: string; halfWidth?: number };
@@ -65,6 +67,8 @@ export const FACTORY_BODY_RADIUS = 0.22;
 const margin = FACTORY_BODY_RADIUS;
 export const FACTORY_OBSTACLES: Obstacle[] = [
   ...PATIO_OBSTACLES,
+  ...[FACTORY_ELEVATOR,GARAGE_ELEVATOR].map(lift=>({id:'elevator-body',left:lift.x-ELEVATOR_BODY.width/2,right:lift.x+ELEVATOR_BODY.width/2,near:ELEVATOR_BODY.near+(lift===GARAGE_ELEVATOR?GARAGE_WORLD_Z:0),far:ELEVATOR_BODY.far+(lift===GARAGE_ELEVATOR?GARAGE_WORLD_Z:0)})),
+  { id: 'dj-booth', left: DJ_BOOTH.x-DJ_BOOTH.width/2, right: DJ_BOOTH.x+DJ_BOOTH.width/2, near: DJ_BOOTH.z-DJ_BOOTH.depth/2, far: DJ_BOOTH.z+DJ_BOOTH.depth/2 },
   { left:BRAND_SHELF.x-BRAND_SHELF.width/2, right:BRAND_SHELF.x+BRAND_SHELF.width/2, near:BRAND_SHELF.z-BRAND_SHELF.depth/2, far:BRAND_SHELF.z+BRAND_SHELF.depth/2 }, // Built-in display joins the shorter front counter.
   ...WORKSTATIONS.filter(station => station.id !== MINI_WORKSTATION_ID).map(station => ({ left: station.x - (station.halfWidth ?? (station.room === 'patio' ? 0.77 : 0.36)), right: station.x + (station.halfWidth ?? (station.room === 'patio' ? 0.77 : 0.36)), near: station.z - 0.3, far: station.z + 0.32 })),
   ...GARAGE_CAR_IDS.map(id => { const bay=GARAGE_CAR_BAYS[id],bounds=GARAGE_PARKED_BOUNDS[id]; return {left:bay.x+bounds.left,right:bay.x+bounds.right,near:GARAGE_WORLD_Z+bay.z+bounds.near,far:GARAGE_WORLD_Z+bay.z+bounds.far}; }),
@@ -74,9 +78,9 @@ export const FACTORY_OBSTACLES: Obstacle[] = [
   { left: -8.775, right: -7.525, near: GARAGE_WORLD_Z - 4.1, far: GARAGE_WORLD_Z - 3.6 }, // Preserved plant shelf between the lower lift and window desks.
   { left: 7.88, right: 8.01, near: -4.7, far: -3.25 },
   { left: 7.88, right: 8.01, near: -1.75, far: 14.1 },
-  { left: -7.88, right: -7.6, near: 5.46, far: 5.62 },
+  { left: -8.1, right: -7.6, near: 5.46, far: 5.62 },
   { left: -6.2, right: 5.8, near: 5.46, far: 5.62 },
-  { left: 7.2, right: 7.88, near: 5.46, far: 5.62 },
+  { left: 7.2, right: 8.1, near: 5.46, far: 5.62 },
   { left: -0.22, right: -0.04, near: 5.6, far: 14.1 },
   { left: FRONT_COUNTER.x-FRONT_COUNTER.width/2, right: FRONT_COUNTER.x+FRONT_COUNTER.width/2, near: FRONT_COUNTER.z-FRONT_COUNTER.depth/2, far: FRONT_COUNTER.z+FRONT_COUNTER.depth/2 },
   { left: FRONT_VENDING.x-FRONT_VENDING.halfWidth, right: FRONT_VENDING.x+FRONT_VENDING.halfWidth, near: FRONT_VENDING.z-FRONT_VENDING.halfDepth, far: FRONT_VENDING.z+FRONT_VENDING.halfDepth }, // Moved down along the front desk room's right divider.

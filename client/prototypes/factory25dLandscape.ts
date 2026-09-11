@@ -483,7 +483,8 @@ export function createUtahLandscape(asset?: { geometry: THREE.BufferGeometry; he
     `);
   };
   const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
-  terrain.castShadow = terrain.receiveShadow = true;
+  // Terrain normals and recess shading describe the cliff without large shadow-map blocks.
+  terrain.castShadow = false; terrain.receiveShadow = true;
   group.add(terrain);
 
   const shorePoints = lakeOutline.map(([x, z]) => new THREE.Vector2(x, z));

@@ -2,7 +2,7 @@ import { createStaffPickup, updatePickupShadow } from './factory25dPickup';
 import * as THREE from 'three';
 import { FRONT_COUNTER } from '@shared/factory25d-layout';
 import { DEFAULT_AVATAR } from '@shared/constants';
-import { avatarTexture, setAvatarTextureFrame } from './factory25dAvatarTexture';
+import { avatarTexture, setAvatarTextureFrame, installAvatarBack } from './factory25dAvatarTexture';
 import { avatarEyePose } from './factory25dAvatarEyes';
 import { createNameTag } from './factory25dLabels';
 import { contactShadow } from './factory25dContactShadows';
@@ -24,9 +24,11 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
     const material = new THREE.MeshStandardMaterial({ map: texture, alphaTest: .08, side: THREE.DoubleSide, roughness: 1,
       emissive: '#101126', emissiveIntensity: .6 });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(.86, .86), material);
+    installAvatarBack(mesh);
     mesh.name = name; mesh.castShadow = true; scene.add(mesh);
     const shadow = contactShadow(scene, { width: .22, depth: .12, spread: .065, opacity: .3, round: true });
     const label = createNameTag(name, false, canvas.parentElement!);
+    label.setAvatar(avatar);
     label.element.classList.add('room-staff-label');
     label.element.dataset.roomStaff = name;
     const pickup=createStaffPickup(mesh,label.element.querySelector('button')!,canvas,avatar);
@@ -88,7 +90,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
         : holding ? 'putting the whiteboard back'
         : phase === 'writing' && managerLife.taskName ? `updating ${managerLife.taskName}’s note`
         : phase === 'walking-to-note' ? 'walking over to update a note' : 'keeping the board organized';
-      if (managerStatus !== managerActivity) { managerStatus = managerActivity; manager.label.setDetails('board manager', managerActivity, 'room staff · click to read the whiteboard'); }
+      if (managerStatus !== managerActivity) { managerStatus = managerActivity; manager.label.setDetails('board manager', managerActivity, 'room staff'); }
       // A receptionist finishes each small cleanup before returning to the desk.
       cleanup.update(desk.pickup.busy?0:dt, visible&&!desk.pickup.busy);
       clerkPoint.set(cleanup.position.x, .018, cleanup.position.z);
@@ -106,7 +108,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
         : cleanup.phase === 'cleaning' ? `putting the ${cleanup.job?.label ?? 'lamp'} back upright`
         : cleanup.phase === 'returning' ? 'heading back to the front desk'
         : data.connected ? `${people} people here · welcoming the team` : 'waiting for the factory connection';
-      if (deskStatus !== deskActivity) { deskStatus = deskActivity; desk.label.setDetails('front desk', deskActivity, 'room staff · click to see who’s here'); }
+      if (deskStatus !== deskActivity) { deskStatus = deskActivity; desk.label.setDetails('front desk', deskActivity, 'room staff'); }
       canvas.dataset.roomStaff = '2'; canvas.dataset.boardManager = phase;
       canvas.dataset.boardManagerPose = poses[row];
       canvas.dataset.boardManagerFrame = String(managerPose.frame);

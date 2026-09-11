@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import {ELEVATOR_BODY} from '@shared/factory25d-layout';
 import { propPart, standard } from './factory25dProps';
 import { contactShadow } from './factory25dContactShadows';
 
-export const ELEVATOR_WIDTH = 1.36;
+export const ELEVATOR_WIDTH = ELEVATOR_BODY.width;
 
 /** Shallow wall assembly, with door panels masked by their pocket opening. */
 export function createElevator(parent: THREE.Object3D, x: number, floorY: number, width: number, floor: '01' | 'G') {

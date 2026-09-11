@@ -1,35 +1,22 @@
 import * as THREE from 'three';
-import { propPart, standard } from './factory25dProps';
+import { DJ_BOOTH, INTERIOR_Z } from '@shared/factory25d-layout';
+import {createDjStation} from './factory25dDjStation';
+import {createDjDecks} from './factory25dDjDecks';
 import { onFactoryMessage, onFactoryConnection, sendFactoryCommand, isControlPreview } from './factory25dBoardData';
-import { LoungeRadioQueue, DJ_VIDEOS, youtubeVideoId, type RadioState, type RadioRequest } from '@shared/lounge-radio';
+import { LoungeRadioQueue, DJ_VIDEOS, type RadioState, type RadioRequest } from '@shared/lounge-radio';
 import './factory25dLoungeRadio.css';
 import { createYoutubePlayer } from './factory25dYoutubePlayer';
 import { createRadioDj } from './factory25dRadioDj';
 
-/** Small lounge receiver, with a nonmodal queue above the existing shared dock. */
+/** Lounge DJ decks, with a nonmodal queue above the existing shared dock. */
 export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement, initialCamera: THREE.Camera,
   callbacks: { preferences(): { enabled: boolean; volume: number }; enable(): void }) {
-  const group = new THREE.Group(); group.name = 'lounge-radio'; group.position.set(3.05, .018, 6.12); parent.add(group);
-  const wood = standard('#775441'), dark = standard('#303d3b'), cream = standard('#ddd2aa'), metal = standard('#9b9d8a', .5);
-  propPart(group, [.55, .06, .43], [0, .43, 0], wood);
-  for (const x of [-.2, .2]) for (const z of [-.15, .15]) propPart(group, [.04, .4, .04], [x, .2, z], dark);
-  const receiver = new THREE.Group(); receiver.position.set(0, .61, 0); receiver.rotation.y = -.2; group.add(receiver);
-  propPart(receiver, [.46, .28, .19], [0, 0, 0], wood);
-  propPart(receiver, [.418, .235, .012], [0, 0, .104], cream);
-  propPart(receiver, [.205, .182, .013], [-.082, 0, .115], dark);
-  for (let i = 0; i < 8; i++) propPart(receiver, [.18, .006, .012], [-.082, -.073 + i * .021, .126], metal);
-  propPart(receiver, [.125, .046, .012], [.128, .058, .118], dark);
-  propPart(receiver, [.084, .006, .006], [.128, .058, .127], cream);
-  for (const x of [.096, .164]) {
-    const knob = new THREE.Mesh(new THREE.CylinderGeometry(.023, .023, .025, 12), dark);
-    knob.rotation.x = Math.PI / 2; knob.position.set(x, -.055, .127); receiver.add(knob);
-  }
-  propPart(receiver, [.017, .29, .017], [-.16, .255, -.035], metal).rotation.z = -.19;
-  const lamp = new THREE.MeshBasicMaterial({ color: '#6b6e40' });
-  propPart(receiver, [.018, .018, .015], [.19, .058, .126], lamp);
+  const group = new THREE.Group(); group.name = 'lounge-radio'; group.position.set(DJ_BOOTH.x, .018, DJ_BOOTH.z-INTERIOR_Z-.12); parent.add(group);
+  const decks=createDjDecks(group),receiver=decks.booth;
+  const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
   const panel = document.createElement('section'); panel.className = 'lounge-radio-panel'; panel.hidden = true;
   panel.setAttribute('aria-label', 'Lounge radio');
-  panel.innerHTML = '<header><h2>lounge music · YouTube</h2><button type="button" aria-label="Close radio">×</button></header><div class="radio-video"></div><p class="radio-playing"></p><div class="radio-actions"><button type="button" class="radio-listen">listen</button><button type="button" class="radio-skip">skip song</button></div><form><label for="radio-video-url">add a YouTube video</label><div class="radio-add"><input id="radio-video-url" type="url" placeholder="https://www.youtube.com/watch?v=…" required maxlength="2048"><button type="submit">add</button></div></form><p>up next · move songs with ↑ ↓</p><ol></ol><p><small>The DJ picks day, evening and night mixes when nobody queues music. Your songs take priority. Playback pauses when this player closes. Music volume is in sound settings.</small></p><p class="radio-feedback" role="status"></p>';
+  panel.innerHTML = `<header><h2>room queue</h2><button type="button" aria-label="Close radio">×</button></header><div class="radio-browser"><aside><h3>now playing</h3><div class="radio-video"></div><p class="radio-playing"></p><div class="radio-actions"><button type="button" class="radio-listen">listen</button><button type="button" class="radio-skip">skip song</button></div></aside><main><form><div class="radio-add"><input id="radio-video-url" type="search" aria-label="Search YouTube or paste a link" placeholder="Search YouTube or paste a link" required maxlength="200"><button type="submit">search</button></div></form><section class="radio-results" hidden aria-label="YouTube search results"></section><h3>up next <span class="radio-queue-count"></span></h3><ol aria-label="Shared song queue"></ol></main></div><p class="radio-feedback" role="status"></p>`;
   const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'lounge-radio-target'; trigger.textContent = 'radio';
   trigger.title = 'Lounge radio · open song queue';
   trigger.setAttribute('aria-label', 'Open lounge radio and song queue'); trigger.setAttribute('aria-expanded', 'false');
@@ -43,17 +30,56 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   let state: RadioState | undefined, pending = false, timeout = 0, visible = false, camera = initialCamera;
   const preview = isControlPreview() ? new LoungeRadioQueue() : undefined;
   let nextPreviewTick = 0, nextPaint = 0;
-  let paintRevision = -1;
-  const player = createYoutubePlayer(panel.querySelector('.radio-video')!, {
-    ...callbacks, feedback: message => { feedback.textContent = message; },
+  let paintRevision = -1,draggedId:number|undefined;
+  const titles=new Map<string,string>();
+  const results=panel.querySelector<HTMLElement>('.radio-results')!;
+  let searchRequest:AbortController|undefined;
+  const videoHost = panel.querySelector<HTMLElement>('.radio-video')!;
+  const videoHome = document.createComment('radio video home'); videoHost.before(videoHome);
+  const player = createYoutubePlayer(videoHost, {
+    ...callbacks, playback: active => { if(soundHost) soundHost.dataset.playing = String(active); }, feedback: message => { feedback.textContent = message; },
     duration: (entryId, seconds) => command({ type: 'radio_queue', action: 'duration', entryId, seconds }),
   });
+  const soundHost = document.querySelector<HTMLElement>('.scene-sound');
+  const nowPlaying = document.createElement('p'); nowPlaying.className = 'factory-audio-now-playing';
+  const transport = document.createElement('section'); transport.className='island-music-player';
+  transport.innerHTML='<input type="range" min="0" max="0" step="1" value="0" aria-label="Track position"><div class="island-track-times"><span>0:00</span><span>0:00</span></div><div class="island-transport"><button type="button" aria-label="Restart track">↤</button><button type="button" aria-label="Play music">▶</button><button type="button" aria-label="Next track">↦</button></div><p class="island-player-feedback" role="status"></p><button type="button" class="island-player-retry" hidden>retry playback</button>';
+  videoHost.after(transport);
+  const credits = document.createElement('a'); credits.href = '/audio/factory/credits.html'; credits.target = '_blank'; credits.rel = 'noopener'; credits.textContent = 'credits'; transport.append(credits);
+  const scrub=transport.querySelector('input')!, timeLabels=transport.querySelectorAll('.island-track-times span'), transportButtons=transport.querySelectorAll('button');
+  const retry = transport.querySelector<HTMLButtonElement>('.island-player-retry')!;
+  retry.onclick = () => { player.reset(); void player.open(); };
+  let scrubbing=false;
+  const timestamp=(n:number)=>`${Math.floor(n/60)}:${String(Math.floor(n%60)).padStart(2,'0')}`;
+  scrub.addEventListener('pointerdown',()=>{scrubbing=true;});
+  scrub.addEventListener('input',()=>{timeLabels[0].textContent=timestamp(Number(scrub.value));});
+  scrub.addEventListener('change',()=>{player.seek(Number(scrub.value));scrubbing=false;});
+  scrub.addEventListener('pointercancel',()=>{scrubbing=false;});
+  transportButtons[0].onclick=()=>player.seek(0);
+  transportButtons[1].onclick=()=>{if(player.progress().playing)player.pause();else player.play();};
+  transportButtons[2].onclick=()=>{if(state?.current)command({type:'radio_queue',action:'skip',entryId:state.current.id});};
+  function paintTransport(){
+    retry.hidden = !feedback.textContent?.includes('Retry');
+    const progress=player.progress(); const length=Number.isFinite(progress.duration)?progress.duration:0;
+    scrub.disabled=!progress.ready || length<=0; scrub.max=String(length);
+    if(!scrubbing){scrub.value=String(progress.time);timeLabels[0].textContent=timestamp(progress.time);}
+    timeLabels[1].textContent=timestamp(length);
+    transportButtons[0].disabled=!progress.ready;transportButtons[1].disabled=!progress.ready;transportButtons[2].disabled=!state?.current;
+    transportButtons[1].textContent=progress.playing?'Ⅱ':'▶';transportButtons[1].setAttribute('aria-label',progress.playing?'Pause music':'Play music');
+    transport.querySelector('.island-player-feedback')!.textContent=feedback.textContent;
+  }
   function paint() {
     playing.textContent = state?.current ? `${state.current.title} · ${state.current.queuedBy}` : 'Connecting to the shared radio…';
+    nowPlaying.textContent = state?.current ? `On the radio · ${state.current.title}` : '';
+    if (soundHost) soundHost.dataset.track = state?.current?.title ?? '';
+
     if (paintRevision !== state?.revision) {
       paintRevision = state?.revision ?? -1; queue.replaceChildren();
       (state?.queue ?? []).forEach((entry, index, entries) => {
         const li = document.createElement('li');
+        li.draggable=true;li.addEventListener('dragstart',()=>{draggedId=entry.id;});li.addEventListener('dragover',e=>e.preventDefault());
+        li.addEventListener('drop',e=>{e.preventDefault();if(!state||draggedId===undefined)return;const ids=state.queue.map(v=>v.id).filter(id=>id!==draggedId);ids.splice(index,0,draggedId);command({type:'radio_queue',action:'reorder',ids,revision:state.revision});draggedId=undefined;});
+        const thumbnail=document.createElement('img');thumbnail.src=`https://i.ytimg.com/vi/${entry.videoId}/default.jpg`;thumbnail.alt='';li.append(thumbnail);
         const name = document.createElement('span'); name.textContent = `${entry.title} · ${entry.queuedBy}`; li.append(name);
         for (const direction of [-1, 1]) {
           const button = document.createElement('button'); button.type = 'button'; button.textContent = direction < 0 ? '↑' : '↓';
@@ -67,12 +93,15 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
             command({ type: 'radio_queue', action: 'reorder', ids, revision: state.revision });
           }); li.append(button);
         }
+        const next=document.createElement('button');next.type='button';next.textContent='next';next.title='Play next';next.disabled=index===0;
+        next.onclick=()=>{if(state)command({type:'radio_queue',action:'reorder',ids:[entry.id,...state.queue.filter(e=>e.id!==entry.id).map(e=>e.id)],revision:state.revision});};
+        const remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.setAttribute('aria-label',`Remove ${entry.title}`);remove.onclick=()=>{if(state)command({type:'radio_queue',action:'remove',entryId:entry.id,revision:state.revision});};li.append(next,remove);
         queue.append(li);
       });
       if (!state?.queue.length) { const li = document.createElement('li'); li.textContent = 'Your next song goes here. The DJ has the quiet moments covered.'; queue.append(li); }
     }
-    (form.querySelector('button') as HTMLButtonElement).disabled = pending;
-    lamp.color.set(state?.current ? '#edc568' : '#6b6e40');
+    panel.querySelector('.radio-queue-count')!.textContent=String(state?.queue.length??0);
+
   }
   function receive(next: RadioState) { state = next; paint(); player.update(state); }
   function settle(error?: string) { pending = false; clearTimeout(timeout); feedback.textContent = error ?? 'Queue updated.'; paint(); }
@@ -80,7 +109,8 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
     if (message.action !== 'duration' && pending) return;
     if (preview) {
       const now = Date.now();
-      const result = message.action === 'add' ? preview.enqueue(message.videoId, 'Local preview', now, DJ_VIDEOS.find(video => video.videoId === message.videoId)?.title)
+      const result = message.action === 'add' ? preview.enqueue(message.videoId, 'Local preview', now, titles.get(message.videoId)??DJ_VIDEOS.find(video => video.videoId === message.videoId)?.title)
+        : message.action === 'remove' ? preview.remove(message.entryId,message.revision)
         : message.action === 'reorder' ? preview.reorder(message.ids, message.revision)
         : message.action === 'duration' ? preview.duration(message.entryId, message.seconds, now)
         : preview.skip(message.entryId, now);
@@ -92,15 +122,29 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
     pending = true; feedback.textContent = 'Updating the shared queue…'; paint();
     timeout = window.setTimeout(() => settle('The radio did not respond. Try again.'), 8000);
   }
-  form.addEventListener('submit', event => {
-    event.preventDefault(); const videoId = youtubeVideoId(input.value);
-    if (!videoId) { feedback.textContent = 'Paste a YouTube video link.'; return; }
-    command({ type: 'radio_queue', action: 'add', videoId });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();searchRequest?.abort();searchRequest=new AbortController();
+    results.hidden=false;results.textContent='Searching YouTube…';
+    try{
+      const response=await fetch(`/api/radio/search?q=${encodeURIComponent(input.value.trim())}`,{signal:searchRequest.signal});
+      const data=await response.json();if(!response.ok)throw new Error(data.error);
+      results.replaceChildren();
+      const dismiss=document.createElement('button');dismiss.type='button';dismiss.textContent='back to queue';dismiss.onclick=()=>{results.hidden=true;};results.append(dismiss);
+      for(const video of data.results){
+        titles.set(video.videoId,video.title);const row=document.createElement('div');row.className='radio-search-row';
+        const image=document.createElement('img');image.src=`https://i.ytimg.com/vi/${video.videoId}/default.jpg`;image.alt='';
+        const text=document.createElement('span');text.textContent=`${video.title} · ${video.channel}${video.duration?' · '+video.duration:''}`;
+        const add=document.createElement('button');add.type='button';add.textContent='+ queue';add.setAttribute('aria-label',`Add ${video.title} to queue`);
+        add.onclick=()=>{command({type:'radio_queue',action:'add',videoId:video.videoId});};row.append(image,text,add);results.append(row);
+      }
+      if(!data.results.length)results.append('No videos found. Try another search.');
+    }catch(error){if((error as Error).name!=='AbortError')results.textContent=(error as Error).message||'Search unavailable. Try a YouTube link.';}
   });
   panel.querySelector('.radio-listen')!.addEventListener('click', () => player.play());
   panel.querySelector('.radio-skip')!.addEventListener('click', () => { if (state?.current) command({ type: 'radio_queue', action: 'skip', entryId: state.current.id }); });
-  function hide(restore = false) { panel.hidden = true; player.hide(); trigger.setAttribute('aria-expanded', 'false'); if (restore && visible) trigger.focus(); }
-  trigger.addEventListener('click', () => { if (!visible) return; panel.hidden = !panel.hidden; trigger.setAttribute('aria-expanded', String(!panel.hidden)); if (!panel.hidden) { const agents = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (agents) agents.open = false; paint(); void player.open(); close.focus(); } else player.hide(); });
+  const station=createDjStation(group,canvas,panel,{listen:()=>player.play(),skip:()=>{if(state?.current)command({type:'radio_queue',action:'skip',entryId:state.current.id});}});
+  function hide(restore = false) { station.setActive(false); panel.hidden = true; player.hide(); trigger.setAttribute('aria-expanded', 'false'); if (restore && visible) trigger.focus(); }
+  trigger.addEventListener('click', () => { if (!visible) return; panel.hidden = !panel.hidden; station.setActive(!panel.hidden); trigger.setAttribute('aria-expanded', String(!panel.hidden)); if (!panel.hidden) { const agents = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (agents) agents.open = false; paint(); void player.open(); close.focus(); } else player.hide(); });
   close.addEventListener('click', () => hide(true));
   const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !panel.hidden) { event.stopPropagation(); hide(true); } };
   document.addEventListener('keydown', onKey, true);
@@ -114,29 +158,35 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   const dj = createRadioDj(parent, canvas, () => trigger.click());
   const playbackTimer = window.setInterval(() => {
     if (preview && preview.advance(Date.now())) receive(preview.snapshot(Date.now()));
-    player.update(state);
+    player.update(state); paintTransport();
   }, 500);
   const projected = new THREE.Vector3();
   return {
     group,
+    cameraFor:station.cameraFor,
+    isActive:station.isActive,
     update(nextCamera: THREE.Camera, isVisible: boolean) {
       camera = nextCamera; visible = isVisible;
-      trigger.hidden = !visible;
+      trigger.hidden = !visible || !panel.hidden;
+      station.update(camera);
       if (!visible) hide();
       if (visible) {
-        receiver.getWorldPosition(projected); projected.project(camera);
+        receiver.localToWorld(projected.set(0, .6, 0)); projected.project(camera);
+        trigger.hidden = projected.z < -1 || projected.z > 1;
         const rect = canvas.getBoundingClientRect();
         trigger.style.left = `${rect.left + (projected.x + 1) * rect.width / 2}px`;
         trigger.style.top = `${rect.top + (1 - projected.y) * rect.height / 2}px`;
       }
       const now = performance.now();
+      const audioPreferences=callbacks.preferences();
+      decks.update(now/1000,player.progress().playing&&audioPreferences.enabled&&audioPreferences.volume>0,reducedMotion.matches);
       if (preview && now > nextPreviewTick) { nextPreviewTick = now + 1000; if (preview.advance(Date.now())) receive(preview.snapshot(Date.now())); }
       if (now > nextPaint && !panel.hidden) { nextPaint = now + 1000; paint(); }
       dj.update(camera, visible, state?.current?.id, state?.current?.dj ?? false);
     },
     dispose() {
-      clearTimeout(timeout); clearInterval(playbackTimer); unsubscribe(); stopConnection(); document.removeEventListener('keydown', onKey, true);
-      player.dispose(); dj.dispose(); panel.remove(); trigger.remove(); group.removeFromParent();
+      searchRequest?.abort();clearTimeout(timeout); clearInterval(playbackTimer); unsubscribe(); stopConnection(); document.removeEventListener('keydown', onKey, true);
+      videoHome.after(videoHost); transport.remove(); videoHome.remove(); nowPlaying.remove(); if(soundHost) { delete soundHost.dataset.track; delete soundHost.dataset.playing; } station.dispose(); player.dispose(); dj.dispose(); decks.dispose(); panel.remove(); trigger.remove(); group.removeFromParent();
       const materials = new Set<THREE.Material>(); group.traverse(node => { if (node instanceof THREE.Mesh) { node.geometry.dispose(); for (const material of Array.isArray(node.material) ? node.material : [node.material]) materials.add(material); } });
       materials.forEach(material => material.dispose());
     },

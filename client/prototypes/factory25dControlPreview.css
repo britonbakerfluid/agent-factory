@@ -15,3 +15,8 @@
   .factory-preview-tools.pixel-island:has(.preview-activity:not([hidden])) { top:auto; bottom:12px; max-height:38dvh; }
   .factory-preview-tools:has(.preview-activity:not([hidden])) > summary { position:sticky; top:-16px; margin:-16px -16px 12px; padding:16px; background:#101821; z-index:1; }
 }
+
+.factory-preview-tools .preview-floor-speed { display:grid; gap:6px; margin:12px 0; }
+.factory-preview-tools .preview-floor-speed > span { display:flex; justify-content:space-between; gap:8px; }
+.factory-preview-tools .preview-floor-speed input { width:100%; min-width:0; accent-color:#40bfff; }
+.factory-preview-tools .preview-floor-speed small { font-size:10px; opacity:.7; }

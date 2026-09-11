@@ -8,7 +8,7 @@ export function createProfileMenu(toolbar:HTMLElement, trigger:HTMLButtonElement
   menu.innerHTML='<header><span>your agents</span><button type="button" data-profile-action="edit" data-icon-only="true" aria-label="Edit avatar" title="Edit avatar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="7" r="3"/><path d="M3 20v-2a6 6 0 0 1 8-5.7M14 20l3.5-1 5-5-2.5-2.5-5 5L14 20Z"/></svg></button></header><div class="factory-profile-list"></div><p class="factory-profile-status" role="status"></p>';
   toolbar.append(menu); trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-controls',id);trigger.setAttribute('aria-expanded','false');
   trigger.dataset.tooltip='your agents & avatar';trigger.dataset.profileMenu='true';
-  let closeTimer:ReturnType<typeof setTimeout>|undefined,openTimer:ReturnType<typeof setTimeout>|undefined,motion:Animation|undefined,signature='',pinned=false;
+  let closeTimer:ReturnType<typeof setTimeout>|undefined,openTimer:ReturnType<typeof setTimeout>|undefined,motion:Animation|undefined,signature='',pinned=false,selectedId:string|undefined;
   function close(focus=false){pinned=false;clearTimeout(closeTimer);clearTimeout(openTimer);motion?.cancel();menu.hidden=true;trigger.setAttribute('aria-expanded','false');if(focus)trigger.focus({preventScroll:true});}
   function open(keyboard=false){
     clearTimeout(closeTimer);clearTimeout(openTimer);if(trigger.hidden||trigger.disabled)return;
@@ -52,13 +52,20 @@ export function createProfileMenu(toolbar:HTMLElement, trigger:HTMLButtonElement
   observer.observe(trigger,{attributes:true,attributeFilter:['hidden','disabled']});
   let nextPreview=0;
   function render(now:number){if(menu.hidden||now<nextPreview)return;nextPreview=now+120;for(const row of menu.querySelectorAll<HTMLElement>('article[data-agent-id]')){const canvas=row.querySelector('canvas');if(canvas)actions.preview?.(row.dataset.agentId!,canvas);}}
-  return {close,render,update(items:ProfileAgentItem[],connected:boolean,available:boolean,message=''){
+  return {close,render,openAgent(id:string){
+    selectedId=id;
+    for(const row of menu.querySelectorAll<HTMLElement>('article[data-agent-id]'))row.classList.toggle('is-selected',row.dataset.agentId===id);
+    open(true);
+    const row=[...menu.querySelectorAll<HTMLElement>('article[data-agent-id]')].find(row=>row.dataset.agentId===id);
+    row?.scrollIntoView({block:'nearest'});
+    row?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({preventScroll:true});
+  },update(items:ProfileAgentItem[],connected:boolean,available:boolean,message=''){
     if(trigger.hidden||trigger.disabled)close();
     const next=JSON.stringify([items,connected,available,message]);if(next===signature)return;signature=next;
     const focused=document.activeElement as HTMLElement|null,oldId=focused?.closest<HTMLElement>('[data-agent-id]')?.dataset.agentId,oldAction=focused?.dataset.profileAction;
     const list=menu.querySelector('.factory-profile-list')!;list.replaceChildren();
     for(const item of items){
-      const row=document.createElement('article');row.dataset.agentId=item.id;
+      const row=document.createElement('article');row.dataset.agentId=item.id;row.classList.toggle('is-selected',item.id===selectedId);
       const preview=document.createElement('canvas');preview.width=preview.height=32;preview.className='factory-profile-agent-preview';preview.setAttribute('aria-hidden','true');
       const identity=document.createElement('div');identity.className='factory-profile-agent-identity';
       const name=document.createElement('strong');name.textContent=item.name;

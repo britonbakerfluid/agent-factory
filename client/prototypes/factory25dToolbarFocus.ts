@@ -2,6 +2,9 @@
 export function createToolbarFocus(toolbar: HTMLElement, available: () => boolean,
   leaveAvatar: () => boolean) {
   const views = [
+    { className: 'duck-hunt-open', name: 'duck hunt', close: '#duck-play', modal: '' },
+    { className: 'dj-station-open', name: 'DJ station', close: '.lounge-radio-panel header button', modal: '' },
+    { className: 'basketball-mode', name: 'basketball', close: '.visitor-ball-hint [data-action="back"]', modal: '' },
     { className: 'avatar-editor-open', name: 'avatar', close: '.avatar-close', modal: '.avatar-editor' },
     { className: 'brand-open', name: 'brand shelf', close: '.brand-library-dock button', modal: '.brand-library' },
     { className: 'team-open', name: 'our people', close: '.team-desk-dock button', modal: '.team-desk-dialog' },
@@ -17,8 +20,9 @@ export function createToolbarFocus(toolbar: HTMLElement, available: () => boolea
     const view = focused();
     if (!view) return available();
     if (view.name === 'avatar') return leaveAvatar();
-    if (!view.button || view.button.disabled) return false;
-    view.button.click(); return true;
+    const button=view.button??document.querySelector<HTMLButtonElement>(view.close);
+    if (!button || button.disabled) return false;
+    button.click(); return true;
   }
   return {
     name: () => focused()?.name,

@@ -52,6 +52,12 @@ export function createBasketball(
   const frame = standard('#36484c', 0.8);
   const orange = standard('#ef6925', 0.75, '#271005');
   const boardY = rim.y + 0.23;
+  const resultMaterial = new THREE.MeshBasicMaterial({color:'#17201d',toneMapped:false});
+  propPart(hoop, [.48,.08,.035], [0,boardY+.39,.02], frame);
+  propPart(hoop, [.42,.045,.012], [0,boardY+.39,.044], resultMaterial);
+  let resultTime = 0;
+  function showResult(made: boolean) { resultMaterial.color.set(made ? '#41ef78' : '#ff4238'); resultTime = 1.6; }
+
   const mountingSteel = standard('#a9bbbf', 0.55);
   for (const x of [-0.35, 0.35]) for (const y of [-0.35, 0.35]) {
     propPart(hoop, [0.045, 0.045, 0.09], [x, boardY + y, -0.033], frame);
@@ -94,13 +100,39 @@ export function createBasketball(
     standard('#d4cfbb', 1), netPoints.length / 2);
   net.name = 'basketball-net'; net.receiveShadow = true;
   const cord = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), direction = new THREE.Vector3();
-  for (let i = 0; i < netPoints.length; i += 2) {
-    direction.subVectors(netPoints[i + 1], netPoints[i]);
-    cord.position.copy(netPoints[i]).add(netPoints[i + 1]).multiplyScalar(0.5);
-    cord.scale.set(1, direction.length(), 1); cord.quaternion.setFromUnitVectors(up, direction.normalize());
-    cord.updateMatrix(); net.setMatrixAt(i / 2, cord.matrix);
+  let netAge = 1;
+  const netStart = new THREE.Vector3(), netEnd = new THREE.Vector3();
+  function paintNet(age: number) {
+    // Keep every rim attachment fixed; the lower cords stretch, flare and settle.
+    const pulse = age >= 1 ? 0 : Math.sin(age * Math.PI * 3) * Math.exp(-age * 5);
+    const flare = age >= 1 ? 0 : Math.sin(Math.min(1, age * 3) * Math.PI) * .07;
+    const deform = (source: THREE.Vector3, target: THREE.Vector3) => {
+      const depth = (rim.y - .013 - source.y) / .255;
+      target.copy(source);
+      target.x *= 1 + flare * depth * 6;
+      target.z = .22 + (source.z - .22) * (1 + flare * depth * 6);
+      target.y -= pulse * .15 * depth;
+    };
+    for (let i = 0; i < netPoints.length; i += 2) {
+      deform(netPoints[i], netStart); deform(netPoints[i + 1], netEnd);
+      direction.subVectors(netEnd, netStart);
+      cord.position.copy(netStart).add(netEnd).multiplyScalar(.5);
+      cord.scale.set(1, direction.length(), 1); cord.quaternion.setFromUnitVectors(up, direction.normalize());
+      cord.updateMatrix(); net.setMatrixAt(i / 2, cord.matrix);
+    }
+    net.instanceMatrix.needsUpdate = true;
   }
+  function swishNet() { netAge = 0; }
+  paintNet(1);
+  net.frustumCulled = false;
   hoop.add(net);
+  // Flex the ring and attached net together about the backboard bracket.
+  const rimSpring = new THREE.Group(); rimSpring.position.set(0, rim.y, .04); hoop.add(rimSpring);
+  ring.position.sub(rimSpring.position); net.position.sub(rimSpring.position);
+  rimSpring.add(ring, net);
+  let rimAngle = 0, rimVelocity = 0;
+  function hitRim(energy: number) { rimVelocity = Math.min(1.2, rimVelocity + Math.max(0, Math.min(1, energy)) * .9); }
+
   const ball = miniBall(parent),
     spare = miniBall(parent);
   spare.position.set(2.55, BALL_RADIUS, -5.72);
@@ -123,26 +155,6 @@ export function createBasketball(
     spread: 0.055,
     round: true,
   });
-  const tallyCanvas = document.createElement("canvas");
-  tallyCanvas.width = 768;
-  tallyCanvas.height = 384;
-  const ctx = tallyCanvas.getContext("2d")!;
-  const texture = new THREE.CanvasTexture(tallyCanvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  const tally = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.45, 0.725),
-    new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      depthWrite: false,
-      opacity: 0.87,
-    }),
-  );
-  tally.position.set(1.35, 0.86, -6.245);
-  tally.rotation.z = -0.018;
-  parent.add(tally);
   const savedScores: Record<string, number> = Object.create(null);
   try {
     const saved = JSON.parse(localStorage.getItem('factory-window-hoops-v2') ?? '{}');
@@ -158,38 +170,14 @@ export function createBasketball(
   call.className = "basket-call"; call.disabled = !players.length;
   call.title = "call an agent for a shot";
   canvas.parentElement!.append(call);
-  function paintScore() {
+  function updateScoreLabel() {
     call.title = players.length ? 'call an agent for a shot' : 'agents are busy · hoops will be available on their next break';
-    ctx.clearRect(0, 0, 768, 384);
-    ctx.fillStyle = '#24374a';
-    ctx.strokeStyle = '#24374a';
-    ctx.font = '700 55px "Board Marker", cursive';
-    ctx.save(); ctx.rotate(-0.022);
-    ctx.fillText('window hoops', 38, 66);
-    ctx.restore();
-    ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(34, 82); ctx.quadraticCurveTo(193, 91, 354, 82); ctx.stroke();
-    players.forEach((player, i) => {
-      ctx.save(); ctx.translate(40, 147 + i * 81); ctx.rotate(i ? 0.014 : -0.016);
-      ctx.font = '700 51px "Board Marker", cursive';
-      ctx.fillText(player.name.toLowerCase(), 0, 0);
-      ctx.font = '700 58px "Board Marker", cursive';
-      ctx.fillText(String(scores[i]), 410, 3);
-      ctx.restore();
-    });
-    ctx.globalAlpha = 0.7;
-    ctx.font = '700 31px "Board Marker", cursive';
-    ctx.fillText('scores on this window', 40, 333);
-    ctx.globalAlpha = 1;
-    if (!players.length) { ctx.font = '700 38px "Board Marker", cursive'; ctx.fillText('back after work', 40, 162); }
-    texture.needsUpdate = true;
     call.setAttribute(
       "aria-label",
       `Call an agent for a basketball shot. ${players.map((p, i) => `${p.name}: ${scores[i]}`).join(", ")}. Scores on this device.`,
     );
   }
-  paintScore();
-  void document.fonts.load('700 32px "Board Marker"').then(paintScore);
+  updateScoreLabel();
   let active = -1,
     stage: "walk" | "aim" | "throw" | "bank" | "drop" | "bounce" | "return" =
       "walk";
@@ -231,13 +219,14 @@ export function createBasketball(
     time = 0;
   }
   return {
+    swishNet, hitRim, showResult,
     pickups: [ball, spare],
     pickupShadows: [ballShadow, spareShadow],
     setPlayers(next: Player[]) {
       active = -1; queued = false; wait = 38; jump = 0; time = 0;
       ball.position.set(0.7, BALL_RADIUS, -5.65);
       ballShadow.position.x = 0.7; ballShadow.position.z = -5.65;
-      players = next; scores = players.map(player => savedScores[player.id] ?? 0); call.disabled = !players.length; paintScore();
+      players = next; scores = players.map(player => savedScores[player.id] ?? 0); call.disabled = !players.length; updateScoreLabel();
     },
     get active() {
       return active >= 0;
@@ -258,10 +247,24 @@ export function createBasketball(
       free: boolean,
       reduced: boolean,
     ) {
+      if (resultTime > 0) { resultTime = Math.max(0,resultTime-dt); if (!resultTime) resultMaterial.color.set('#17201d'); }
+      if (reduced) { rimAngle = 0; rimVelocity = 0; }
+      else {
+        let remaining = Math.min(.1, Math.max(0, dt));
+        while (remaining > 0) {
+          const step = Math.min(remaining, 1/120); remaining -= step;
+          rimVelocity += (-180 * rimAngle - 12 * rimVelocity) * step;
+          rimAngle += rimVelocity * step;
+        }
+        if (Math.abs(rimAngle) < .0001 && Math.abs(rimVelocity) < .001) { rimAngle = 0; rimVelocity = 0; }
+      }
+      rimSpring.rotation.x = rimAngle;
+      if (netAge < 1) { netAge = reduced ? 1 : Math.min(1, netAge + dt); paintNet(netAge); }
       call.hidden =
         !visible || document.body.classList.contains("inspect-open");
       if (!call.hidden) {
         parent.localToWorld(project.copy(rim)).project(camera);
+        call.hidden = project.z < -1 || project.z > 1;
         const x = ((project.x + 1) * canvas.clientWidth) / 2,
           y = ((1 - project.y) * canvas.clientHeight) / 2;
         call.style.left = `${x - 22}px`;
@@ -332,10 +335,10 @@ export function createBasketball(
         ball.position.y = start.y - 2.2 * time * time;
         if (!scored && crossedBasket(previous, ball.position, rim, 0.15 * hoopScale)) {
           scored = true;
-          sounds.swish?.();
+          swishNet(); showResult(true); sounds.swish?.();
           scores[active]++;
           savedScores[players[active].id] = scores[active];
-          paintScore();
+          updateScoreLabel();
           try {
             localStorage.setItem(
               "factory-window-hoops-v2",

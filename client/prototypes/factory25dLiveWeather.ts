@@ -9,9 +9,9 @@ export function liveSunAt(timestamp: number) {
     palette: paletteForElevation(sun.elevationDeg, sun.rising) };
 }
 
-/** Same location, provider and solar calculation as the production skyline. */
+/** Live Lehi conditions, with the shared weather provider and solar calculation. */
 export function watchLiveWeather(receive: (weather: WeatherVisualState) => void,
-  status: (message: string) => void, provider: WeatherProvider = new OpenMeteoWeatherProvider()) {
+  status: (message: string) => void, provider: WeatherProvider = new OpenMeteoWeatherProvider(40.3916, -111.8508)) {
   let stopped = false, request: AbortController | undefined;
   async function refresh() {
     if (stopped || document.hidden || request) return;
@@ -19,7 +19,7 @@ export function watchLiveWeather(receive: (weather: WeatherVisualState) => void,
     const timeout = setTimeout(() => controller.abort(), 5000);
     try {
       const weather = await provider.current(controller.signal);
-      if (!stopped) { receive(weather); status('live weather · Salt Lake City'); }
+      if (!stopped) { receive(weather); status('live weather · Lehi'); }
     } catch {
       if (!stopped) status('weather reconnecting · keeping the last conditions');
     } finally { clearTimeout(timeout); if (request === controller) request = undefined; }

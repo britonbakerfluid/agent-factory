@@ -16,11 +16,11 @@ vi.mock('../client/prototypes/factory25dContributions', () => ({ watchContributi
 vi.mock('../client/prototypes/factory25dAvatarTexture', async () => {
   const THREE = await import('three');
   return { avatarTexture: () => ({ sheet: { feet: Array.from({ length: 9 }, () => [24, 24, 24, 24]) },
-    texture: new THREE.CanvasTexture({} as HTMLCanvasElement) }), setAvatarTextureFrame() {} };
+    texture: new THREE.CanvasTexture({} as HTMLCanvasElement) }), setAvatarTextureFrame() {}, installAvatarBack() {} };
 });
 vi.mock('../client/prototypes/factory25dLabels', () => ({ createNameTag: () => ({
-  element: { dataset: {}, classList: { toggle() {} } }, update: hooks.labelUpdates,
-  setContribution() {}, setTickets: hooks.tickets, setDetails() {}, setActivity() {}, dispose() {},
+  element: { dataset: {}, style: {}, classList: { toggle() {} }, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, height: 0 }) }, update: hooks.labelUpdates,
+  setContribution() {}, setTickets: hooks.tickets, setDetails() {}, setAvatar() {}, setActivity() {}, dispose() {},
 }) }));
 vi.mock('../client/prototypes/factory25dEffects', () => ({ createFactoryEffects: () => ({
   update() {}, follow() {}, configureGarage() {}, dispose() {},

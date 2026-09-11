@@ -1,3 +1,4 @@
+import {batchStaticProp} from './factory25dStaticBatch';
 import * as THREE from "three";
 import { standard, propPart } from "./factory25dProps";
 import { contactShadow } from "./factory25dContactShadows";
@@ -18,7 +19,7 @@ export function createIndoorPlants(interior: THREE.Group) {
     | "bonsai"
     | "flytrap";
   const houseplants = createHouseplantFoliage();
-  const plants: Array<{ foliage: THREE.Group; phase: number; update?: (time: number, reduced: boolean) => void }> = [];
+
   const potClay = standard("#69515d", 1, "#100c16");
   const potRim = standard("#8b6e74", 1, "#110c16");
   const potSoil = standard("#272431", 1);
@@ -71,7 +72,7 @@ export function createIndoorPlants(interior: THREE.Group) {
   ) {
     const group = new THREE.Group();
     group.name = `${kind} plant`;
-    let updateFoliage: ((time: number, reduced: boolean) => void) | undefined;
+
     propPart(group, [0.24, 0.18, 0.24], [0, 0.11, 0], potClay);
     propPart(group, [0.29, 0.07, 0.29], [0, 0.235, 0], potRim);
     propPart(group, [0.235, 0.015, 0.235], [0, 0.279, 0], potSoil);
@@ -187,7 +188,7 @@ export function createIndoorPlants(interior: THREE.Group) {
       }
     } else if (kind === 'bonsai') {
       const detail = houseplants.bonsai(phase);
-      foliage.add(detail.group); updateFoliage = detail.update;
+      foliage.add(detail.group);
     } else if (kind === "flytrap") {
       const lip = standard("#c35a72", 1, "#231019");
       const tooth = standard("#e2d9a1", 1);
@@ -230,10 +231,10 @@ export function createIndoorPlants(interior: THREE.Group) {
       }
     } else if (kind === 'rubber' || kind === 'broad' || kind === 'calathea') {
       const detail = houseplants.broadleaf(kind,phase);
-      foliage.add(detail.group); updateFoliage = detail.update;
+      foliage.add(detail.group);
     } else if (kind === 'fern' || kind === 'palm' || kind === 'trailing') {
       const detail = kind === 'trailing' ? houseplants.trailing(phase, baseY > 0) : houseplants.fronds(kind,phase);
-      foliage.add(detail.group); updateFoliage = detail.update;
+      foliage.add(detail.group);
     } else {
       const count = kind === "snake" ? 7 : kind === "bird" ? 4 : 6;
       for (let i = 0; i < count; i += 1) {
@@ -272,6 +273,8 @@ export function createIndoorPlants(interior: THREE.Group) {
         bloom.add(beak);
       }
     }
+    group.userData.plantBatchSavings=batchStaticProp(group);
+    interior.userData.plantBatchSavings=(interior.userData.plantBatchSavings??0)+group.userData.plantBatchSavings;
     group.position.set(x, baseY, z);
     group.scale.setScalar(scale);
     parent.add(group);
@@ -283,7 +286,7 @@ export function createIndoorPlants(interior: THREE.Group) {
       opacity: 0.28,
       round: true,
     });
-    plants.push({ foliage, phase, update: updateFoliage });
+
     return group;
   }
 
@@ -314,16 +317,7 @@ export function createIndoorPlants(interior: THREE.Group) {
       });
       return shelf;
     },
-    update(elapsed: number, reduced: boolean) {
-      plants.forEach(({ foliage, phase, update }) => {
-        if (update) { update(elapsed,reduced); return; }
-        foliage.rotation.z = reduced
-          ? 0
-          : Math.sin(elapsed * 0.92 + phase) * 0.018;
-        foliage.rotation.y = reduced
-          ? 0
-          : Math.sin(elapsed * 0.57 + phase) * 0.025;
-      });
-    },
+    // Indoor foliage keeps its authored resting pose; there is no indoor wind.
+    update(_elapsed: number, _reduced: boolean) {},
   };
 }

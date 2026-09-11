@@ -4,6 +4,7 @@ import { createClient, type Client } from '@libsql/client';
 import type { AvatarConfig, WorldSnapshot } from '../../shared/types.js';
 import { parseAvatarConfig } from '../../shared/avatar-customization.js';
 import type { StoredTeamMember } from '../../shared/team.js';
+import type { BasketballChallenge } from '../../shared/basketball-challenge.js';
 import { readContribution, type ContributionRecord } from '../../shared/factory-contributions.js';
 import {
   WORLD_SCHEMA_VERSION,
@@ -77,6 +78,9 @@ export class LibSqlWorldRepository implements WorldRepository {
       await this.client.execute(`CREATE TABLE IF NOT EXISTS team_members (
         id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL,
         avatar TEXT NOT NULL, last_seen INTEGER NOT NULL
+      )`);
+      await this.client.execute(`CREATE TABLE IF NOT EXISTS basketball_challenges (
+        id TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL
       )`);
       await this.client.execute(`CREATE TABLE IF NOT EXISTS github_contribution_totals (
         scope TEXT PRIMARY KEY,
@@ -188,6 +192,24 @@ export class LibSqlWorldRepository implements WorldRepository {
         last_seen = MAX(team_members.last_seen, excluded.last_seen)`,
       args: [member.id, member.name, JSON.stringify(member.avatar), member.lastSeen],
     })), 'write');
+  }
+
+  async loadChallenges(): Promise<unknown[]> {
+    const result = await this.requireClient().execute('SELECT data FROM basketball_challenges');
+    return result.rows.map(row => { try { return JSON.parse(String(row.data)) as unknown; } catch { return null; } });
+  }
+
+  async saveChallenges(challenges: BasketballChallenge[]): Promise<void> {
+    if (!challenges.length) return;
+    await this.requireClient().batch(challenges.map(challenge => ({
+      sql: 'INSERT INTO basketball_challenges (id, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
+      args: [challenge.id, JSON.stringify(challenge), challenge.updatedAt],
+    })), 'write');
+  }
+
+  async deleteChallenges(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    await this.requireClient().batch(ids.map(id => ({ sql: 'DELETE FROM basketball_challenges WHERE id = ?', args: [id] })), 'write');
   }
 
   async loadContributionRecords(scope?: string): Promise<ContributionRecord[]> {

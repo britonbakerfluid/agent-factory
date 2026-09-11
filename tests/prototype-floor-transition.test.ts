@@ -15,33 +15,19 @@ describe('physical floor descent',()=>{
     expect(GARAGE_ELEVATOR.x+GARAGE_SECTION_X).toBeCloseTo(FACTORY_ELEVATOR.x);
   });
   it('rebases the settled garage without a visual jump',()=>{
-    const camera=home();floorTravelCamera(camera,home(),1,true);
+    const camera=home();floorTravelCamera(camera,home(),1,true,false);
     const before=new THREE.Vector3(GARAGE_ELEVATOR.x+GARAGE_SECTION_X,GARAGE_LEVEL+GARAGE_SECTION_Y,-2.9).project(camera);
     floorTravelCamera(camera,home(),1,false);
     const after=new THREE.Vector3(GARAGE_ELEVATOR.x,GARAGE_LEVEL,-2.9).project(camera);
     expect(before.distanceTo(after)).toBeLessThan(1e-8);
   });
-  it('keeps looking down with readable floor depth throughout the ride',()=>{
-    const camera=home(),source=home(),front=new THREE.Vector3(0,0,13.9),back=new THREE.Vector3(0,0,-4.6);
-    for(let i=0;i<=100;i++){
-      floorTravelCamera(camera,source,i/100,true);
-      expect(camera.getWorldDirection(new THREE.Vector3()).y).toBeLessThan(-.25);
-      // No edge-on collapse or underside flip; the room retains its 2.5D depth.
-      const depth=back.clone().project(camera).y-front.clone().project(camera).y;
-      expect(depth).toBeGreaterThan(.7);expect(depth).toBeLessThan(1.9);
-    }
+  it('provides slab undersides for the passing eye-level view',()=>{
     const section=createFloorSection(new THREE.Scene());
     expect(section.root.position.toArray()).toEqual([0,0,0]);
     expect(section.root.scale.toArray()).toEqual([1,1,1]);
     expect(section.root.getObjectByName('upper-slab-underside')).toBeDefined();
     expect(section.root.getObjectByName('patio-lower-underside')).toBeDefined();
     section.dispose();
-  });
-  it('lowers the viewing angle during travel, then restores the landing framing',()=>{
-    const source=home(),camera=home();floorTravelCamera(camera,source,.5,true);
-    expect(camera.getWorldDirection(new THREE.Vector3()).y).toBeGreaterThan(-.4);
-    floorTravelCamera(camera,source,1,true);
-    expect(camera.getWorldDirection(new THREE.Vector3()).y).toBeLessThan(-.6);
   });
   it('clears the upper cutaway above the frame before the garage settles',()=>{
     const camera=home();floorTravelCamera(camera,home(),1,true);
@@ -68,10 +54,14 @@ describe('physical floor descent',()=>{
     for(let ms=0;ms<=2400;ms+=16){
       const t=elevatorTrip(ms,false,true).garage01;
       floorTravelCamera(camera,source,t,true);
-      const ys=landmarks.map(({at,upper})=>at.clone().add(new THREE.Vector3(0,upper?upperFloorLift(t):0,0)).project(camera).y);
+      const ys=landmarks.map(({at,upper})=>{
+        floorTravelCamera(camera,source,t,true,upper);
+        return at.clone().add(new THREE.Vector3(0,upper?upperFloorLift(t):0,0)).project(camera).y;
+      });
       if(previous)ys.forEach((y,i)=>{
-        expect(Math.abs(y-previous![i])).toBeLessThan(.11);
-        expect(y-previous![i]).toBeLessThan(.11);
+        expect(Number.isFinite(y)).toBe(true);
+        // Bound visible movement; offscreen slabs can cross larger distances.
+        if(Math.abs(y)<=1||Math.abs(previous![i])<=1)expect(Math.abs(y-previous![i])).toBeLessThan(.14);
       });
       previous=ys;
     }
@@ -116,6 +106,7 @@ describe('physical floor descent',()=>{
       product.elements.forEach((value,index)=>expect(value).toBeCloseTo(identity.elements[index],8));
     }
     const settled=home();floorTravelCamera(settled,source,1,false);
+    floorTravelCamera(camera,source,1,true,false);
     expect(camera.projectionMatrix.equals(settled.projectionMatrix)).toBe(true);
   });
 });
@@ -137,4 +128,80 @@ describe('vending machine walking clearance',()=>{
     expect(clearFactorySegment({x:7.2,z:8.1},{x:7.2,z:10})).toBe(true);
     expect(clearFactorySegment({x:-5.15,z:7.4},{x:-5.15,z:8.9})).toBe(true);
   });
+});
+
+it('reveals the arriving upper floor from below, through eye level, then from above',()=>{
+  const source=home(),camera=home();
+  const directionAt=(t:number)=>{floorTravelCamera(camera,source,t,true);return camera.getWorldDirection(new THREE.Vector3()).y;};
+  expect(directionAt(.70)).toBeGreaterThan(0);
+  expect(Math.abs(directionAt(.65))).toBeLessThan(.025);
+  expect(directionAt(.3)).toBeLessThan(-.25);
+  expect(directionAt(0)).toBeCloseTo(source.getWorldDirection(new THREE.Vector3()).y);
+  // Reversing travel retraces the same spatial path, rather than adding a bob.
+  let previous=directionAt(.70);
+  for(let i=69;i>=0;i--) {
+    const direction=directionAt(i/100);
+    expect(direction).toBeLessThanOrEqual(previous+1e-8);
+    previous=direction;
+  }
+});
+
+it('keeps the lower floor elevated while the upper floor passes eye level',()=>{
+  const source=home(),upper=home(),lower=home();
+  for(let i=0;i<=100;i++) {
+    floorTravelCamera(lower,source,i/100,true,false);
+    expect(lower.getWorldDirection(new THREE.Vector3()).y).toBeLessThan(-.5);
+  }
+  floorTravelCamera(upper,source,.65,true);
+  expect(Math.abs(upper.getWorldDirection(new THREE.Vector3()).y)).toBeLessThan(.025);
+  floorTravelCamera(lower,source,1,true,false);
+  floorTravelCamera(upper,source,1,true);
+  expect(lower.position.distanceTo(upper.position)).toBeLessThan(1e-8);
+  expect(lower.quaternion.angleTo(upper.quaternion)).toBeLessThan(1e-8);
+});
+
+it('looks further down at the garage as we rise and less steeply as we descend',()=>{
+  const source=home(),camera=home();
+  let previous=-1;
+  for(let i=0;i<=100;i++) {
+    floorTravelCamera(camera,source,i/100,true,false);
+    const y=camera.getWorldDirection(new THREE.Vector3()).y;
+    expect(y).toBeGreaterThanOrEqual(previous-1e-8);
+    previous=y;
+  }
+});
+
+it('holds each floor at its own settled zoom throughout travel',()=>{
+  const source=home(),camera=home();
+  for(let i=0;i<=100;i++) {
+    floorTravelCamera(camera,source,i/100,true,true);
+    expect(camera.zoom).toBe(i < 100 ? source.zoom : .66);
+    floorTravelCamera(camera,source,i/100,true,false);
+    expect(camera.zoom).toBe(.66);
+  }
+});
+
+it('keeps the garage framing identical during the landing hold and final rebase',()=>{
+  const source=home(),camera=home();
+  const point=new THREE.Vector3(GARAGE_ELEVATOR.x,GARAGE_LEVEL,0);
+  let landed:THREE.Vector3|undefined;
+  for(const elapsed of [1650,1800,2100,2390,2400]) {
+    const trip=elevatorTrip(elapsed,false,true);
+    expect(trip.garage01).toBe(1);
+    const physical=!trip.done;
+    floorTravelCamera(camera,source,trip.garage01,physical);
+    const projected=point.clone().add(new THREE.Vector3(physical?GARAGE_SECTION_X:0,physical?GARAGE_SECTION_Y:0,0)).project(camera);
+    expect(camera.zoom).toBe(.66);
+    if(landed)expect(projected.distanceTo(landed)).toBeLessThan(1e-8);
+    landed=projected;
+  }
+});
+
+it('preserves the factory zoom before and after reduced-motion trips',()=>{
+ const source=home(),camera=home();
+ for(const toGarage of [false,true])for(const elapsed of [0,50,109,110,180,240]) {
+  const trip=elevatorTrip(elapsed,!toGarage,toGarage,true);
+  floorTravelCamera(camera,source,trip.garage01,false);
+  expect(camera.zoom).toBe(trip.garage?.66:source.zoom);
+ }
 });

@@ -1,3 +1,4 @@
+import {batchStaticSiblings} from './factory25dStaticBatch';
 import * as THREE from "three";
 import { FRONT_COUNTER, INTERIOR_Z } from '@shared/factory25d-layout';
 import { createBeanbagConsole } from "./factory25dBeanbagConsole";
@@ -42,6 +43,7 @@ export function createLoungeDetails(
     opacity: 0.13,
   });
 
+  batchStaticSiblings(table,table.children.filter((child):child is THREE.Mesh=>child instanceof THREE.Mesh&&child.material===leg));
   const candle = new THREE.Mesh(
     new THREE.CylinderGeometry(0.055, 0.062, 0.14, 8),
     standard("#dfc18e", 1),
@@ -230,7 +232,7 @@ export function createLoungeDetails(
 
   // A shaded floor lamp gives the couch its own warm pool, with one shadow map.
   const floorLamp = new THREE.Group();
-  floorLamp.position.set(3.25, 0.018, 5.18);
+  floorLamp.position.set(5.05, 0.018, 5.18);
   parent.add(floorLamp);
   propPart(floorLamp, [0.27, 0.035, 0.27], [0, 0.018, 0], brass);
   propPart(floorLamp, [0.028, 1.22, 0.028], [0, 0.62, 0], brass);

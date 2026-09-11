@@ -264,6 +264,8 @@ export type WSMessageToClient =
   | import('./factory25d-driving.js').GarageDriveState
   | import('./factory25d-driving.js').GarageDriveResult
   | import('./visitor-basketball.js').VisitorBallUpdate
+  | import('./basketball-challenge.js').ChallengeState
+  | import('./basketball-challenge.js').ChallengeResult
   /** `buildId` identifies the running server build; a client that sees it change reloads once. */
   | { type: 'world_snapshot'; snapshot: WorldSnapshot; buildId?: string }
   | { type: 'world_delta'; delta: WorldDelta }
@@ -289,6 +291,7 @@ export type WSMessageToServer =
   | import('./lounge-radio.js').RadioRequest
   | import('./factory25d-driving.js').GarageDriveRequest
   | import('./visitor-basketball.js').VisitorBallInput
+  | import('./basketball-challenge.js').ChallengeRequest
   | { type: 'identify'; username: string; avatar: AvatarConfig }
   | { type: 'request_state' }
   | { type: 'logout' }

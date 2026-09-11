@@ -1,5 +1,5 @@
 {
-  "collection": "Fluid + We Commerce original logos",
+  "collection": "Fluid + We Commerce + Mist original logos",
   "assets": [
     {
       "file": "fluid-logomark.svg",
@@ -40,6 +40,11 @@
       "file": "we-commerce-logotype-white.svg",
       "sha256": "a3f127d701b6dd5d36245c7d43acf2d8d5ff6189b2bb4f695900963c340eed77",
       "source": "Fluid design system / brand assets"
+    },
+    {
+      "file": "mist-mark.svg",
+      "sha256": "311e7fb8455083910d92105eb6e793e79983a04129af8902def9adee7d6e7bb9",
+      "source": "Mist logo animation, frame 180 pixel export (mist-logo-original.html)"
     }
   ]
 }

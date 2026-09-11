@@ -18,7 +18,7 @@ export function createToolbarTooltip(toolbar: HTMLElement, id = 'factory-toolbar
   const hints: Record<string,string> = {
     'window-left':'look left', 'window-right':'look right', 'window-position':'pan across the valley',
     'board-flip':'flip the whiteboard', 'board-page':'see more notes', 'board-reset':'start a new game',
-    'board-back':'back to the whiteboard', 'duck-play':'play duck hunt', 'duck-reload':'reload',
+    'board-back':'back to the whiteboard', 'duck-play':'play duck hunt',
   };
   function label(el: HTMLElement) {
     // Suppress the browser's second, unstyled tooltip on legacy view controls.
@@ -43,6 +43,9 @@ export function createToolbarTooltip(toolbar: HTMLElement, id = 'factory-toolbar
   }
   function target(event: Event) {
     const el = event.target instanceof Element ? event.target.closest<HTMLElement>('button,select,input[type="range"],summary') : null;
+    if (el?.matches('.factory-audio-dock summary,.factory-audio-mute') || el?.closest('.scene-sound')) { el?.removeAttribute('title'); return undefined; }
+    // Visible labels already explain their actions. Reserve tooltips for icon-only controls.
+    if (el?.textContent?.trim() && !el.matches('input,select') && !el.matches('.factory-avatar-shortcut')) { el.removeAttribute('title'); return undefined; }
     return el && toolbar.contains(el) && !el.closest('.factory-toolbar-ghost,.factory-room-menu,.factory-profile-menu') && !el.dataset.profileMenu && el.getAttribute('aria-expanded') !== 'true' ? el : undefined;
   }
   function reveal(el: HTMLElement) {
@@ -60,7 +63,7 @@ export function createToolbarTooltip(toolbar: HTMLElement, id = 'factory-toolbar
   }
   toolbar.addEventListener('pointerover', event => {
     if (event.pointerType !== 'mouse') return;
-    const el = target(event); if (!el || el === anchor) return;
+    const el = target(event); if (!el) { hide(); return; } if (el === anchor) return;
     hide(); anchor = el; label(el);
     showTimer = setTimeout(()=>reveal(el),performance.now() - lastHide < 500 ? 60 : 400);
   }, events);

@@ -13,3 +13,41 @@
 .agent-level[hidden], .agent-contributions[hidden] { display: none; }
 .agent-label .agent-details { z-index: 5; transform: translateX(calc(-50% + var(--detail-shift, 0px))) translateY(var(--detail-y, 0px)); overflow-y: auto; }
 .agent-label:has(> .agent-details:not([hidden])) { z-index: 16; }
+
+/* Character metadata stays visually close to the dark scene controls. */
+.agent-label .agent-details { padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; color:#dce6e1; overflow:visible; }
+.agent-thought-body { display:grid; gap:7px; padding:12px 14px; background:#14201f; max-height:inherit; overflow-y:auto; clip-path:polygon(8px 0,calc(100% - 8px) 0,calc(100% - 8px) 4px,calc(100% - 4px) 4px,calc(100% - 4px) 8px,100% 8px,100% calc(100% - 8px),calc(100% - 4px) calc(100% - 8px),calc(100% - 4px) calc(100% - 4px),calc(100% - 8px) calc(100% - 4px),calc(100% - 8px) 100%,8px 100%,8px calc(100% - 4px),4px calc(100% - 4px),4px calc(100% - 8px),0 calc(100% - 8px),0 8px,4px 8px,4px 4px,8px 4px); }
+.agent-label .agent-details :is(strong,.agent-activity) { color:#dce6e1; }
+.agent-label .agent-details :is(small,.agent-contributions,.agent-next-level) { color:#a7bbb2; }
+.agent-label .agent-details::after { display:none; }
+
+/* Keep the name's hit area stable while its text is shown in the detail panel. */
+.agent-label:has(> .agent-details:not([hidden])) > .agent-name { opacity:0; }
+.agent-label .agent-thought-body .agent-feedback-detail { color:#a7bbb2; }
+
+.agent-label > .agent-name { cursor:grab; }
+.is-grabbing .agent-label > .agent-name { cursor:grabbing; }
+
+/* Match the island's black surface and stepped, rounded silhouette. Animate the
+   inner panel so the label's viewport-clamping transform stays independent. */
+.agent-thought-body {
+  padding:14px 18px; background:#000;
+  clip-path:polygon(18px 0,calc(100% - 18px) 0,calc(100% - 18px) 3px,calc(100% - 9px) 3px,calc(100% - 9px) 6px,calc(100% - 6px) 6px,calc(100% - 6px) 9px,calc(100% - 3px) 9px,calc(100% - 3px) 18px,100% 18px,100% calc(100% - 18px),calc(100% - 3px) calc(100% - 18px),calc(100% - 3px) calc(100% - 9px),calc(100% - 6px) calc(100% - 9px),calc(100% - 6px) calc(100% - 6px),calc(100% - 9px) calc(100% - 6px),calc(100% - 9px) calc(100% - 3px),calc(100% - 18px) calc(100% - 3px),calc(100% - 18px) 100%,18px 100%,18px calc(100% - 3px),9px calc(100% - 3px),9px calc(100% - 6px),6px calc(100% - 6px),6px calc(100% - 9px),3px calc(100% - 9px),3px calc(100% - 18px),0 calc(100% - 18px),0 18px,3px 18px,3px 9px,6px 9px,6px 6px,9px 6px,9px 3px,18px 3px);
+}
+.agent-details:not([hidden]) > .agent-thought-body {
+  animation:agent-panel-enter 190ms cubic-bezier(.23,1,.32,1) both;
+}
+.agent-details[data-above="true"] { --agent-panel-start:12px; }
+@keyframes agent-panel-enter {
+  from { opacity:0; transform:translateY(var(--agent-panel-start,-12px)); }
+  to { opacity:1; transform:translateY(0); }
+}
+.agent-label:has(> .agent-name:focus-visible) .agent-thought-body { animation:none; }
+@media(prefers-reduced-motion:reduce) {
+  .agent-details:not([hidden]) > .agent-thought-body { animation:none; }
+}
+
+/* Both staff and agent cards use the projected feet, not the name-button height. */
+.agent-label .agent-details:not([data-above="true"]) { top:8px; }
+.agent-detail-heading { align-items:center; gap:10px; }
+.agent-detail-heading .factory-portrait { --portrait-size:32px; }

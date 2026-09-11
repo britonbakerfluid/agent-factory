@@ -6,7 +6,7 @@ import { AVATAR_ANIMATIONS } from '../client/prototypes/factory25dAvatar';
 import { snackHandPose } from '../client/prototypes/factory25dSnackCarry';
 
 type Rect = { x: number; y: number; width: number; height: number; color: string };
-function paint(animation: string, frame: number, avatar = DEFAULT_AVATAR) {
+function paint(animation: string, frame: number, avatar = DEFAULT_AVATAR, backView = false) {
   const pixels = Array.from({ length: 32 }, () => Array<string>(32).fill(''));
   const rectangles: Rect[] = [], colors = resolveAvatar(avatar);
   const ctx = { fillStyle: '', globalAlpha: 1, clearRect() {},
@@ -16,11 +16,18 @@ function paint(animation: string, frame: number, avatar = DEFAULT_AVATAR) {
         for (let col = Math.max(0, x); col < Math.min(32, x + width); col++) pixels[row][col] = this.fillStyle;
     },
   };
-  drawCharacter(ctx as unknown as CanvasRenderingContext2D, 0, 0, 32, hexToInt(colors.shirtColor), animation, frame, colors);
+  drawCharacter(ctx as unknown as CanvasRenderingContext2D, 0, 0, 32, hexToInt(colors.shirtColor), animation, frame, colors, undefined, false, backView);
   return { pixels, rectangles, colors };
 }
 
 describe('four-frame pixel walk', () => {
+  it('paints the opposite face on the reverse of a sprite without mirroring its front', () => {
+    const front=paint('idle',0), back=paint('idle',0,DEFAULT_AVATAR,true);
+    expect(back.pixels.slice(4,15)).not.toEqual(front.pixels.slice(4,15));
+    expect(back.pixels.slice(4,15)).toEqual(paint('walk_up',0).pixels.slice(4,15));
+    expect(paint('walk_up',0,DEFAULT_AVATAR,true).pixels.slice(4,15)).toEqual(front.pixels.slice(4,15));
+  });
+
   it('anchors a carried snack on actual painted hand pixels in every pose and frame', () => {
     const texture = new THREE.Texture(), pixel = .86 / 32;
     for (const [row, animation] of AVATAR_ANIMATIONS.entries()) for (let frame = 0; frame < 4; frame++) {

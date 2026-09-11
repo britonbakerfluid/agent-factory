@@ -77,8 +77,7 @@ export function createLoungeChat(
   sheet.append(composer); dock.append(back);
   view.append(sheet, dock, suggestionsEl); canvas.parentElement!.append(view);
   const soundPanel = document.querySelector<HTMLElement>('.scene-sound');
-  const soundParent = soundPanel?.parentElement;
-  const soundSibling = soundPanel?.nextSibling;
+  // The island may adopt the panel after this module is built; read its home when borrowing it.
   function hideSuggestions() {
     suggestions = []; activeSuggestion = -1; suggestionsEl.hidden = true;
     input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant');
@@ -217,7 +216,7 @@ export function createLoungeChat(
     document.body.classList.add('chat-open');
     view.removeAttribute('aria-hidden'); view.setAttribute('role', 'dialog'); view.setAttribute('aria-modal', 'true');
     // Keep the global mute within the modal's accessible content while reading.
-    if (soundPanel) view.append(soundPanel);
+    soundPanel?.closest('details')?.removeAttribute('open');
     dock.hidden = false; sheet.inert = true;
     dock.dataset.instant = String(reduced.matches);
     fit(); from.height *= canvas.clientHeight / Math.max(1, previousHeight);
@@ -235,7 +234,6 @@ export function createLoungeChat(
   function finishExit() {
     active = moving = false; dock.hidden = true;
     view.setAttribute('aria-hidden', 'true'); view.removeAttribute('role'); view.removeAttribute('aria-modal');
-    if (soundPanel && soundParent) soundParent.insertBefore(soundPanel, soundSibling ?? null);
     document.body.classList.remove('chat-open');
     renderer.setSize(800, 564, false);
     button.hidden = false; button.focus({ preventScroll: true });
@@ -324,7 +322,7 @@ export function createLoungeChat(
     camera,
     configureCommands(commands: LoungeChatCommands) { integration = commands; },
     configureNotifications(sounds: PhoneNotificationSounds) { notificationSounds = sounds; },
-    dispose() { saveDraft(); cancelNotification(); stopMessages(); stopConnection(); abort.abort(); handset.dispose(); if (soundPanel && soundParent) soundParent.insertBefore(soundPanel, soundSibling ?? null); document.body.classList.remove('chat-open'); view.remove(); button.remove(); },
+    dispose() { saveDraft(); cancelNotification(); stopMessages(); stopConnection(); abort.abort(); handset.dispose(); document.body.classList.remove('chat-open'); view.remove(); button.remove(); },
     isActive: () => active,
     focusPoint: () => board.localToWorld(focus.set(0, 0, PHONE.faceZ)),
     update(now: number, data: BoardData, visible: boolean) {

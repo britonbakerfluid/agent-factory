@@ -1,14 +1,14 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import * as THREE from 'three';
 import {DEFAULT_AVATAR} from '../shared/constants';
-import {createStaffPickup,createPickupMotion,updatePickupShadow,createPickupFold,pickupReleaseLanding} from '../client/prototypes/factory25dPickup';
+import {createStaffPickup,createPickupMotion,updatePickupShadow,createPickupFold,pickupReleaseLanding,pickupLanding} from '../client/prototypes/factory25dPickup';
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 function fixture(){
  let now=100;vi.spyOn(performance,'now').mockImplementation(()=>now);
  vi.stubGlobal('matchMedia',()=>({matches:true}));vi.stubGlobal('window',new EventTarget());
- vi.stubGlobal('document',{documentElement:{classList:{add:vi.fn(),remove:vi.fn()}}});
+ vi.stubGlobal('document',{body:{classList:{contains:()=>false}},documentElement:{classList:{add:vi.fn(),remove:vi.fn()}}});
  const button=Object.assign(new EventTarget(),{setPointerCapture:vi.fn()});
- const canvas={getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})};
+ const canvas={classList:{contains:()=>false},getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})};
  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:new THREE.Texture()}));new THREE.Scene().add(mesh);
  const camera=new THREE.OrthographicCamera(-2,2,2,-2,.1,30);camera.position.z=10;camera.updateMatrixWorld();
  const pickup=createStaffPickup(mesh,button as unknown as HTMLButtonElement,canvas as HTMLCanvasElement,DEFAULT_AVATAR);
@@ -117,5 +117,54 @@ it('gains altitude only after lifting, and starts each new pickup low again',()=
  expect(f.mesh.userData.pickupHeight).toBeLessThan(2.18);
  for(let t=6320;t<=8300;t+=20){f.frame(t);motion.update(camera,canvas);}
  f.frame(8320);motion.update(camera,canvas,{x:200,y:180});expect(f.mesh.userData.pickupHeight).toBe(.18);
+ motion.dispose();f.pickup.dispose();
+});
+
+it('holds a high-fall landing, rises, and only then finishes the pickup',()=>{
+ const f=fixture(),canvas={getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})} as HTMLCanvasElement;
+ const camera=new THREE.OrthographicCamera(-2,2,2,-2,.1,30);camera.position.z=10;camera.updateMatrixWorld();
+ const motion=createPickupMotion(f.mesh,DEFAULT_AVATAR);
+ for(let t=120;t<=420;t+=20){f.frame(t);motion.update(camera,canvas,{x:200,y:-80});}
+ let impact=0;
+ for(let t=440;t<3000;t+=20){f.frame(t);motion.update(camera,canvas);if(motion.stage==='landing'){impact=t;break;}}
+ expect(impact).toBeGreaterThan(0);expect(motion.active).toBe(true);expect(motion.shadowAirborne).toBe(false);
+ f.frame(impact+400);motion.update(camera,canvas);expect(motion.stage).toBe('landing');
+ f.frame(impact+820);motion.update(camera,canvas);expect(motion.stage).toBe('idle');
+ motion.dispose();f.pickup.dispose();
+});
+
+it('stretches downward first, then snaps into a latched lift below the pointer',()=>{
+ const f=fixture(),canvas={getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})} as HTMLCanvasElement;
+ const camera=new THREE.OrthographicCamera(-2,2,2,-2,.1,30);camera.position.z=10;camera.updateMatrixWorld();
+ const motion=createPickupMotion(f.mesh,DEFAULT_AVATAR);
+ f.frame(120);motion.update(camera,canvas,{x:200,y:220});expect(motion.stage).toBe('pulling');expect(f.mesh.position.y).toBe(0);
+ f.frame(140);motion.update(camera,canvas,{x:200,y:350});expect(motion.stage).toBe('lifted');expect(f.mesh.position.y).toBeLessThan(-1.5);
+ f.frame(160);motion.update(camera,canvas,{x:200,y:230});expect(motion.stage).toBe('lifted');
+ motion.dispose();f.pickup.dispose();
+});
+
+it.each(['factory','garage'] as const)('lands a drop over the %s elevator in front of its doors',async room=>{
+ const {fromFactoryWorld,FACTORY_ELEVATOR,GARAGE_ELEVATOR,GARAGE_WORLD_Z,clearFactorySegment}=await import('../shared/factory25d-layout');
+ const lift=room==='garage'?GARAGE_ELEVATOR:FACTORY_ELEVATOR;
+ const landed=fromFactoryWorld(pickupLanding({x:lift.x,z:-4.28},room));
+ expect(landed.z-(room==='garage'?GARAGE_WORLD_Z:0)).toBeGreaterThan(-3.58);
+ expect(Math.abs(landed.x-lift.x)).toBeLessThan(.1);
+ expect(clearFactorySegment(landed,lift)).toBe(true);
+});
+
+it('reaches the frozen release destination without a backward landing snap',()=>{
+ const f=fixture(),canvas={getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})} as HTMLCanvasElement;
+ const camera=new THREE.OrthographicCamera(-2,2,2,-2,.1,30);camera.position.z=10;camera.updateMatrixWorld();
+ const motion=createPickupMotion(f.mesh,DEFAULT_AVATAR);
+ for(let t=120;t<=320;t+=20){f.frame(t);motion.update(camera,canvas,{x:200+(t-120)*.4,y:150-(t-120)*.5});}
+ f.mesh.userData.pickupLanding={x:1.3,z:0};
+ let previous=f.mesh.position.x;
+ for(let t=340;t<1500;t+=20){
+   f.frame(t);if(t===340)f.mesh.userData.pickupLanding={x:1.3,z:0};motion.update(camera,canvas);
+   expect(f.mesh.position.x).toBeGreaterThanOrEqual(previous-1e-8);
+   expect(f.mesh.position.x).toBeLessThanOrEqual(1.3+1e-8);
+   previous=f.mesh.position.x;
+   if(motion.stage!=='falling'){expect(f.mesh.position.x).toBeCloseTo(1.3);break;}
+ }
  motion.dispose();f.pickup.dispose();
 });

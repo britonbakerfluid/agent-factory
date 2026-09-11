@@ -19,14 +19,14 @@ export const AVATAR_ANIMATIONS = ['idle', 'walk_right', 'walk_left', 'walk_down'
 // Painted sheets are immutable and shared by matching agents, companions and portraits.
 // Bound the cache so dragging a custom color never retains every intermediate look.
 const sheets = new Map<string, { canvas: HTMLCanvasElement; feet: number[][] }>();
-export function avatarSheet(avatar: AvatarConfig, animations: readonly string[] = AVATAR_ANIMATIONS, eyes: readonly (AvatarEyes | undefined)[] = [undefined], frontFacing = false) {
-  const colors = resolveAvatar(avatar), key = JSON.stringify([colors, animations, eyes, frontFacing]);
+export function avatarSheet(avatar: AvatarConfig, animations: readonly string[] = AVATAR_ANIMATIONS, eyes: readonly (AvatarEyes | undefined)[] = [undefined], frontFacing = false, backView = false) {
+  const colors = resolveAvatar(avatar), key = JSON.stringify([colors, animations, eyes, frontFacing, backView]);
   const cached = sheets.get(key);
   if (cached) { sheets.delete(key); sheets.set(key, cached); return cached; }
   const canvas = document.createElement('canvas'); canvas.width = 128 * eyes.length; canvas.height = animations.length * 32;
   const ctx = canvas.getContext('2d')!;
   for (const [expression, eye] of eyes.entries()) for (const [row, animation] of animations.entries()) for (let frame = 0; frame < 4; frame++)
-    drawCharacter(ctx, (expression * 4 + frame) * 32, row * 32, 32, hexToInt(colors.shirtColor), animation, frame, colors, eye, frontFacing);
+    drawCharacter(ctx, (expression * 4 + frame) * 32, row * 32, 32, hexToInt(colors.shirtColor), animation, frame, colors, eye, frontFacing, backView);
   // Ground by visible pixels for each frame, including different shoes and strides.
   const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   const feet = animations.map((_, row) => Array.from({length:4}, (_, frame) => {

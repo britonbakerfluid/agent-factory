@@ -130,7 +130,7 @@ export const SHIRT_DESIGN_NAMES = [
 export const VALID_EMOTES: import('./types.js').EmoteType[] = ['dance', 'jump', 'guitar', 'gun', 'laugh', 'wave', 'sleep', 'explode', 'dizzy', 'flex', 'rage', 'fart'];
 
 export const DEFAULT_SERVER_CONFIG: import('./types.js').ServerConfig = {
-  title: 'AGENT FACTORY',
+  title: 'FLUID FACTORY',
   environment: 'factory25d',
 };
 

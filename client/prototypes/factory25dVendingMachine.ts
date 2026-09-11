@@ -7,9 +7,6 @@ import { createVendingDispenser, type VendingInteractionOptions } from './factor
 import { createSnackGeometry, snackKind } from './factory25dVendingSnacks';
 import { VendingCabinetRock } from './factory25dVendingMotion';
 
-/** Physical cabinet size, excluding the soft pool of light in front. */
-export const VENDING_MACHINE_SIZE = { width: .96, depth: .68, height: 1.36 } as const;
-
 /** A freestanding snack machine; local +Z is its front and local Y=0 is the floor. */
 export function createVendingMachine(parent: THREE.Object3D) {
   const root = new THREE.Group(); root.name = 'corner-vending-machine'; parent.add(root);

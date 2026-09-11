@@ -21,7 +21,7 @@ const STORAGE_KEY = 'factory-light-switches-v1';
 const FALLING_FIXTURES: Record<string, { axis: 'x' | 'z'; x: number; z: number }> = {
   'front-desk-lamp': { axis: 'z', x: 0, z: -.58 },
   'lounge-floor-lamp': { axis: 'x', x: .65, z: 0 },
-  'lounge-candle': { axis: 'x', x: .7, z: 0 },
+  'lounge-candle': { axis: 'x', x: -.7, z: 0 },
 };
 
 export function readLightPreferences(storage: Pick<Storage, 'getItem'>): Record<string, boolean> {

@@ -20,7 +20,7 @@ const simulate = (clerk: StaffCleanup, seconds: number, onFrame?: () => void) =>
 describe('room staff cleanup', () => {
   it('walks around the counter and room walls, restores each fixture once, then returns to the desk', () => {
     const clerk = new StaffCleanup(home);
-    const lamps = [job('desk', -3.56, 6.61, 0, -.58), job('floor', 3.25, 7.13, .65, 0), job('candle', 2.25, 7.85, .7, 0)];
+    const lamps = [job('desk', -3.56, 6.61, 0, -.58), job('floor', 5.05, 7.13, .65, 0), job('candle', 2.25, 7.85, -.7, 0)];
     lamps.forEach(lamp => { clerk.enqueue(lamp.request); clerk.enqueue(lamp.request); });
     expect(clerk.queued).toBe(3);
     const order: string[] = [];

@@ -1,38 +1,115 @@
 import * as THREE from "three";
 import { requireElement } from "./dom";
+import { createDuckHud, type DuckTallyMark } from "./factory25dDuckHud";
 
-/** A short local arcade round. Hit awards are idempotent within each flight. */
+/**
+ * Patio duck hunt with the shape of the arcade original: a round is five waves
+ * of two ducks, three shells per wave with an automatic reload between waves,
+ * a stated hit quota to clear the round and ducks that get quicker each round.
+ * Downtime between waves stays under a second.
+ */
+export const DUCK_WAVES = 5;
+export const DUCKS_PER_WAVE = 2;
+export const SHOTS_PER_WAVE = 3;
+export const DUCKS_PER_ROUND = DUCK_WAVES * DUCKS_PER_WAVE;
+export const WAVE_PAUSE_SECONDS = 0.85;
+/** Hits needed to clear a round: six of ten to start, up to nine of ten. */
+export function duckQuota(round: number) {
+  return Math.min(9, 5 + Math.max(1, Math.floor(round)));
+}
+/** Faster, jumpier and shorter flights as rounds go on; capped so the ducks stay hittable. */
+export function duckDifficulty(round: number) {
+  const step = Math.max(0, Math.floor(round) - 1);
+  return {
+    speed: Math.min(3.4, 1.55 + step * 0.28),
+    flightSeconds: Math.max(3.2, 5.6 - step * 0.4),
+    wobble: Math.min(1.4, 0.55 + step * 0.15),
+  };
+}
+export type DuckPhase = 'idle' | 'wave' | 'between' | 'result';
+export type DuckOutcome = 'cleared' | 'failed';
+
+/** Round bookkeeping only; flight animation and timing of wave close-out belong to the view. */
 export class DuckRound {
-  remaining = 0;
-  score = 0;
-  shots = 3;
+  round = 1;
+  wave = 0;
+  shots = SHOTS_PER_WAVE;
+  hits = 0;
+  phase: DuckPhase = 'idle';
+  outcome: DuckOutcome | undefined;
+  /** Seconds into the current wave's flight. */
+  elapsed = 0;
+  pause = 0;
   hit = new Set<number>();
-  get active() {
-    return this.remaining > 0;
+  results: DuckTallyMark[] = [];
+  get active() { return this.phase === 'wave' || this.phase === 'between'; }
+  get quota() { return duckQuota(this.round); }
+  get difficulty() { return duckDifficulty(this.round); }
+  get waveComplete() { return this.phase === 'wave' && this.hit.size === DUCKS_PER_WAVE; }
+  /** Remaining ducks fly off once the shells are spent or the flight time is up. */
+  get escaping() {
+    return this.phase === 'wave' && this.hit.size < DUCKS_PER_WAVE
+      && (this.shots === 0 || this.elapsed >= this.difficulty.flightSeconds);
+  }
+  /** Ten marks in flight order: settled waves, the current wave, then pending. */
+  get tally(): DuckTallyMark[] {
+    const marks: DuckTallyMark[] = [...this.results];
+    if (this.phase === 'wave') for (let i = 0; i < DUCKS_PER_WAVE; i++) marks.push(this.hit.has(i) ? 'hit' : 'pending');
+    while (marks.length < DUCKS_PER_ROUND) marks.push('pending');
+    return marks.slice(0, DUCKS_PER_ROUND);
   }
   start() {
-    this.remaining = 30;
-    this.score = 0;
-    this.newFlight();
+    this.phase = 'wave'; this.wave = 1; this.hits = 0; this.results = []; this.outcome = undefined;
+    this.loadWave();
   }
-  newFlight() {
-    this.shots = 3;
-    this.hit.clear();
+  /** After a result: a cleared round moves on, a failed one starts over at round one. */
+  continue() {
+    if (this.phase !== 'result') return;
+    this.round = this.outcome === 'cleared' ? Math.min(99, this.round + 1) : 1;
+    this.start();
   }
+  /** Leaving mid-round abandons it without a result; the round number is kept. */
+  end() { this.phase = 'idle'; this.hit.clear(); this.outcome = undefined; this.elapsed = 0; this.pause = 0; }
+  private loadWave() { this.shots = SHOTS_PER_WAVE; this.hit.clear(); this.elapsed = 0; }
+  /** One shell per call. A duck counts once per wave; `null` is a shot into the sky. */
   shoot(target: number | null) {
-    if (!this.active || this.shots === 0) return false;
+    if (this.phase !== 'wave' || this.shots === 0 || this.escaping) return false;
     this.shots--;
-    if (target === null || this.hit.has(target)) return false;
+    if (target === null || target < 0 || target >= DUCKS_PER_WAVE || this.hit.has(target)) return false;
     this.hit.add(target);
-    this.score++;
+    this.hits++;
     return true;
   }
-  tick(dt: number) {
-    this.remaining = Math.max(
-      0,
-      this.remaining - Math.max(0, Math.min(dt, 0.1)),
-    );
+  /** Settle the wave: every duck not hit flew away. The last wave decides the round. */
+  closeWave() {
+    if (this.phase !== 'wave') return;
+    for (let i = 0; i < DUCKS_PER_WAVE; i++) this.results.push(this.hit.has(i) ? 'hit' : 'miss');
+    if (this.wave >= DUCK_WAVES) {
+      this.phase = 'result';
+      this.outcome = this.hits >= this.quota ? 'cleared' : 'failed';
+    } else {
+      this.phase = 'between';
+      this.pause = WAVE_PAUSE_SECONDS;
+    }
   }
+  tick(dt: number) {
+    const step = Math.max(0, Math.min(dt, 0.1));
+    if (this.phase === 'wave') this.elapsed += step;
+    else if (this.phase === 'between') {
+      this.pause -= step;
+      if (this.pause <= 0) { this.wave++; this.loadWave(); this.phase = 'wave'; }
+    }
+  }
+}
+
+function pixelTexture(canvas: HTMLCanvasElement, repeatX = 1) {
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.repeat.set(repeatX, 1);
+  return texture;
 }
 
 function duckTexture() {
@@ -42,13 +119,7 @@ function duckTexture() {
   const ctx = canvas.getContext("2d")!;
   for (let frame = 0; frame < 3; frame++) {
     const offset = frame * 32;
-    const rect = (
-      color: string,
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-    ) => {
+    const rect = (color: string, x: number, y: number, w: number, h: number) => {
       ctx.fillStyle = color;
       ctx.fillRect(offset + x, y, w, h);
     };
@@ -62,183 +133,315 @@ function duckTexture() {
     rect("#d59a42", 27, 8, 5, 3);
     rect("#182c30", 25, 6, 1, 1);
     rect("#e2d9b1", 26, 6, 1, 1);
-    rect(
-      "#4b615d",
-      10,
-      frame === 0 ? 3 : frame === 1 ? 10 : 14,
-      8,
-      frame === 1 ? 5 : 7,
-    );
+    rect("#4b615d", 10, frame === 0 ? 3 : frame === 1 ? 10 : 14, 8, frame === 1 ? 5 : 7);
     rect("#8fada0", 11, frame === 0 ? 3 : frame === 1 ? 10 : 18, 6, 2);
     rect("#427b9c", 11, frame === 0 ? 7 : frame === 1 ? 12 : 17, 6, 2);
     rect("#d19949", 10, 19, 5, 1);
     rect("#d19949", 16, 18, 4, 1);
   }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.magFilter = texture.minFilter = THREE.NearestFilter;
-  texture.generateMipmaps = false;
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.repeat.set(1 / 3, 1);
-  return texture;
+  return pixelTexture(canvas, 1 / 3);
 }
 
-export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement) {
+/** Original pixel reeds: blades with a few seed heads, opaque along the bottom rows. */
+function reedTexture(seed: number, blades: string[], heads: string, density: number) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 96;
+  const ctx = canvas.getContext("2d")!;
+  let state = seed;
+  const random = () => { state = (state * 1664525 + 1013904223) >>> 0; return state / 4294967296; };
+  ctx.fillStyle = blades[0];
+  ctx.fillRect(0, 84, 256, 12);
+  for (let i = 0; i < density; i++) {
+    const x = Math.floor(random() * 256), height = 18 + Math.floor(random() * 62), width = random() < 0.35 ? 2 : 1;
+    const lean = random() < 0.5 ? -1 : 1, color = blades[Math.floor(random() * blades.length)];
+    ctx.fillStyle = color;
+    for (let y = 0; y < height; y++) {
+      const drift = Math.floor((y / height) * (y / height) * 5) * lean;
+      ctx.fillRect((x + drift + 256) % 256, 95 - y, width, 1);
+    }
+    if (random() < 0.16) {
+      ctx.fillStyle = heads;
+      ctx.fillRect((x + 4 * lean + 255) % 256, 95 - height - 7, 3, 8);
+    }
+  }
+  return pixelTexture(canvas, 2);
+}
+
+/** Read-only view of the game's model for the island HUD and gallery. */
+export type DuckHuntOptions = {
+  /** The room's sky gradient; sampled along its top row to continue the sky above the mountains. */
+  sky?: THREE.Texture;
+  /** Fires when the hunt view opens or closes, so the backdrop can switch to its close-up detail. */
+  onActive?(active: boolean): void;
+};
+
+export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, options: DuckHuntOptions = {}) {
   const round = new DuckRound();
-  const play = requireElement<HTMLButtonElement>("#duck-play");
-  const reload = requireElement<HTMLButtonElement>("#duck-reload");
-  const status = requireElement<HTMLElement>("#duck-status");
+  const events = new AbortController(), listen = { signal: events.signal };
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const play = requireElement<HTMLButtonElement>("#duck-play");
+  const hud = createDuckHud(requireElement<HTMLElement>("#duck-status"));
+
+  // A stable orthographic view from the deck edge: reeds along the bottom, the
+  // valley in the middle, open sky above. The near plane keeps the deck and its
+  // furniture out of the frame; only the backdrop and the game props are closer than -4.15.
+  const gameCamera = new THREE.OrthographicCamera();
+  const CENTER_X = 16, EYE_Z = -4.05, FRAME_BOTTOM = -0.55, MAX_HEIGHT = 5.4, BACKDROP_WIDTH = 15.84;
+  let cameraBlend = 0, viewHeight = MAX_HEIGHT, halfWidth = 3.4, viewTop = FRAME_BOTTOM + MAX_HEIGHT;
+  let wasOpen = false;
+
+  const stage = new THREE.Group(); stage.name = 'duck-hunt-stage'; stage.visible = false; scene.add(stage);
+  const disposables: Array<{ dispose(): void }> = [];
+  if (options.sky) {
+    const geometry = new THREE.PlaneGeometry(BACKDROP_WIDTH, 4.2);
+    const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setY(i, 0.995);
+    const material = new THREE.MeshBasicMaterial({ map: options.sky });
+    const sky = new THREE.Mesh(geometry, material);
+    sky.position.set(CENTER_X, 3.61 + 2.1, -4.63); sky.name = 'duck-hunt-sky';
+    stage.add(sky); disposables.push(geometry, material);
+  }
+  // Solid ground behind the reeds: the painted backdrop ends at the meadow line, and the
+  // frame's bottom edge sits below it.
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(BACKDROP_WIDTH + 2, 1.6), new THREE.MeshBasicMaterial({ color: '#1d3a2b' }));
+  ground.position.set(CENTER_X, FRAME_BOTTOM + 0.3, -4.4); ground.name = 'duck-hunt-ground';
+  stage.add(ground); disposables.push(ground.geometry, ground.material);
+  const reedLayers = [
+    { texture: reedTexture(7, ['#274a33', '#2f5a3a', '#37663f'], '#6b4a2c', 120), width: 17.5, height: 1.05, y: 0.32, z: -4.31, sway: 0.0012 },
+    { texture: reedTexture(19, ['#4a8342', '#5f9a4c', '#79b45a'], '#8a6236', 160), width: 17.5, height: 1.15, y: -0.08, z: -4.22, sway: 0.002 },
+  ].map(layer => {
+    const material = new THREE.MeshBasicMaterial({ map: layer.texture, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
+    const geometry = new THREE.PlaneGeometry(layer.width, layer.height);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(CENTER_X, layer.y, layer.z); mesh.name = 'duck-hunt-reeds';
+    stage.add(mesh); disposables.push(geometry, material, layer.texture);
+    return { mesh, texture: layer.texture, sway: layer.sway };
+  });
+
   const texture = duckTexture();
   const material = new THREE.MeshStandardMaterial({
-    map: texture,
-    alphaTest: 0.1,
-    roughness: 1,
-    emissive: "#283f40",
-    emissiveIntensity: 0.55,
-    side: THREE.DoubleSide,
+    map: texture, alphaTest: 0.1, roughness: 1, emissive: "#283f40", emissiveIntensity: 0.55, side: THREE.DoubleSide,
   });
-  const ducks = [0, 1].map((i) => {
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.45), material);
+  disposables.push(texture, material);
+  const DUCK_Z = -4.36, DUCK_W = 0.6, DUCK_H = 0.45;
+  type Duck = { mesh: THREE.Mesh; button: HTMLButtonElement; x: number; y: number; vx: number; vy: number; scale: number; turnIn: number; state: 'flying' | 'falling' | 'escaping' | 'gone'; age: number };
+  const ducks: Duck[] = Array.from({ length: DUCKS_PER_WAVE }, (_, i) => {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(DUCK_W, DUCK_H), material);
     mesh.visible = false;
-    scene.add(mesh);
+    stage.add(mesh); disposables.push(mesh.geometry);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "duck-target";
     button.hidden = true;
     button.setAttribute("aria-label", `Shoot duck ${i + 1}`);
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      shoot(i);
-    });
+    button.addEventListener("click", (event) => { event.stopPropagation(); shoot(i); }, listen);
     canvas.parentElement!.append(button);
-    return { mesh, button, fall: 0 };
+    return { mesh, button, x: CENTER_X, y: 0, vx: 0, vy: 0, scale: 0.8, turnIn: 0, state: 'gone', age: 0 };
   });
-  let flight = 0,
-    wave = 0,
-    enabled = false,
-    wasActive = false,
-    text = "";
-  let best = 0;
+
+  // Deterministic per wave so a round plays the same way for everyone testing it.
+  let rng = 1;
+  const random = () => { rng = (rng * 1664525 + 1013904223) >>> 0; return rng / 4294967296; };
+  let flightClock = 0, enabled = false, wasActive = false, finishedAt = 0, resultShown = false;
+  let message = '', messageUntil = 0, launchedWave = 0;
+  let best = 0, bestRound = 0;
+  const storage = { best: 'factory-patio-ducks-best', round: 'factory-patio-ducks-round' };
   try {
-    best = Math.max(
-      0,
-      Math.min(
-        999,
-        Number(localStorage.getItem("factory-patio-ducks-best")) || 0,
-      ),
-    );
-  } catch {
-    /* Play without storage. */
-  }
-  function announce() {
-    const next = round.active
-      ? `${round.score} hit · ${round.shots}/3 shots · ${Math.ceil(round.remaining)}s`
-      : `best ${best} · local arcade`;
-    if (text !== next) {
-      status.textContent = next;
-      text = next;
-    }
+    best = Math.max(0, Math.min(DUCKS_PER_ROUND, Number(localStorage.getItem(storage.best)) || 0));
+    bestRound = Math.max(0, Math.min(99, Number(localStorage.getItem(storage.round)) || 0));
+  } catch { /* Play without storage. */ }
+
+  function say(text: string, seconds = 1.4) { message = text; messageUntil = performance.now() + seconds * 1000; paint(); }
+  function launchWave() {
+    launchedWave = round.wave; flightClock = 0;
+    rng = (round.round * 7919 + round.wave * 104729) >>> 0;
+    const { speed } = round.difficulty;
+    ducks.forEach((duck, i) => {
+      const side = i === 0 ? -1 : 1;
+      duck.state = 'flying'; duck.age = 0; duck.turnIn = 0.5 + random() * 0.6;
+      duck.x = CENTER_X + side * (0.5 + random() * Math.max(0.6, halfWidth * 0.55));
+      duck.y = reduced.matches ? 2.1 + i * 0.7 : 0.15;
+      const angle = THREE.MathUtils.degToRad(58 + random() * 64) ;
+      duck.vx = Math.cos(angle) * speed * (random() < 0.5 ? -1 : 1);
+      duck.vy = Math.sin(angle) * speed;
+      duck.scale = reduced.matches ? 0.72 : 0.86;
+      duck.mesh.visible = true;
+    });
+    say(round.wave === 1 ? `round ${round.round} · need ${round.quota} of ${DUCKS_PER_ROUND}` : `wave ${round.wave} of ${DUCK_WAVES}`, 1.6);
   }
   function shoot(index: number | null) {
-    if (!enabled) return;
-    if (round.shoot(index) && index !== null) ducks[index].fall = 0.001;
-    announce();
+    if (!enabled || round.phase !== 'wave') return;
+    const before = round.shots;
+    const hit = round.shoot(index);
+    if (round.shots === before) return;
+    if (hit && index !== null) { ducks[index].state = 'falling'; ducks[index].age = 0; ducks[index].vy = 0.6; say('hit!'); }
+    else if (round.escaping) say(round.hit.size ? 'one flew away' : 'flew away', 1.8);
+    else say(round.shots === 1 ? 'last shell' : 'miss', 1);
+    paint();
   }
+  function finishRound() {
+    finishedAt = performance.now(); resultShown = true;
+    best = Math.max(best, round.hits);
+    if (round.outcome === 'cleared') bestRound = Math.max(bestRound, round.round);
+    try { localStorage.setItem(storage.best, String(best)); localStorage.setItem(storage.round, String(bestRound)); } catch { /* Scores stay local to the session. */ }
+  }
+  function leave() { if (round.active) { round.end(); launchedWave = 0; for (const duck of ducks) duck.state = 'gone'; message = ''; paint(); } }
   play.addEventListener("click", () => {
-    if (round.active) {
-      round.remaining = 0;
-    } else {
-      round.start();
-      flight = 0;
-      wave = 0;
-      ducks.forEach((duck) => {
-        duck.fall = 0;
-      });
-    }
-    announce();
-  });
-  reload.addEventListener("click", () => {
-    if (round.active) {
-      round.shots = 3;
-      announce();
-    }
-  });
-  canvas.addEventListener("click", () => {
-    if (round.active) shoot(null);
-  });
+    if (round.active) { leave(); return; }
+    if (cameraBlend > 0) return;
+    if (round.phase === 'result') round.continue(); else round.start();
+    launchWave(); finishedAt = 0; resultShown = false; paint();
+  }, listen);
+  canvas.addEventListener("click", () => { if (round.phase === 'wave') shoot(null); }, listen);
   document.addEventListener("keydown", (event) => {
-    if (
-      !round.active ||
-      !enabled ||
-      event.key.toLowerCase() !== "r" ||
-      event.target instanceof HTMLInputElement
-    )
-      return;
-    event.preventDefault();
-    round.shots = 3;
-    announce();
-  });
-  const point = new THREE.Vector3();
+    if (round.active && event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); leave(); }
+  }, { ...listen, capture: true });
+
+  let canvasWidth = canvas.clientWidth, canvasHeight = canvas.clientHeight;
+  const canvasSize = new ResizeObserver(() => { canvasWidth = canvas.clientWidth; canvasHeight = canvas.clientHeight; });
+  canvasSize.observe(canvas);
+
+  const playIcon = '<svg class="duck-play-icon" aria-hidden="true" viewBox="0 0 16 16" shape-rendering="crispEdges"><path fill="#f2ac42" d="M2 8h10v5H4v-1H2z"/><path fill="#ffe08a" d="M3 8h5v3H3z"/><path fill="#42865a" d="M9 3h4v1h1v5h-5z"/><path fill="#f6eed3" d="M9 8h5v1H9z"/><path fill="#e3782b" d="M13 5h3v2h-3z"/><path fill="#172a24" d="M11 4h1v1h-1z"/><path fill="#bd642e" d="M5 12h7v1H5z"/></svg>';
+  let playState = '';
+  function paint() {
+    const now = performance.now();
+    const live = message && now < messageUntil ? message : '';
+    let text: string;
+    if (round.phase === 'wave' || round.phase === 'between') text = live || (round.phase === 'between' ? `${round.hits} of ${DUCKS_PER_ROUND} · need ${round.quota}` : `need ${round.quota}`);
+    else if (round.phase === 'result') text = round.outcome === 'cleared'
+      ? `round ${round.round} cleared · ${round.hits}/${DUCKS_PER_ROUND}`
+      : `round over · ${round.hits}/${DUCKS_PER_ROUND} · needed ${round.quota}`;
+    else text = bestRound ? `best round ${bestRound} · ${best} hits` : `${DUCK_WAVES} waves · ${SHOTS_PER_WAVE} shells each`;
+    hud.paint({ round: round.round, shots: round.active ? round.shots : SHOTS_PER_WAVE, tally: round.phase === 'idle' ? [] : round.tally, quota: round.quota, message: text });
+    const state = round.active ? 'active' : round.phase === 'result' ? round.outcome! : 'idle';
+    if (playState !== state) {
+      playState = state;
+      play.dataset.gameActive = String(round.active);
+      play.innerHTML = state === 'active' ? 'end round' : `${playIcon}<span>${state === 'cleared' ? 'next round' : state === 'failed' ? 'play again' : 'duck hunt'}</span>`;
+      play.setAttribute('aria-label', state === 'active' ? 'End duck hunt round' : state === 'cleared' ? `Play round ${round.round + 1}` : state === 'failed' ? 'Play duck hunt again from round 1' : 'Play duck hunt');
+    }
+  }
+  paint();
+
+  const point = new THREE.Vector3(), edge = new THREE.Vector3();
   return {
+    isActive: () => round.active || cameraBlend > 0,
+    cameraFor(base: THREE.OrthographicCamera | THREE.PerspectiveCamera, dt: number) {
+      cameraBlend = reduced.matches ? Number(round.active) : THREE.MathUtils.clamp(cameraBlend + (round.active ? 1 : -1) * dt / 0.5, 0, 1);
+      const open = round.active || cameraBlend > 0;
+      if (open !== wasOpen) {
+        wasOpen = open; document.body.classList.toggle('duck-hunt-open', open); stage.visible = open;
+        options.onActive?.(open);
+      }
+      if (!cameraBlend || !(base instanceof THREE.OrthographicCamera)) return base;
+      const t = cameraBlend * cameraBlend * (3 - 2 * cameraBlend);
+      const aspect = canvasWidth / Math.max(1, canvasHeight);
+      // Never wider than the painted backdrop; wide screens trade height for width.
+      viewHeight = Math.min(MAX_HEIGHT, (BACKDROP_WIDTH - 0.3) / aspect);
+      halfWidth = viewHeight * aspect / 2; viewTop = FRAME_BOTTOM + viewHeight;
+      const centerY = FRAME_BOTTOM + viewHeight / 2;
+      gameCamera.copy(base);
+      gameCamera.position.set(CENTER_X, centerY, EYE_Z); gameCamera.lookAt(CENTER_X, centerY, -5);
+      gameCamera.position.lerp(base.position, 1 - t); gameCamera.quaternion.slerp(base.quaternion, 1 - t);
+      const h = THREE.MathUtils.lerp((base.top - base.bottom) / base.zoom, viewHeight, t);
+      gameCamera.zoom = 1; gameCamera.left = -h * aspect / 2; gameCamera.right = h * aspect / 2;
+      gameCamera.top = h / 2; gameCamera.bottom = -h / 2;
+      gameCamera.updateProjectionMatrix(); gameCamera.updateMatrixWorld(); return gameCamera;
+    },
+    dispose() {
+      canvasSize.disconnect(); events.abort(); hud.dispose();
+      for (const duck of ducks) { duck.mesh.removeFromParent(); duck.button.remove(); }
+      stage.removeFromParent(); for (const item of disposables) item.dispose();
+      document.body.classList.remove('duck-hunt-open', 'duck-round-result');
+      if (wasOpen) options.onActive?.(false);
+    },
     update(dt: number, camera: THREE.Camera, visible: boolean) {
-      enabled =
-        visible &&
-        !document.hidden &&
-        !document.body.classList.contains("inspect-open");
-      if (!visible && round.active) round.remaining = 0;
-      if (enabled) round.tick(dt);
-      if (wasActive && !round.active) {
-        best = Math.max(best, round.score);
-        try {
-          localStorage.setItem("factory-patio-ducks-best", String(best));
-        } catch {
-          /* A local session can still score. */
-        }
-      }
+      enabled = visible && !document.hidden && !document.body.classList.contains("inspect-open");
+      if (!visible && round.active) leave();
+      const step = Math.max(0, Math.min(dt, 0.1));
+      if (enabled) round.tick(step);
+      if (round.phase === 'wave' && round.wave !== launchedWave) launchWave();
+      if (round.phase === 'result' && !resultShown) { finishRound(); paint(); }
+      if (wasActive && !round.active) paint();
       wasActive = round.active;
-      play.textContent = round.active ? "end round" : "duck hunt";
-      if (play.dataset.gameActive !== String(round.active)) play.dataset.gameActive = String(round.active);
-      reload.hidden = !round.active;
-      if (enabled) announce();
-      if (round.active && enabled) {
-        flight += dt;
-        if (
-          flight > 7 ||
-          (round.hit.size === 2 && ducks.every((duck) => duck.fall > 0.7))
-        ) {
-          flight = 0;
-          wave++;
-          round.newFlight();
-          ducks.forEach((duck) => {
-            duck.fall = 0;
-          });
+      const showResult = round.phase === 'result' && finishedAt > 0 && performance.now() - finishedAt < 5000;
+      if (document.body.classList.contains('duck-round-result') !== showResult) document.body.classList.toggle('duck-round-result', showResult);
+      if (message && performance.now() >= messageUntil) { message = ''; paint(); }
+      // Test hook, like the other scene systems: phase, wave, shells left and hits.
+      const summary = `${round.phase}:${round.wave}:${round.shots}:${round.hits}`;
+      if (canvas.dataset.duckHunt !== summary) canvas.dataset.duckHunt = summary;
+      if (enabled && round.phase === 'wave') {
+        flightClock += step;
+        const { wobble } = round.difficulty;
+        if (round.escaping && ducks.some(duck => duck.state === 'flying')) {
+          // Time ran out (spent shells are announced by the shot itself).
+          if (round.shots > 0) say(round.hit.size ? 'one flew away' : 'flew away', 1.8);
+          for (const duck of ducks) if (duck.state === 'flying') { duck.state = 'escaping'; duck.age = 0; }
+        }
+        for (const duck of ducks) {
+          if (duck.state === 'gone') continue;
+          duck.age += step;
+          if (reduced.matches) {
+            // Reduced motion: ducks hold a spot; hits and escapes resolve without travel.
+            if (duck.state !== 'flying') duck.state = 'gone';
+            continue;
+          }
+          if (duck.state === 'flying') {
+            duck.turnIn -= step;
+            if (duck.turnIn <= 0) {
+              duck.turnIn = 0.45 + random() * 0.7;
+              const speed = Math.hypot(duck.vx, duck.vy), angle = Math.atan2(duck.vy, duck.vx) + (random() - 0.5) * 1.6 * wobble;
+              duck.vx = Math.cos(angle) * speed; duck.vy = Math.sin(angle) * speed;
+            }
+            duck.x += duck.vx * step; duck.y += duck.vy * step;
+            // Ducks turn back inside the frame, like the arcade sky.
+            if (duck.x < CENTER_X - halfWidth + 0.4) { duck.x = CENTER_X - halfWidth + 0.4; duck.vx = Math.abs(duck.vx); }
+            if (duck.x > CENTER_X + halfWidth - 0.4) { duck.x = CENTER_X + halfWidth - 0.4; duck.vx = -Math.abs(duck.vx); }
+            if (duck.y > viewTop - 0.5) { duck.y = viewTop - 0.5; duck.vy = -Math.abs(duck.vy) * 0.8; }
+            if (duck.y < 1.0 && duck.vy < 0) duck.vy = Math.abs(duck.vy);
+            // Higher ducks read as further away.
+            duck.scale = THREE.MathUtils.lerp(0.86, 0.6, THREE.MathUtils.clamp((duck.y - 0.5) / 3.6, 0, 1));
+          } else if (duck.state === 'falling') {
+            duck.vy -= 9.8 * step; duck.y += duck.vy * step; duck.x += duck.vx * 0.15 * step;
+            if (duck.y < -0.2 || duck.age > 1.4) duck.state = 'gone';
+          } else if (duck.state === 'escaping') {
+            duck.vy = Math.min(5.5, Math.abs(duck.vy) + 9 * step); duck.y += duck.vy * step; duck.x += duck.vx * 0.5 * step;
+            duck.scale = Math.max(0.5, duck.scale - step * 0.25);
+            if (duck.y > viewTop + 0.6) duck.state = 'gone';
+          }
+        }
+        // Every duck settled: hit ones have fallen, the rest have flown off.
+        if (ducks.every(duck => duck.state === 'gone')) {
+          round.closeWave();
+          if (round.active) say(`${round.hits} of ${DUCKS_PER_ROUND} · need ${round.quota}`, WAVE_PAUSE_SECONDS);
+          paint();
         }
       }
-      texture.offset.x = (Math.floor(flight * 7) % 3) / 3;
-      ducks.forEach(({ mesh, button }, i) => {
-        const duck = ducks[i];
-        if (duck.fall && enabled) duck.fall += dt;
-        const direction = (wave + i) % 2 ? -1 : 1;
-        const t = Math.min(1, flight / 6.6);
-        const x = reduced.matches
-          ? 13 + i * 5
-          : 16 + direction * (t * 13 - 6.5);
-        const y =
-          1.7 +
-          i * 0.75 +
-          (reduced.matches ? 0 : Math.sin(flight * 1.5 + i) * 0.26);
-        mesh.position.set(x, y - Math.min(duck.fall, 1) * 1.6, -4.36);
-        mesh.scale.x = direction;
-        mesh.rotation.z = duck.fall
-          ? direction * Math.min(duck.fall * 2, 1.2)
-          : 0;
-        mesh.visible = round.active && duck.fall < 0.75;
-        button.hidden = !mesh.visible || Boolean(duck.fall) || !enabled;
+      texture.offset.x = (Math.floor(flightClock * 7) % 3) / 3;
+      if (stage.visible && !reduced.matches) for (const layer of reedLayers) layer.texture.offset.x = Math.sin(performance.now() / 1300) * layer.sway;
+      ducks.forEach((duck, i) => {
+        const { mesh, button } = duck;
+        const direction = duck.vx < 0 ? -1 : 1;
+        mesh.visible = round.phase === 'wave' && duck.state !== 'gone';
+        if (mesh.visible) {
+          mesh.position.set(duck.x, duck.y, DUCK_Z);
+          mesh.scale.set(direction * duck.scale, duck.scale, 1);
+          mesh.rotation.z = duck.state === 'falling' ? direction * Math.min(duck.age * 2.2, 1.3) : duck.state === 'escaping' ? -direction * 0.35 : 0;
+        }
+        const hidden = !mesh.visible || duck.state !== 'flying' || round.hit.has(i) || !enabled || cameraBlend < 0.99;
+        if (button.hidden !== hidden) button.hidden = hidden;
         if (button.hidden) return;
         point.copy(mesh.position).project(camera);
-        button.style.left = `${((point.x + 1) * canvas.clientWidth) / 2 - 22}px`;
-        button.style.top = `${((1 - point.y) * canvas.clientHeight) / 2 - 22}px`;
+        if (Math.abs(point.x) > 1 || Math.abs(point.y) > 1 || point.z < -1 || point.z > 1) { button.hidden = true; return; }
+        // The hit area is the projected sprite, never smaller than a finger.
+        edge.set(mesh.position.x + DUCK_W / 2 * duck.scale, mesh.position.y + DUCK_H / 2 * duck.scale, mesh.position.z).project(camera);
+        const width = Math.max(36, Math.abs(edge.x - point.x) * canvasWidth);
+        const height = Math.max(36, Math.abs(edge.y - point.y) * canvasHeight);
+        button.style.width = `${width}px`;
+        button.style.height = `${height}px`;
+        button.style.left = `${((point.x + 1) * canvasWidth) / 2 - width / 2}px`;
+        button.style.top = `${((1 - point.y) * canvasHeight) / 2 - height / 2}px`;
       });
     },
   };
