@@ -137,9 +137,10 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
       const airborne=phase==='held'&&lifted;material.transparent=phase==='held'?true:transparent;material.depthTest=airborne?false:depthTest;material.depthWrite=airborne?false:depthWrite;mesh.renderOrder=phase==='held'?1000:renderOrder;
       if(phase==='held')mesh.userData.pickupVelocity={x:body.vx*UNIT,y:-body.vy*UNIT};
       mesh.userData.pickupFalling=phase==='falling';
+      mesh.userData.pickupActive=phase!=='idle';
       if(phase==='idle')delete mesh.userData.pickupLanding;
       return phase;
-    },dispose(){spriteMaterial.map=normalMap;heroMap?.dispose();material.transparent=transparent;material.depthTest=depthTest;material.depthWrite=depthWrite;mesh.renderOrder=renderOrder;fold.dispose();}};
+    },dispose(){delete mesh.userData.pickupActive;spriteMaterial.map=normalMap;heroMap?.dispose();material.transparent=transparent;material.depthTest=depthTest;material.depthWrite=depthWrite;mesh.renderOrder=renderOrder;fold.dispose();}};
 }
 
 /** Staff preserve click actions, fall when released, then return to their post. */
