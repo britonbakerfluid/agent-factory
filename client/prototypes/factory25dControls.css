@@ -389,11 +389,11 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 .factory-profile-agent-actions button { background:transparent; }
 .factory-profile-agent-actions button:is(:hover,:focus-visible) { background:#3b3f3d; }
 
-/* A single Back action owns the entire island, including its title and padding. */
-.factory-toolbar.pixel-island.factory-solo-back { padding:0; }
+/* Focused views keep Back and the mixer inside the same padded island. */
+.factory-toolbar.pixel-island.factory-solo-back { padding:8px; }
 .factory-toolbar.factory-solo-back .factory-toolbar-actions { gap:0; }
 .factory-toolbar.factory-solo-back .factory-context-action[data-action="back"] {
-  width:100%;height:60px;padding:8px 22px;gap:12px;clip-path:var(--pixel-capsule);border-radius:0;
+  width:auto;flex:none;height:44px;padding:0 14px;gap:12px;clip-path:var(--island-control-cut);border-radius:0;
 }
 .factory-toolbar.factory-solo-back .factory-context-action[data-action="back"] .factory-nav-label { display:inline; }
 

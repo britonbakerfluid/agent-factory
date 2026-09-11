@@ -30,7 +30,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   const desk = new THREE.Group(); desk.position.y = .37; desk.rotation.x = -.22; terminal.add(desk);
   propPart(desk, [DISPLAY.frameWidth, DISPLAY.frameHeight, .045], [0, 0, 0], casing);
   propPart(desk, [DISPLAY.width + .012, DISPLAY.height + .012, .003], [0, 0, .023], edge);
-  propPart(desk, [.012, .005, .003], [.30, -.257, .023], standard('#9fbead', .7, '#37533f'));
+  propPart(desk, [.012, .005, .003], [.30, -.257, .023], standard('#aeb6b1', .7, '#37533f'));
   const paper = document.createElement('canvas'); paper.width = 360; paper.height = 255;
   const ink = paper.getContext('2d')!;
   const texture = new THREE.CanvasTexture(paper); texture.colorSpace = THREE.SRGBColorSpace;
@@ -56,7 +56,6 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   let data: TeamSnapshot | undefined, unavailable = false, signature = '';
   const emptyMembers: readonly TeamMember[] = [];
   let request: AbortController | undefined;
-  let challengeRows: { signature(memberId: string): string; action(member: TeamMember, close: () => void): HTMLElement | undefined } | undefined;
   function portrait(member: TeamMember) {
     return avatarPortrait(member.avatar);
   }
@@ -66,8 +65,9 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
     count.textContent = unavailable ? 'reconnecting' : `${online} here · ${members.length} ${members.length === 1 ? 'person' : 'people'}`;
     status.textContent = unavailable ? 'reconnecting · showing the last update'
       : data?.historyAvailable === false ? 'live now · visit history is waiting to save'
-      : 'people join this list when they connect';
-    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now), contributionFor(member.name), stationTickets && ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name }), challengeRows?.signature(member.id)])) + unavailable;
+      : '';
+    status.hidden = !status.textContent;
+    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now), contributionFor(member.name), stationTickets && ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name })])) + unavailable;
     if (signature !== next) {
       signature = next; const scroll = list.scrollTop; list.replaceChildren();
       for (const member of members) {
@@ -92,31 +92,30 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
         const tickets = document.createElement('span'); tickets.className = 'team-person-tickets';
         tickets.hidden = !stationTickets; tickets.textContent = `${ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name }).toLocaleString()} tickets`;
         details.append(heading, seen, tickets);
-        const challenge = challengeRows?.action(member, exit); if (challenge) details.append(challenge);
         row.append(image, details, dot); list.append(row);
       }
       if (!members.length) { const empty = document.createElement('p'); empty.className = 'team-desk-empty'; empty.textContent = unavailable ? 'the team list is temporarily unavailable' : data ? 'the first person to connect will appear here' : 'checking who’s here…'; list.append(empty); }
       list.scrollTop = scroll;
-      ink.fillStyle = '#182629'; ink.fillRect(0, 0, paper.width, paper.height);
-      ink.fillStyle = '#d8e6df'; ink.font = '22px "Geist Pixel", monospace'; ink.fillText('our people', 22, 33);
-      ink.fillStyle = '#8ab8a1'; ink.font = '12px "Geist Pixel", monospace'; ink.fillText(unavailable ? 'reconnecting' : `${online} here`, 245, 31);
+      ink.fillStyle = '#000000'; ink.fillRect(0, 0, paper.width, paper.height);
+      ink.fillStyle = '#e1e7e4'; ink.font = '22px "Geist Pixel", monospace'; ink.fillText('our people', 22, 33);
+      ink.fillStyle = '#aeb6b1'; ink.font = '12px "Geist Pixel", monospace'; ink.fillText(unavailable ? 'reconnecting' : `${online} here`, 245, 31);
       members.slice(0, 3).forEach((member, index) => {
         const y = 53 + index * 48;
         ink.globalAlpha = member.online && !unavailable ? 1 : .4; ink.drawImage(portrait(member), 18, y, 42, 42); ink.globalAlpha = 1;
         const contribution = contributionFor(member.name);
-        ink.fillStyle = member.online && !unavailable ? '#d8e6df' : '#91a09e'; ink.font = '15px "Geist Pixel", monospace';
+        ink.fillStyle = member.online && !unavailable ? '#e1e7e4' : '#9b9f9d'; ink.font = '15px "Geist Pixel", monospace';
         ink.fillText(member.name, 72, y + 18, contribution ? 186 : 235);
         if (contribution) {
-          ink.fillStyle = '#172c29'; ink.fillRect(272, y + 4, 59, 19);
-          ink.strokeStyle = '#769180'; ink.strokeRect(272.5, y + 4.5, 58, 18);
-          ink.font = '11px "Geist Pixel", monospace'; ink.fillStyle = '#d9ecc9';
+          ink.fillStyle = '#242626'; ink.fillRect(272, y + 4, 59, 19);
+          ink.strokeStyle = '#626666'; ink.strokeRect(272.5, y + 4.5, 58, 18);
+          ink.font = '11px "Geist Pixel", monospace'; ink.fillStyle = '#e1e7e4';
           ink.fillText(`LV ${contributionLevel(contribution.mergedPullRequests).level}`, 278, y + 18);
         }
-        ink.font = '10px "Geist Pixel", monospace'; ink.fillStyle = '#889f9a';
+        ink.font = '10px "Geist Pixel", monospace'; ink.fillStyle = '#9b9f9d';
         ink.fillText(unavailable ? 'reconnecting' : member.online ? 'here now' : lastSeenLabel(member.lastSeen, now), 72, y + 34, 240);
       });
-      ink.fillStyle = '#304541'; ink.fillRect(18, 220, 324, 1);
-      ink.fillStyle = '#9fbead'; ink.font = '11px "Geist Pixel", monospace';
+      ink.fillStyle = '#343636'; ink.fillRect(18, 220, 324, 1);
+      ink.fillStyle = '#aeb6b1'; ink.font = '11px "Geist Pixel", monospace';
       ink.fillText('tap to see the team', 22, 242);
       texture.needsUpdate = true;
     }
@@ -183,7 +182,6 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   return {
     setTickets(next: StationTicketState | undefined) { if (stationTickets === next) return; stationTickets = next; paint(); },
     members: (): readonly TeamMember[] => data?.members ?? emptyMembers,
-    setChallenges(rows: typeof challengeRows) { challengeRows = rows; paint(); },
     repaint() { paint(); },
     camera, isActive: () => active, focusPoint: () => desk.localToWorld(focus.set(0, 0, DISPLAY.faceZ)),
     update(now: number, visible: boolean) {
