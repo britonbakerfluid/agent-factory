@@ -25,7 +25,7 @@ export function createToolbarFocus(toolbar: HTMLElement, available: () => boolea
     button.click(); return true;
   }
   return {
-    name: () => focused()?.name,
+    name: () => { const view = focused(); return view?.dialog?.dataset.exiting === 'true' ? undefined : view?.name; },
     back,
     run(action: () => void) {
       if (available()) { pending = undefined; action(); return; }
@@ -38,7 +38,7 @@ export function createToolbarFocus(toolbar: HTMLElement, available: () => boolea
       const layer = view?.dialog;
       const host = layer && (!(layer instanceof HTMLDialogElement) || layer.open) ? layer : document.body;
       if (toolbar.parentElement !== host) host.append(toolbar);
-      const name = view?.name ?? '';
+      const name = view?.dialog?.dataset.exiting === 'true' ? '' : view?.name ?? '';
       if (toolbar.dataset.focus !== name) toolbar.dataset.focus = name;
       if (pending && available()) { const action = pending; pending = undefined; action(); }
     },

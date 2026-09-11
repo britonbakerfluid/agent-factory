@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createBasketballFloorMarker } from './factory25dFloorMarker';
-import { BasketballChallengeBook, HORSE_HELP, HORSE_RELEASE_Y, describeChallenge, horseActive, horseCanShoot, horseLetters, horseOpponent, horseSide, readChallenge, simulateChallengeShot, validHorseSpot,
+import { BasketballChallengeBook, HORSE_RELEASE_Y, describeChallenge, horseActive, horseCanShoot, horseLetters, horseOpponent, horseSide, readChallenge, simulateChallengeShot, validHorseSpot,
   type ChallengeRequest, type ChallengeResult, type ChallengeState, type HorseGame } from '@shared/basketball-challenge';
 import type { TeamMember } from '@shared/team';
 import { VISITOR_BALL_RIM, visitorShotVelocity, stepVisitorBall, type FlyingBall, type BallVector } from '@shared/visitor-basketball';
@@ -10,6 +10,7 @@ import './factory25dBasketballChallenge.css';
 import { miniBall } from './factory25dBasketball';
 import { avatarSheet } from './factory25dAvatar';
 import { DEFAULT_AVATAR } from '@shared/constants';
+import { createProfilePortrait } from './factory25dPortrait';
 
 type Basketball = ReturnType<typeof createVisitorBasketball>;
 type Principal = { ownerId: string; username: string } | undefined;
@@ -60,11 +61,11 @@ function createFloorMark(parent: THREE.Group, canvas: HTMLCanvasElement, onMatch
 }
 
 export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanvasElement, basketball: Basketball,
-  options: { principal(): Principal; members(): readonly TeamMember[]; onRows?(): void; replayEffects?: { rim(energy: number): void; swish(): void; bounce(energy: number): void; result(made: boolean): void } }) {
+  options: { principal(): Principal; members(): readonly TeamMember[]; replayEffects?: { rim(energy: number): void; swish(): void; bounce(energy: number): void; result(made: boolean): void } }) {
   const abort = new AbortController(), events = { signal: abort.signal };
   const preview = isControlPreview() ? new BasketballChallengeBook() : undefined;
   const games = new Map<string, HorseGame>();
-  let roomVisible = false;
+  let roomVisible = false, toolbarVisible = false;
   let pendingSend: { id: string; resolve(): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> } | undefined;
   let acceptedSpot: { id: string; revision: number; spot: BallVector } | undefined;
   let serverOffset = 0, connected = !!preview, feedback = '', feedbackUntil = 0, pendingFeedback = '', flightLetters = '';
@@ -142,17 +143,19 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
     challengePicker.hidden = !roomVisible || !basketball.shooting || basketball.armedShot || !!replay;
     if (challengePicker.hidden) challengePicker.open = false;
     const mine = me(), members = options.members().filter(member => member.id !== mine && !member.id.startsWith('legacy:'));
-    const signature = JSON.stringify([mine, connected, members.map(member => [member.id, member.name]), [...games.values()].map(game => [game.id, game.revision])]);
+    const signature = JSON.stringify([mine, connected, members.map(member => [member.id, member.name, member.avatar]), [...games.values()].map(game => [game.id, game.revision])]);
     if (signature === pickerSignature) return; pickerSignature = signature; pickerList.replaceChildren();
     if (!mine || !connected || !members.length) { pickerList.textContent = !mine ? 'Connect your account to challenge someone.' : !connected ? 'Reconnecting…' : 'No opponents available yet.'; return; }
     for (const member of members) {
       const active = [...games.values()].find(game => horseActive(game) && horseSide(game, mine) && horseSide(game, member.id));
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = member.name + (active ? ' · game in progress' : ''); button.disabled = !!active;
+      const button = document.createElement('button'); button.type = 'button'; button.disabled = !!active;
+      const name = document.createElement('span'); name.className = 'horse-opponent-name';
+      name.textContent = member.name + (active ? ' · game in progress' : '');
+      button.append(createProfilePortrait(member.avatar), name);
       button.onclick = () => { if (!connected) return; send({ type: 'challenge', action: 'create', challengeeId: member.id }); startSpot = 'created'; startDeadline = performance.now() + 8000; challengePicker.open = false; };
       pickerList.append(button);
     }
   }
-  const help = document.createElement('p'); help.className = 'horse-help'; help.hidden = true; help.textContent = HORSE_HELP; document.body.append(help);
 
   function send(request: ChallengeRequest) {
     if (preview) { local(request); return true; }
@@ -181,7 +184,7 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
       if (!game || !horseCanShoot(game, mine!) || game.revision !== playing.revision) { basketball.disarm(); playing = undefined; }
     }
     if (armedFor && !(games.get(armedFor) && horseCanShoot(games.get(armedFor)!, mine!))) { basketball.disarm(); armedFor = undefined; }
-    paint(); options.onRows?.();
+    paint();
   }
   function receiveResult(result: ChallengeResult) {
     const sentPlacement = !!pendingSend && result.id === pendingSend.id && result.action === 'shot';
@@ -240,7 +243,7 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
       turnButton.setAttribute('aria-label', text);
       const resultUnseen = !horseActive(game) && !game.seenBy.includes(mine) && !game.seenBy.includes(`${mine}:result`);
       turnButton.disabled = basketball.placingChallenge || (!(horseCanShoot(game, mine) || (game.status === 'pending' && game.challengee.ownerId === mine) || resultUnseen)) || (!!playing && !showFeedback);
-      turnButton.hidden = !roomVisible || !(horseActive(game) || showFeedback || resultUnseen);
+      turnButton.hidden = !toolbarVisible || !(horseActive(game) || showFeedback || resultUnseen);
       const inFlight = basketball.shotInFlight && (playing || pendingFeedback);
       basketball.setHint(inFlight ? 'shot away' : showFeedback && basketball.shooting ? feedback : playing ? (basketball.shooting ? `your turn · ${(basketball.shotDistance * 3.28084).toFixed(0)} ft` : 'your turn · choose a spot') : undefined, inFlight ? flightLetters : playing || (showFeedback && basketball.shooting) ? horseLetters(horseSide(game, mine)!) : undefined);
     } else { turnButton.hidden = true; basketball.setHint(undefined); }
@@ -256,7 +259,7 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
     if (message.type === 'challenge_state') receiveState(message);
     else if (message.type === 'challenge_result') receiveResult(message);
   });
-  const stopConnection = onFactoryConnection(state => { connected = state; if (!state && !preview) { games.clear(); paint(); options.onRows?.(); } });
+  const stopConnection = onFactoryConnection(state => { connected = state; if (!state && !preview) { games.clear(); paint(); } });
 
   // Local preview: an isolated book. The teammate has set a shot; after each of your shots they answer in kind.
   function local(request: ChallengeRequest) {
@@ -297,34 +300,8 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
   }
 
   return {
-    /** Team desk rows: a challenge action or the standing between the viewer and this person. */
-    desk: {
-      signature(memberId: string) {
-        const mine = me(); if (!mine) return '';
-        return [...games.values()].filter(g => [g.challenger.ownerId, g.challengee.ownerId].includes(memberId)).map(g => `${g.id}:${g.revision}`).join('|') + (connected ? '' : ':offline');
-      },
-      action(member: TeamMember, close: () => void): HTMLElement | undefined {
-        const mine = me(); if (!mine || member.id === mine) return undefined;
-        const wrap = document.createElement('span'); wrap.className = 'team-person-challenge';
-        const button = (label: string, run: () => void, primary = false) => { const el = document.createElement('button'); el.type = 'button'; el.textContent = label; el.className = primary ? 'challenge-primary' : ''; el.addEventListener('click', run, events); return el; };
-        const active = [...games.values()].find(g => horseActive(g) && horseSide(g, member.id) && horseSide(g, mine));
-        if (active) {
-          const text = document.createElement('span');
-          text.textContent = `${horseLetters(horseSide(active, mine)!) || '–'} vs ${horseLetters(horseSide(active, member.id)!) || '–'} · ${describeChallenge(active, mine)}`; wrap.append(text);
-          if (horseCanShoot(active, mine)) wrap.append(button(active.turn.role === 'match' ? 'match it' : 'set a shot', () => { close(); startSpot = active.id; startDeadline = performance.now() + 6000; }, true));
-          else if (active.status === 'pending' && active.challengee.ownerId === mine) { wrap.append(button('accept', () => send({ type: 'challenge', action: 'respond', id: active.id, accept: true }), true), button('pass', () => send({ type: 'challenge', action: 'respond', id: active.id, accept: false }))); }
-          else if (active.status === 'pending' && active.challenger.ownerId === mine) wrap.append(button('cancel', () => send({ type: 'challenge', action: 'cancel', id: active.id })));
-          return wrap;
-        }
-        if (member.id.startsWith('legacy:')) { wrap.textContent = 'connect a browser to play HORSE'; wrap.className += ' team-person-challenge-quiet'; return wrap; }
-        const last = [...games.values()].filter(g => !horseActive(g) && horseSide(g, member.id) && horseSide(g, mine)).sort((a, b) => b.updatedAt - a.updatedAt)[0];
-        if (last) { const text = document.createElement('span'); text.textContent = describeChallenge(last, mine); wrap.append(text); }
-        wrap.append(button('challenge to HORSE', () => { if (!connected) return; send({ type: 'challenge', action: 'create', challengeeId: member.id }); startSpot = 'created'; startDeadline = performance.now() + 8000; close(); }, true));
-        const rules = button('how it works', () => { help.hidden = !help.hidden; }); rules.className = 'team-person-challenge-help'; wrap.append(rules);
-        return wrap;
-      },
-    },
-    update(visible: boolean, camera: THREE.Camera) {
+    update(visible: boolean, camera: THREE.Camera, showToolbar = visible) {
+      if (toolbarVisible !== showToolbar) { toolbarVisible = showToolbar; paint(); }
       if (roomVisible !== visible) { roomVisible = visible; if (!visible && replay) finishReplay(false); paint(); }
       if (replay) {
         const current = games.get(replay.gameId);
@@ -374,6 +351,6 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
       if(signature!==viewSignature){viewSignature=signature;paint();}
       mark.place(camera, visible && !basketball.shooting && !replay);
     },
-    dispose() { if (pendingSend) { clearTimeout(pendingSend.timer); pendingSend.reject(new Error('Challenge closed.')); pendingSend = undefined; } abort.abort(); stopMessages(); stopConnection(); basketball.showReplayView(); basketball.disarm(); mark.dispose(); replayActor.removeFromParent(); actorMaterial.dispose(); actorTexture.dispose(); replayBall.removeFromParent(); replayBall.traverse(object => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose(); } }); challengePicker.remove(); turnButton.remove(); help.remove(); },
+    dispose() { if (pendingSend) { clearTimeout(pendingSend.timer); pendingSend.reject(new Error('Challenge closed.')); pendingSend = undefined; } abort.abort(); stopMessages(); stopConnection(); basketball.showReplayView(); basketball.disarm(); mark.dispose(); replayActor.removeFromParent(); actorMaterial.dispose(); actorTexture.dispose(); replayBall.removeFromParent(); replayBall.traverse(object => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose(); } }); challengePicker.remove(); turnButton.remove(); },
   };
 }

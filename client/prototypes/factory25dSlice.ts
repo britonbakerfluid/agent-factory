@@ -627,7 +627,9 @@ const avatarStage = createAvatarStage(scene, sideRoomScene, garage.scene, liveAg
 const factoryControls = createFactoryControls(canvas, liveAgents, () => currentViewCamera,
   () => !carDrivingActive() && !garage.isTransitioning() && !avatarStage.isActive() && !whiteboardInteraction.isTransitioning() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive() && !document.body.classList.contains('inspect-open'),
   room => roomNavigation.request(room), avatarStage,
-  () => garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory');
+  () => garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory',
+  () => roomNavigation.destination() ?? (garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory'),
+  () => roomNavigation.destination() !== undefined);
 const garageDriving = createGarageDriving(garage.room, garage.cars, liveAgents, canvas, () => {
   factoryControls.state.stop(); if (factoryControls.state.active) factoryControls.state.release();
 });
@@ -670,9 +672,8 @@ const visitorBasketball = createVisitorBasketball(interior, canvas, basketball.p
     current: () => garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory',
     visit: room => roomNavigation.request(room), transitioning: () => garage.isTransitioning() }, basketball.pickupShadows);
 // Asynchronous HORSE between durable people from the front-desk roster: floor mark and island turn status.
-const basketballChallenges = createBasketballChallenges(interior, canvas, visitorBasketball, { principal: () => whiteboardInteraction.getData().principal, members: () => teamDesk.members(), onRows: () => teamDesk.repaint(),
+const basketballChallenges = createBasketballChallenges(interior, canvas, visitorBasketball, { principal: () => whiteboardInteraction.getData().principal, members: () => teamDesk.members(),
   replayEffects: { rim: energy => basketball.hitRim(energy), swish: () => { basketball.swishNet(); sceneAudio.ballSwish(); }, bounce: energy => sceneAudio.ballBounce(energy), result: made => basketball.showResult(made) } });
-teamDesk.setChallenges(basketballChallenges.desk);
 const snackCarry = createSnackCarry(vendingMachine, canvas, () => liveAgents.entries.values(),
   entry => !liveAgents.isPerforming(entry.session.sessionId)
     && !(basketball.active && basketballPlayers[basketball.player]?.id === entry.session.sessionId));
@@ -973,7 +974,8 @@ function animate(): void {
   mountainView.render(elapsed, sceneryVisible, viewCamera, glassCenterY);
   const visitorBallVisible = !duckHunt.isActive() && !djViewActive && !garage.isTransitioning() && !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive();
   visitorBasketball.update(dt, viewCamera, visitorBallVisible);
-  basketballChallenges.update(visitorBallVisible && mainRoomVisible, viewCamera);
+  basketballChallenges.update(visitorBallVisible && mainRoomVisible, viewCamera,
+    (visitorBallVisible && mainRoomVisible) || teamDesk.isExiting());
   activityFeedback.update();
   duckHunt.update(dt, viewCamera, sideRoom.isActive() && !sideRoom.showsFactory());
   // Keep a square sky image in both the tilted room view and the straight-on window view.

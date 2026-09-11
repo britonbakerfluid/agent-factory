@@ -389,11 +389,11 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 .factory-profile-agent-actions button { background:transparent; }
 .factory-profile-agent-actions button:is(:hover,:focus-visible) { background:#3b3f3d; }
 
-/* A single Back action owns the entire island, including its title and padding. */
-.factory-toolbar.pixel-island.factory-solo-back { padding:0; }
+/* Focused views keep Back and the mixer inside the same padded island. */
+.factory-toolbar.pixel-island.factory-solo-back { padding:8px; }
 .factory-toolbar.factory-solo-back .factory-toolbar-actions { gap:0; }
 .factory-toolbar.factory-solo-back .factory-context-action[data-action="back"] {
-  width:100%;height:60px;padding:8px 22px;gap:12px;clip-path:var(--pixel-capsule);border-radius:0;
+  width:auto;flex:none;height:44px;padding:0 14px;gap:12px;clip-path:var(--island-control-cut);border-radius:0;
 }
 .factory-toolbar.factory-solo-back .factory-context-action[data-action="back"] .factory-nav-label { display:inline; }
 
@@ -527,15 +527,15 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 .island-player-feedback:empty { display:none; }
 
 /* Compact row controls share the portrait's height. */
-.factory-toolbar.pixel-island { --island-row-control-height:38px; }
+.factory-toolbar.pixel-island { --island-row-control-height:44px; }
 .factory-toolbar.pixel-island :is(.factory-toolbar-actions button,.horse-turn,.factory-audio-mute,.factory-audio-dock>summary) {
   height:var(--island-row-control-height); min-height:var(--island-row-control-height);
 }
 .factory-toolbar.pixel-island .factory-audio-mute { display:grid; place-items:center; box-sizing:border-box; width:44px; min-width:44px; padding:0; gap:0; }
-/* The far-right game action ends the capsule: its outer right inset matches the 11px above and below
-   (8px island padding + 3px row centering), so the button's pixel corners stay concentric with the island's. */
-.factory-toolbar.pixel-island .horse-turn.horse-play { margin-inline:6px 3px; }
-.factory-toolbar .factory-toolbar-actions .duck-play.factory-game-action { margin-inline:6px 3px; height:38px; min-height:38px; }
+/* The far-right game action ends the capsule: its outer right inset matches the 8px above and below
+   (the shared island padding), so the button's pixel corners stay concentric with the island's. */
+.factory-toolbar.pixel-island .horse-turn.horse-play { margin-inline:6px 0; }
+.factory-toolbar .factory-toolbar-actions .duck-play.factory-game-action { margin-inline:6px 0; height:44px; min-height:44px; }
 .factory-toolbar .factory-toolbar-actions .duck-play.factory-game-action:not([data-game-active="true"]) { background:#badb8c; color:#22331b; box-shadow:none; font-weight:600; }
 .factory-toolbar .factory-toolbar-actions .duck-play.factory-game-action:not([data-game-active="true"])::before { display:none; }
 .factory-toolbar .factory-toolbar-actions .duck-play.factory-game-action:not([data-game-active="true"]):is(:hover,:focus-visible) { background:#cee7aa; color:#22331b; box-shadow:none; }
@@ -669,9 +669,10 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 .duck-round-result .factory-toolbar #duck-status { display:block; color:#d6e5dc; }
 .duck-round-result .factory-toolbar #room-navigation .room-view-title { display:none; }
 
-/* Back is a square control before applying the shared pixel-circle silhouette. */
-.factory-toolbar.pixel-island:not(.factory-solo-back) .factory-context-action[data-action="back"] {
-  width:38px; min-width:38px; max-width:38px; height:38px; min-height:38px;
-  flex:0 0 38px; padding:0; display:grid; place-items:center;
+/* All focused views use the same labeled Back control as the people screen. */
+.factory-toolbar.pixel-island .factory-context-action[data-action="back"] {
+  width:auto; min-width:0; max-width:none; height:44px; min-height:44px;
+  flex:none; padding:0 14px; display:flex; align-items:center; gap:12px;
   clip-path:var(--island-control-cut);
 }
+.factory-toolbar .factory-context-action[data-action="back"] .factory-nav-label { display:inline; }

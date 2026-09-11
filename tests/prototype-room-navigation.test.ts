@@ -46,7 +46,8 @@ describe('navigation between factory rooms', () => {
     state.garage = true; state.elevator = true;
     navigation.request('patio'); navigation.update();
     navigation.request('factory'); navigation.update();
-    expect(garage.visit).not.toHaveBeenCalled();
+    expect(garage.visit).toHaveBeenLastCalledWith(false);
+    garage.visit.mockClear();
     state.elevator = false;
     navigation.update(false);
     expect(garage.visit).not.toHaveBeenCalled();

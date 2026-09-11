@@ -80,7 +80,7 @@ describe('physical floor descent',()=>{
     for(let i=1;i<down.length;i++){expect(down[i]).toBeGreaterThanOrEqual(down[i-1]);expect(up[i]).toBeLessThanOrEqual(up[i-1]);expect(Math.abs(down[i]-down[i-1])).toBeLessThan(.04);}
     expect(down.at(-1)).toBe(1);expect(up.at(-1)).toBe(0);
     expect(elevatorTrip(1770,false,true,false,true).done).toBe(true);
-    expect(elevatorTrip(1770,false,true).done).toBe(false);
+    expect(elevatorTrip(1770,false,true).done).toBe(true);
     expect(elevatorTrip(240,false,true,true).done).toBe(true);
     floorTravelCamera(camera,source,-1,true);expect(camera.position.equals(source.position)).toBe(true);
     floorTravelCamera(camera,source,2,true);expect(camera.position.y).toBeCloseTo(GARAGE_LEVEL+GARAGE_SECTION_Y+18.94);
