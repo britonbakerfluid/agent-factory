@@ -196,6 +196,7 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
       occluder?: THREE.Object3D,
       localFeet?: THREE.Vector3,
     ) {
+      visible = visible && !object.userData.pickupActive;
       element.hidden = !visible;
       if (!visible) {
         close();lastLayout='';
