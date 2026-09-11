@@ -156,6 +156,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   function enter() {
     if (active || !canOpen) return;
     onOpen(); room = cameraPose(roomCamera); from = cameraPose(roomCamera); const oldHeight = canvas.clientHeight;
+    delete dialog.dataset.exiting;
     active = open = moving = true; started = performance.now(); document.body.classList.add('team-open');
     sheet.style.opacity = '0'; sheet.inert = true;
     soundPanel?.closest('details')?.removeAttribute('open');
@@ -165,10 +166,11 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   function exit() {
     if (!open) return;
     exitOpacity = Number(sheet.style.opacity); from = cameraPose(camera);
+    dialog.dataset.exiting = 'true';
     open = false; moving = true; started = performance.now(); sheet.inert = true;
   }
   function finishExit() {
-    active = moving = false; dialog.close(); document.body.classList.remove('team-open'); renderer.setSize(800, 564, false);
+    active = moving = false; delete dialog.dataset.exiting; dialog.close(); document.body.classList.remove('team-open'); renderer.setSize(800, 564, false);
     trigger.hidden = false; trigger.focus({ preventScroll: true });
   }
   trigger.addEventListener('click', enter, events); back.addEventListener('click', exit, events);
@@ -183,7 +185,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
     setTickets(next: StationTicketState | undefined) { if (stationTickets === next) return; stationTickets = next; paint(); },
     members: (): readonly TeamMember[] => data?.members ?? emptyMembers,
     repaint() { paint(); },
-    camera, isActive: () => active, focusPoint: () => desk.localToWorld(focus.set(0, 0, DISPLAY.faceZ)),
+    camera, isActive: () => active, isExiting: () => active && !open, focusPoint: () => desk.localToWorld(focus.set(0, 0, DISPLAY.faceZ)),
     update(now: number, visible: boolean) {
       canOpen = visible && !document.body.classList.contains('inspect-open'); trigger.hidden = active || !canOpen;
       if (now - lastPoll > (active ? 10_000 : 30_000)) void refresh();

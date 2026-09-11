@@ -627,7 +627,9 @@ const avatarStage = createAvatarStage(scene, sideRoomScene, garage.scene, liveAg
 const factoryControls = createFactoryControls(canvas, liveAgents, () => currentViewCamera,
   () => !carDrivingActive() && !garage.isTransitioning() && !avatarStage.isActive() && !whiteboardInteraction.isTransitioning() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive() && !document.body.classList.contains('inspect-open'),
   room => roomNavigation.request(room), avatarStage,
-  () => garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory');
+  () => garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory',
+  () => roomNavigation.destination() ?? (garage.isActive() ? 'garage' : sideRoom.isActive() ? 'patio' : 'factory'),
+  () => roomNavigation.destination() !== undefined);
 const garageDriving = createGarageDriving(garage.room, garage.cars, liveAgents, canvas, () => {
   factoryControls.state.stop(); if (factoryControls.state.active) factoryControls.state.release();
 });
@@ -972,7 +974,8 @@ function animate(): void {
   mountainView.render(elapsed, sceneryVisible, viewCamera, glassCenterY);
   const visitorBallVisible = !duckHunt.isActive() && !djViewActive && !garage.isTransitioning() && !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen() && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive();
   visitorBasketball.update(dt, viewCamera, visitorBallVisible);
-  basketballChallenges.update(visitorBallVisible && mainRoomVisible, viewCamera);
+  basketballChallenges.update(visitorBallVisible && mainRoomVisible, viewCamera,
+    (visitorBallVisible && mainRoomVisible) || teamDesk.isExiting());
   activityFeedback.update();
   duckHunt.update(dt, viewCamera, sideRoom.isActive() && !sideRoom.showsFactory());
   // Keep a square sky image in both the tilted room view and the straight-on window view.

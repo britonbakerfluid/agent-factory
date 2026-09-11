@@ -9,9 +9,11 @@ export function createRoomNavigation(
 ) {
   let destination: FactoryRoom | undefined;
   return {
+    destination: () => destination,
     request(room: FactoryRoom) { destination = room; },
     update(available = true) {
-      if (!destination || !available || garage.isTransitioning()) return;
+      if (!destination || !available) return;
+      if (garage.isTransitioning()) { garage.visit(destination === 'garage'); return; }
       if (garage.isActive()) {
         if (destination === 'garage') destination = undefined;
         else garage.visit(false);

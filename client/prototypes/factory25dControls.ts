@@ -34,7 +34,7 @@ import { ManualRoomFollower } from './factory25dManualTravel';
 import './factory25dControls.css';
 
 export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnType<typeof createLiveAgents>,
-  camera: () => THREE.Camera, available: () => boolean, visit: (room: FactoryRoom) => void, avatarScene: AvatarScenePreview, currentRoom: () => FactoryRoom = () => 'factory') {
+  camera: () => THREE.Camera, available: () => boolean, visit: (room: FactoryRoom) => void, avatarScene: AvatarScenePreview, currentRoom: () => FactoryRoom = () => 'factory', displayedRoom: () => FactoryRoom = currentRoom, navigating: () => boolean = () => false) {
   const state = new FactoryControlState(sendFactoryCommand);
   const preview = isControlPreview();
   const abort = new AbortController(), options = { signal: abort.signal };
@@ -395,6 +395,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
 
   const toolbarTooltip = createToolbarTooltip(toolbar);
   const roomMenu = createRoomMenu(toolbar, roomPicker, destination => {
+    if (navigating()) { visit(destination); return; }
     toolbarFocus.run(() => { state.stop(); panel.open = false; visit(destination); });
   }, undefined,()=>{profileMenu.close();panel.open=false;});
   const menuSize = new ResizeObserver(entries => {
@@ -441,8 +442,9 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     }
     // This runs with the scene. Only mutate the DOM when the visible state changes.
     const signature = JSON.stringify(model);
-    if (signature === toolbarSignature) { roomMenu.update(currentRoom(),roomCounts,data.connected,!!focused || !available()); return; }
-    roomMenu.update(currentRoom(),roomCounts,data.connected,!!focused || !available());
+    roomPicker.disabled = model.navigationDisabled && !navigating();
+    if (signature === toolbarSignature) { roomMenu.update(displayedRoom(),roomCounts,data.connected,!!focused || (!available() && !navigating())); return; }
+    roomMenu.update(displayedRoom(),roomCounts,data.connected,!!focused || (!available() && !navigating()));
     toolbarSignature = signature;
     toolbar.dataset.identity = model.identity; toolbar.dataset.view = model.view; toolbar.dataset.control = model.controlMode; toolbar.dataset.reconnecting = String(model.reconnecting);
     controlIdentity.hidden = !model.controlStatus;
@@ -451,7 +453,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     controlIdentity.setAttribute('aria-label', `${model.controlStatus} ${model.controlName}`);
     // Keep keyboard order aligned with the visible Back-first layout.
     if (focused) viewTools.before(contextAction); else { avatarShortcut.before(controlIdentity); avatarShortcut.before(contextAction); }
-    roomPicker.disabled = model.navigationDisabled;
+    roomPicker.disabled = model.navigationDisabled && !navigating();
     avatarShortcut.hidden = !model.showProfile;
     roomPicker.hidden = !model.showRoomTools;
     for (const item of docked) item.group.hidden = item.view !== model.tools && !(focused === 'duck hunt' && item.view === 'patio');
@@ -462,7 +464,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     const soloBack = model.action === 'back' && !model.showProfile && !model.showRoomTools && viewTools.hidden;
     toolbar.classList.toggle('factory-solo-back', soloBack);
     focusTitle.textContent = focused ?? '';
-    focusTitle.hidden = soloBack || !focused || focused === 'window' || focused === 'whiteboard';
+    focusTitle.hidden = model.action === 'back' || !focused || focused === 'window' || focused === 'whiteboard';
     avatarShortcut.disabled = model.navigationDisabled;
     avatarShortcut.setAttribute('aria-label', model.profileLabel);
     avatarShortcut.setAttribute('aria-pressed', String(model.profileSelected));
@@ -471,7 +473,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     contextAction.setAttribute('aria-busy',String(model.action==='reconnect'));
     contextAction.dataset.action = model.action;
     contextAction.setAttribute('aria-label', model.label);
-    contextAction.querySelector('.factory-nav-label')!.textContent = soloBack ? focused ?? model.label : model.label;
+    contextAction.querySelector('.factory-nav-label')!.textContent = model.action === 'back' ? focused ?? model.label : model.label;
     contextAction.querySelector('.factory-nav-icon')!.innerHTML = contextIcons[model.action === 'release' || model.action === 'cancel' ? 'stop'
       : model.action === 'customize' ? 'help' : model.action];
     contextAction.dataset.tooltip = focused ? `Return from ${focused}` : model.action === 'connect' ? 'Connect this browser to customize your character'

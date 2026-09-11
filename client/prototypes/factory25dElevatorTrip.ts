@@ -20,7 +20,9 @@ export function elevatorTrip(elapsedMs: number, fromGarage: boolean, toGarage: b
   const passengerFade = elapsed < 760 ? smooth((elapsed - 660) / 100) : 1 - smooth((elapsed - 790) / 110);
   const travel = smooth((elapsed - 320) / 890);
   const garage01 = reduced ? Number(switched ? toGarage : fromGarage) : Number(fromGarage) + (Number(toGarage) - Number(fromGarage)) * travel;
-  return { done: elapsed >= 1770, garage: switched ? toGarage : fromGarage,
+  // Camera navigation can continue as soon as the floor movement finishes.
+  // Passengers still wait for the complete server-owned door sequence.
+  return { done: elapsed >= (passenger ? 1770 : 1210), garage: switched ? toGarage : fromGarage,
     veil: reduced ? passengerFade : 0, door, lift: 0, garage01 };
 }
 

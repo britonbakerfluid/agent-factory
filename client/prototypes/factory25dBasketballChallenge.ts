@@ -65,7 +65,7 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
   const abort = new AbortController(), events = { signal: abort.signal };
   const preview = isControlPreview() ? new BasketballChallengeBook() : undefined;
   const games = new Map<string, HorseGame>();
-  let roomVisible = false;
+  let roomVisible = false, toolbarVisible = false;
   let pendingSend: { id: string; resolve(): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> } | undefined;
   let acceptedSpot: { id: string; revision: number; spot: BallVector } | undefined;
   let serverOffset = 0, connected = !!preview, feedback = '', feedbackUntil = 0, pendingFeedback = '', flightLetters = '';
@@ -243,7 +243,7 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
       turnButton.setAttribute('aria-label', text);
       const resultUnseen = !horseActive(game) && !game.seenBy.includes(mine) && !game.seenBy.includes(`${mine}:result`);
       turnButton.disabled = basketball.placingChallenge || (!(horseCanShoot(game, mine) || (game.status === 'pending' && game.challengee.ownerId === mine) || resultUnseen)) || (!!playing && !showFeedback);
-      turnButton.hidden = !roomVisible || !(horseActive(game) || showFeedback || resultUnseen);
+      turnButton.hidden = !toolbarVisible || !(horseActive(game) || showFeedback || resultUnseen);
       const inFlight = basketball.shotInFlight && (playing || pendingFeedback);
       basketball.setHint(inFlight ? 'shot away' : showFeedback && basketball.shooting ? feedback : playing ? (basketball.shooting ? `your turn · ${(basketball.shotDistance * 3.28084).toFixed(0)} ft` : 'your turn · choose a spot') : undefined, inFlight ? flightLetters : playing || (showFeedback && basketball.shooting) ? horseLetters(horseSide(game, mine)!) : undefined);
     } else { turnButton.hidden = true; basketball.setHint(undefined); }
@@ -300,7 +300,8 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
   }
 
   return {
-    update(visible: boolean, camera: THREE.Camera) {
+    update(visible: boolean, camera: THREE.Camera, showToolbar = visible) {
+      if (toolbarVisible !== showToolbar) { toolbarVisible = showToolbar; paint(); }
       if (roomVisible !== visible) { roomVisible = visible; if (!visible && replay) finishReplay(false); paint(); }
       if (replay) {
         const current = games.get(replay.gameId);

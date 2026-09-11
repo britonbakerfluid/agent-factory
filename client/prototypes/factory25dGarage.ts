@@ -96,7 +96,17 @@ export function createGarage(factory:THREE.Scene,canvas:HTMLCanvasElement,home:T
  let visibleCamera:THREE.Camera=home,carPickingAvailable=false;
  function visit(next:boolean,force=false){
   if(floorPreview!==undefined)return;
-  if(trip||next===open||(!available&&!force))return;
+  if(trip){
+   if(trip.passenger||trip.to===next)return;
+   // Reverse the symmetric floor curve at the same position, without restarting at a floor.
+   const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+   const progress=Math.max(0,Math.min(1,(trip.elapsed/1.35-320)/890));
+   trip.elapsed=reduced?0:(320+890*(1-progress))*1.35;
+   trip.from=!next;trip.to=next;trip.last=performance.now();
+   readout.textContent=next?'01 ↓ G':'G ↑ 01';
+   return;
+  }
+  if(next===open||(!available&&!force))return;
   const ride=walkingAgent?.manualControl?.elevatorTrip;
   const passenger=!!ride&&(factoryRoomAt(fromFactoryWorld(ride.arrival))==='garage')===next;
   const started=performance.now();
