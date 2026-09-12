@@ -45,6 +45,9 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
   const material=mesh.material as THREE.Material,depthTest=material.depthTest,depthWrite=material.depthWrite,transparent=material.transparent,renderOrder=mesh.renderOrder;
   const fold=createPickupFold(mesh,avatar),body={x:0,y:0,vx:0,vy:0};
   let phase:'idle'|'held'|'falling'|'landing'|'dunking'='idle',last=performance.now(),lifted=false,liftedAt=0;
+  mesh.geometry.computeBoundingBox();
+  const bodyWidth=mesh.geometry.boundingBox!.max.x-mesh.geometry.boundingBox!.min.x;
+  const throughRimScale=Math.min(mesh.scale.x,.20/Math.max(.01,bodyWidth));
   const dunkStart=new THREE.Vector3(),dunkRim=new THREE.Vector3(),baseScale=mesh.scale.clone(); let dunkElapsed=0,dunkDuration=0,dunkReacted=false;
   let landedAt=0,highFall=false,landingSlide=0;const impactPoint=new THREE.Vector3(),fallHome=new THREE.Vector3();
   const spriteMaterial=material as THREE.MeshStandardMaterial,normalMap=spriteMaterial.map;let heroMap:THREE.CanvasTexture|undefined;
@@ -149,11 +152,15 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
         const alignedX=dunkStart.x+Math.round((x-dunkStart.x)/(UNIT*baseScale.x))*UNIT*baseScale.x;
         // Stay inside the rim until the head clears the net, then settle onto
         // the safe floor in front of the window frame.
-        const cleared=t===0?0:THREE.MathUtils.clamp((dunkRim.y-.36*baseScale.y-y)/.45,0,1);
+        const cleared=t===0?0:THREE.MathUtils.clamp((dunkRim.y-.74*baseScale.y-y)/.45,0,1);
         const forward=cleared*cleared*(3-2*cleared);
         mesh.position.set(THREE.MathUtils.lerp(alignedX,fallHome.x,forward),y,THREE.MathUtils.lerp(dunkRim.z,fallHome.z,forward));
-        const squeeze=Math.max(0,1-Math.abs(y-dunkRim.y)/(.45*baseScale.y));
-        mesh.scale.set(baseScale.x*(1-.16*squeeze),baseScale.y*(1+.1*squeeze),baseScale.z);mesh.rotation.z=0;
+        // Narrow before the feet reach the ring, hold through the whole body
+        // and net, then ease back out. The full sprite plane fits the opening.
+        const distance=Math.abs(y-(dunkRim.y-.12*baseScale.y))/baseScale.y;
+        const edge=THREE.MathUtils.clamp((distance-.68)/.28,0,1);
+        const squeeze=1-edge*edge*(3-2*edge);
+        mesh.scale.set(THREE.MathUtils.lerp(baseScale.x,throughRimScale,squeeze),baseScale.y*(1+.18*squeeze),baseScale.z);mesh.rotation.z=0;
         if(!dunkReacted&&y<=dunkRim.y+.3){reactToPickupDunk(mesh);dunkReacted=true;}
         if(t===1){phase='landing';mesh.position.copy(fallHome);impactPoint.copy(fallHome);landedAt=now;}
       }
