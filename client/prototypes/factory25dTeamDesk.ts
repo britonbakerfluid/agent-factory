@@ -1,4 +1,4 @@
-import { ticketBalance } from '@shared/station-tickets';
+import { teamPeople, type TeamPerson } from '@shared/team-people';
 import type { StationTicketState } from '@shared/types';
 import * as THREE from 'three';
 import { FRONT_COUNTER, INTERIOR_Z } from '@shared/factory25d-layout';
@@ -59,15 +59,18 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
   function portrait(member: TeamMember) {
     return avatarPortrait(member.avatar);
   }
+  function personContribution(member: TeamPerson) {
+    return member.aliases.map(name => contributionFor(name)).find(Boolean);
+  }
   function paint() {
-    const members = data?.members ?? [], now = Date.now() + (data ? data.serverTime - previousTime : 0);
+    const members = teamPeople(data?.members ?? [], stationTickets), now = Date.now() + (data ? data.serverTime - previousTime : 0);
     const online = members.filter(member => member.online).length;
     count.textContent = unavailable ? 'reconnecting' : `${online} here · ${members.length} ${members.length === 1 ? 'person' : 'people'}`;
     status.textContent = unavailable ? 'reconnecting · showing the last update'
       : data?.historyAvailable === false ? 'live now · visit history is waiting to save'
       : '';
     status.hidden = !status.textContent;
-    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now), contributionFor(member.name), stationTickets && ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name })])) + unavailable;
+    const next = JSON.stringify(members.map(member => [member.id, member.name, member.avatar, member.online, member.agents, lastSeenLabel(member.lastSeen, now), personContribution(member), stationTickets && member.tickets])) + unavailable;
     if (signature !== next) {
       signature = next; const scroll = list.scrollTop; list.replaceChildren();
       for (const member of members) {
@@ -77,7 +80,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
         const details = document.createElement('div'), name = document.createElement('strong'), seen = document.createElement('span');
         name.textContent = member.name;
         const heading = document.createElement('div'); heading.className = 'team-person-heading'; heading.append(name);
-        const contribution = contributionFor(member.name);
+        const contribution = personContribution(member);
         if (contribution) {
           const level = contributionLevel(contribution.mergedPullRequests).level;
           const badge = document.createElement('span'); badge.className = 'agent-level';
@@ -90,7 +93,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
           : lastSeenLabel(member.lastSeen, now);
         const dot = document.createElement('span'); dot.className = 'team-person-dot'; dot.setAttribute('aria-hidden', 'true');
         const tickets = document.createElement('span'); tickets.className = 'team-person-tickets';
-        tickets.hidden = !stationTickets; tickets.textContent = `${ticketBalance(stationTickets, { ownerId: member.id.startsWith('legacy:') ? undefined : member.id, username: member.name }).toLocaleString()} tickets`;
+        tickets.hidden = !stationTickets; tickets.textContent = `${member.tickets.toLocaleString()} tickets`;
         details.append(heading, seen, tickets);
         row.append(image, details, dot); list.append(row);
       }
@@ -102,7 +105,7 @@ export function createTeamDesk(parent: THREE.Group, canvas: HTMLCanvasElement,
       members.slice(0, 3).forEach((member, index) => {
         const y = 53 + index * 48;
         ink.globalAlpha = member.online && !unavailable ? 1 : .4; ink.drawImage(portrait(member), 18, y, 42, 42); ink.globalAlpha = 1;
-        const contribution = contributionFor(member.name);
+        const contribution = personContribution(member);
         ink.fillStyle = member.online && !unavailable ? '#e1e7e4' : '#9b9f9d'; ink.font = '15px "Geist Pixel", monospace';
         ink.fillText(member.name, 72, y + 18, contribution ? 186 : 235);
         if (contribution) {
