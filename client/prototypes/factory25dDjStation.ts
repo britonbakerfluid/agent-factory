@@ -48,7 +48,10 @@ export function createDjStation(group:THREE.Group,canvas:HTMLCanvasElement,panel
       closeCamera.updateProjectionMatrix();closeCamera.updateMatrixWorld();return closeCamera;
     },
     update(camera:THREE.Camera){
-      current=camera;layer.hidden=!active;screenMount.visible=true;
+      current=camera;
+      const minimized=panel.classList.contains('radio-minimized');
+      layer.classList.toggle('dj-station-minimized',minimized);
+      layer.hidden=!active&&!minimized;screenMount.visible=true;
       if(!active){targets.forEach(target=>{target.hidden=true;});return;}
       const r=canvas.getBoundingClientRect();
       // Project the tabletop plane itself, so the UI shares its tilt and camera motion.
