@@ -8,7 +8,7 @@ import type { AvatarConfig } from '@shared/types';
 import { createPickupFold } from './factory25dPickupFold';
 import { updatePickupHoopTarget, reactToPickupDunk } from './factory25dPickupHoop';
 export { createPickupFold } from './factory25dPickupFold';
-import {ELEVATOR_BODY,FACTORY_BODY_RADIUS,FACTORY_WINDOW_FRONT_Z,FACTORY_ELEVATOR,GARAGE_ELEVATOR,GARAGE_WORLD_Z,factoryWorldPoint,factoryScenePoint,recoverFactoryPosition,toFactoryWorld,fromFactoryWorld,type FactoryRoom} from '@shared/factory25d-layout';
+import {routeToStation,ELEVATOR_BODY,FACTORY_BODY_RADIUS,FACTORY_WINDOW_FRONT_Z,FACTORY_ELEVATOR,GARAGE_ELEVATOR,GARAGE_WORLD_Z,factoryWorldPoint,factoryScenePoint,recoverFactoryPosition,toFactoryWorld,fromFactoryWorld,type FactoryRoom} from '@shared/factory25d-layout';
 
 /** A screen point outside the room lands on the nearest clear spot on this floor. */
 export function pickupLanding(point:{x:number;z:number},room:FactoryRoom){
@@ -45,7 +45,7 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
   const material=mesh.material as THREE.Material,depthTest=material.depthTest,depthWrite=material.depthWrite,transparent=material.transparent,renderOrder=mesh.renderOrder;
   const fold=createPickupFold(mesh,avatar),body={x:0,y:0,vx:0,vy:0};
   let phase:'idle'|'held'|'falling'|'landing'|'dunking'='idle',last=performance.now(),lifted=false,liftedAt=0;
-  const dunkStart=new THREE.Vector3(),dunkRim=new THREE.Vector3(),baseScale=mesh.scale.clone(); let dunkAt=0,dunkDuration=0,dunkReacted=false;
+  const dunkStart=new THREE.Vector3(),dunkRim=new THREE.Vector3(),baseScale=mesh.scale.clone(); let dunkElapsed=0,dunkDuration=0,dunkReacted=false;
   let landedAt=0,highFall=false,landingSlide=0;const impactPoint=new THREE.Vector3(),fallHome=new THREE.Vector3();
   const spriteMaterial=material as THREE.MeshStandardMaterial,normalMap=spriteMaterial.map;let heroMap:THREE.CanvasTexture|undefined;
   const planted={x:0,y:0};let heldZ=0;
@@ -54,7 +54,7 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
   return {get active(){return phase!=='idle';},get shadowAirborne(){return lifted&&(phase==='held'||phase==='falling'||phase==='dunking');},get stage(){return phase==='held'?(lifted?'lifted':'pulling'):phase;},
     cancel(){phase='idle';lifted=false;fold.set(false);mesh.rotation.z=0;mesh.scale.copy(baseScale);spriteMaterial.map=normalMap;material.transparent=transparent;material.depthTest=depthTest;material.depthWrite=depthWrite;mesh.renderOrder=renderOrder;delete mesh.userData.pickupPin;delete mesh.userData.pickupActive;},
     update(camera:THREE.Camera,canvas:HTMLCanvasElement,pointer?:{x:number;y:number}){
-      const now=performance.now(),dt=Math.min(.05,Math.max(0,(now-last)/1000));last=now;home.copy(mesh.position);
+      const now=performance.now(),dt=Math.min(.05,Math.max(0,(now-last)/1000));last=now;home.copy(mesh.position);let startedDunk=false;
       if(pointer){
         if(phase!=='held'){mesh.getWorldPosition(world);plane.constant=-world.z;heldZ=mesh.position.z;body.x=mesh.position.x/UNIT;body.y=-mesh.position.y/UNIT;body.vx=body.vy=0;planted.x=body.x;planted.y=body.y;lifted=false;liftedAt=0;mesh.userData.pickupHeight=.18;phase='held';}
         delete mesh.userData.pickupDunkRim;
@@ -122,7 +122,7 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
             if(ray.ray.intersectPlane(plane,target)){mesh.parent!.worldToLocal(target);dunkStart.copy(target);}
             if(landing)fallHome.x=landing.x;
             dunkDuration=Math.max(.3,Math.sqrt(2*Math.max(0,dunkStart.y-fallHome.y)/7));
-            dunkAt=now;dunkReacted=false;phase='dunking';highFall=true;landingSlide=0;
+            dunkElapsed=0;startedDunk=true;dunkReacted=false;phase='dunking';highFall=true;landingSlide=0;
             delete mesh.userData.pickupDunkRim;
           }
         }
@@ -135,10 +135,14 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
         }
       }
       if(phase==='dunking'){
-        const age=(now-dunkAt)/1000,t=Math.min(1,age/dunkDuration);
+        // Let the rim briefly resist the body, then release it into the fall.
+        const previousT=Math.min(1,dunkElapsed/dunkDuration);
+        const previousY=dunkStart.y-Math.max(0,dunkStart.y-fallHome.y)*previousT*previousT;
+        const contact=Math.max(0,1-Math.abs(previousY-dunkRim.y)/(.45*baseScale.y));
+        dunkElapsed+=(startedDunk?0:dt)*(1-.72*contact);
+        const age=dunkElapsed,t=Math.min(1,age/dunkDuration);
         const align=Math.min(1,age/.14),ease=align*align*(3-2*align);
-        // Translate whole sprite pixels. Never squash, stretch, or rotate the
-        // avatar's grid; the existing drawn frames provide the landing pose.
+        // Keep the falling position pixel-stepped, with a small squeeze at the rim.
         const pixel=UNIT*baseScale.y,drop=Math.max(0,dunkStart.y-fallHome.y)*t*t;
         const y=dunkStart.y-Math.floor(drop/pixel)*pixel;
         const x=THREE.MathUtils.lerp(dunkStart.x,dunkRim.x,ease);
@@ -148,11 +152,13 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
         const cleared=t===0?0:THREE.MathUtils.clamp((dunkRim.y-.36*baseScale.y-y)/.45,0,1);
         const forward=cleared*cleared*(3-2*cleared);
         mesh.position.set(THREE.MathUtils.lerp(alignedX,fallHome.x,forward),y,THREE.MathUtils.lerp(dunkRim.z,fallHome.z,forward));
-        mesh.scale.copy(baseScale);mesh.rotation.z=0;
+        const squeeze=Math.max(0,1-Math.abs(y-dunkRim.y)/(.45*baseScale.y));
+        mesh.scale.set(baseScale.x*(1-.16*squeeze),baseScale.y*(1+.1*squeeze),baseScale.z);mesh.rotation.z=0;
         if(!dunkReacted&&y<=dunkRim.y+.3){reactToPickupDunk(mesh);dunkReacted=true;}
         if(t===1){phase='landing';mesh.position.copy(fallHome);impactPoint.copy(fallHome);landedAt=now;}
       }
       if(phase==='landing'){
+        mesh.scale.copy(baseScale);
         mesh.position.copy(impactPoint);
         const slideProgress=Math.min(1,(now-landedAt)/350);
         mesh.position.x+=landingSlide*(1-Math.pow(1-slideProgress,3));
@@ -180,8 +186,10 @@ export function createStaffPickup(mesh:THREE.Mesh,button:HTMLButtonElement,canva
   const texture=(mesh.material as THREE.MeshStandardMaterial).map,pressPose=new THREE.Vector2();
   let walkMap:THREE.CanvasTexture|undefined;
   let returning=false,lastFrame=performance.now();const dropped=new THREE.Vector3();
+  let returnPath: {x:number;z:number}[]=[];
+  const returnGoal=new THREE.Vector3(Infinity,Infinity,Infinity),returnWorld=new THREE.Vector3();
   function move(e:PointerEvent){if(!press||e.pointerId!==press.id)return;if(!pointer&&Math.hypot(e.clientX-press.x,e.clientY-press.y)<6)return;if(!pointer&&shared&&!shared.begin()){press=undefined;return;}pointer={x:e.clientX,y:e.clientY};suppress=true;document.documentElement.classList.add('is-grabbing');e.preventDefault();e.stopImmediatePropagation();}
-  function end(e?:PointerEvent){if(!press||e&&e.pointerId!==press.id)return;if(pointer){returning=true;dropped.copy(mesh.position);const landing=pickupReleaseLanding(mesh);if(landing){mesh.userData.pickupLanding=landing;dropped.x=landing.x;dropped.z=landing.z;}}pointer=undefined;press=undefined;document.documentElement.classList.remove('is-grabbing');}
+  function end(e?:PointerEvent){if(!press||e&&e.pointerId!==press.id)return;if(pointer){returning=true;returnPath=[];returnGoal.set(Infinity,Infinity,Infinity);dropped.copy(mesh.position);const landing=pickupReleaseLanding(mesh);if(landing){mesh.userData.pickupLanding=landing;dropped.x=landing.x;dropped.z=landing.z;}}pointer=undefined;press=undefined;document.documentElement.classList.remove('is-grabbing');}
   button.addEventListener('pointerdown',e=>{if(e.button!==0||!mesh.visible||document.body.classList.contains('basketball-input-active')||canvas.classList.contains('holding-basketball'))return;press={id:e.pointerId,x:e.clientX,y:e.clientY};if(texture)pressPose.copy(texture.offset);suppress=false;button.setPointerCapture(e.pointerId);e.stopPropagation();},options);
   button.addEventListener('pointermove',move,options);button.addEventListener('pointerup',end,options);button.addEventListener('pointercancel',end,options);
   button.addEventListener('click',e=>{if(suppress){suppress=false;e.preventDefault();e.stopImmediatePropagation();}},options);
@@ -199,11 +207,31 @@ export function createStaffPickup(mesh:THREE.Mesh,button:HTMLButtonElement,canva
       const phase=motion.update(camera,canvas,pointer);
       if(pointer&&motion.stage==='pulling'&&texture)texture.offset.copy(pressPose);
       if(returning){dropped.copy(mesh.position);if(phase==='idle'){
-        const delta=home.clone().sub(dropped),distance=delta.length();
-        if(distance<.035){returning=false;mesh.position.copy(home);}else{
-          if(!walkMap&&typeof document.createElement==='function')walkMap=avatarTexture(avatar,['walk_right','walk_left','walk_down','walk_up']).texture;
-          if(walkMap){const row=Math.abs(delta.x)>Math.abs(delta.z)?delta.x>0?0:1:delta.z>0?2:3;setAvatarTextureFrame(walkMap,row,Math.floor(now/120)%4);(mesh.material as THREE.MeshStandardMaterial).map=walkMap;mesh.userData.pickupAtlas='walk';}
-          dropped.addScaledVector(delta,Math.min(1,2.1*dt/distance));mesh.position.copy(dropped);
+        // Route the feet in room coordinates, then convert the next waypoint
+        // back into this sprite's parent space (including patio props).
+        mesh.parent!.updateWorldMatrix(true,false);
+        const start=mesh.parent!.localToWorld(dropped.clone());
+        const goal=mesh.parent!.localToWorld(home.clone());
+        const room=mesh.userData.room??'factory';
+        if(returnGoal.distanceTo(goal)>.1||!returnPath.length){
+          returnGoal.copy(goal);
+          const from=factoryWorldPoint(start,room),to=factoryWorldPoint(goal,room);
+          returnPath=routeToStation(from,to).map(p=>({...p}));
+        }
+        const waypoint=returnPath[0];
+        if(waypoint){
+          const point=factoryScenePoint(waypoint);
+          returnWorld.set(point.x,goal.y,point.z);mesh.parent!.worldToLocal(returnWorld);
+          const delta=returnWorld.clone().sub(dropped),distance=delta.length();
+          if(distance<.035){
+            dropped.copy(returnWorld);returnPath.shift();
+            if(!returnPath.length&&start.distanceTo(goal)<.08){returning=false;dropped.copy(home);}
+          }else{
+            if(!walkMap&&typeof document.createElement==='function')walkMap=avatarTexture(avatar,['walk_right','walk_left','walk_down','walk_up']).texture;
+            if(walkMap){const row=Math.abs(delta.x)>Math.abs(delta.z)?delta.x>0?0:1:delta.z>0?2:3;setAvatarTextureFrame(walkMap,row,Math.floor(now/120)%4);(mesh.material as THREE.MeshStandardMaterial).map=walkMap;mesh.userData.pickupAtlas='walk';}
+            dropped.addScaledVector(delta,Math.min(1,2.1*dt/distance));
+          }
+          mesh.position.copy(dropped);
         }
       }}
       if(shared?.owns()){if(pointer||motion.active||returning)shared.publish(returning&&phase==='idle'?'returning':motion.stage==='idle'?'returning':motion.stage);else shared.finish();}

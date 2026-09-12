@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {DEFAULT_AVATAR} from '../shared/constants';
 import {createStaffPickup,createPickupMotion,updatePickupShadow,createPickupFold,pickupReleaseLanding,pickupLanding} from '../client/prototypes/factory25dPickup';
 import { updatePickupHoopTarget } from '../client/prototypes/factory25dPickupHoop';
-import { FACTORY_WINDOW_FRONT_Z, FACTORY_BODY_RADIUS, fromFactoryWorld, clearFactorySegment } from '../shared/factory25d-layout';
+import { FACTORY_WINDOW_FRONT_Z, FACTORY_BODY_RADIUS, fromFactoryWorld, clearFactorySegment, routeToStation, DJ_BOOTH } from '../shared/factory25d-layout';
 import { createSharedPickupVisual } from '../client/prototypes/factory25dSharedPickupVisual';
 import type { SharedPickupView } from '../client/prototypes/factory25dSharedPickup';
 import type { PickupPose } from '../shared/pickup-motion';
@@ -174,7 +174,7 @@ it('reaches the frozen release destination without a backward landing snap',()=>
  motion.dispose();f.pickup.dispose();
 });
 
-it.each([false,true])('slips through the hoop with a rigid pixel grid and superhero landing (reduced motion: %s)',reduced=>{
+it.each([false,true])('falls through the hoop without rotating and restores its landing pose (reduced motion: %s)',reduced=>{
  const f=fixture();
  vi.stubGlobal('matchMedia',()=>({matches:reduced}));
  const motion=createPickupMotion(f.mesh,DEFAULT_AVATAR);
@@ -252,4 +252,48 @@ it('reacts once for an observer when a shared dunk passes through the rim',()=>{
  pose.position[1]=1.2;visual.applyRemote();visual.applyRemote();expect(react).toHaveBeenCalledOnce();
  pose.stage='landing';visual.applyRemote();expect(react).toHaveBeenCalledOnce();
  visual.dispose();f.pickup.dispose();
+});
+
+it('squeezes and lingers at the rim, then restores normal proportions on landing',()=>{
+ const f=fixture(),motion=createPickupMotion(f.mesh,DEFAULT_AVATAR);
+ const canvas={getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})} as HTMLCanvasElement;
+ const camera=new THREE.OrthographicCamera(-4,4,4,-4,.1,30);camera.position.z=10;camera.updateMatrixWorld();
+ let now=100;vi.spyOn(performance,'now').mockImplementation(()=>now);
+ for(;now<=1100;now+=20)motion.update(camera,canvas,{x:200,y:5});
+ f.mesh.userData.pickupDunkRim=new THREE.Vector3(0,1,0);f.mesh.userData.pickupLanding={x:0,z:.55};
+ f.mesh.position.set(0,0,0);motion.update(camera,canvas);
+ let contactFrames=0,minWidth=1;
+ for(;now<=5000;now+=20){
+  f.mesh.position.set(0,0,0);motion.update(camera,canvas);
+  minWidth=Math.min(minWidth,f.mesh.scale.x);
+  if(motion.stage==='dunking'&&Math.abs(f.mesh.position.y-1)<.3)contactFrames++;
+ }
+ expect(minWidth).toBeLessThan(.9);expect(minWidth).toBeGreaterThanOrEqual(.84);
+ expect(contactFrames).toBeGreaterThan(8);
+ expect(motion.active).toBe(false);expect(f.mesh.scale.toArray()).toEqual([1,1,1]);
+ motion.dispose();f.pickup.dispose();
+});
+
+it.each([0,1.95])('walks back around the partition, including translated parents (%s)',offset=>{
+ const f=fixture();f.mesh.parent!.position.z=offset;f.event('pointerdown');f.event('pointermove',200,40);f.frame(200);
+ f.mesh.userData.pickupLanding={x:3,z:10};f.mesh.userData.pickupVelocity={x:0,y:0};
+ f.event('pointerup');
+ let previous:{x:number;z:number}|undefined,walkingFrames=0;
+ for(let t=220;t<=22000;t+=20){
+  f.frame(t);
+  if(t>3000){
+   const world=f.mesh.getWorldPosition(new THREE.Vector3());const point={x:world.x,z:world.z};
+   if(previous){expect(clearFactorySegment(previous,point)).toBe(true);if(Math.hypot(point.x-previous.x,point.z-previous.z)>.001)walkingFrames++;}
+   previous=point;
+  }
+ }
+ expect(walkingFrames).toBeGreaterThan(20);expect(f.pickup.busy).toBe(false);expect(f.mesh.position.length()).toBeCloseTo(0,8);
+ f.pickup.dispose();
+});
+
+it('can reach the DJ post without entering the booth collision margin',()=>{
+ const home={x:DJ_BOOTH.x,z:DJ_BOOTH.z-.80},start={x:0,z:0};
+ const route=routeToStation(start,home);
+ expect(route.at(-1)).toEqual(home);
+ let previous=start;for(const point of route){expect(clearFactorySegment(previous,point)).toBe(true);previous=point;}
 });
