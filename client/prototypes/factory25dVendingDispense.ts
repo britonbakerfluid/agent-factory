@@ -3,12 +3,14 @@ import { VendingPilePhysics, VENDING_PILE_LIMIT, type VendingCanBody } from './f
 import { createSnackGeometry, snackKind, VENDING_SNACK_KINDS, type VendingSnackKind } from './factory25dVendingSnacks';
 import { VendingSoundEvents, type VendingSounds } from './factory25dVendingSoundEvents';
 import './factory25dVendingDispense.css';
+import type { SharedPropsConnection } from './factory25dSharedProps';
 
 export interface VendingInteractionOptions {
   canvas: HTMLCanvasElement;
   camera: () => THREE.Camera;
   visible: () => boolean;
   sounds?: VendingSounds;
+  shared?: SharedPropsConnection;
 }
 export interface VendingDispenseEvents {
   accepted?: () => void;
@@ -49,8 +51,17 @@ export function createVendingDispenser(root: THREE.Group, events: VendingDispens
   let lastReleasedId = -1;
   const soundEvents = new VendingSoundEvents();
   let attach: ReturnType<typeof attachVendingInteraction> | undefined;
+  let shared: SharedPropsConnection | undefined, sharedEpoch = '', dispenses: number | undefined;
+  let sharedWasVisible = false;
+  let bodies: readonly VendingCanBody[] = pile.bodies;
+  const queued = () => shared ? shared.state?.queued ?? 0 : pile.queued;
   const visible = () => (attach?.visible() ?? true) && !document.hidden;
   const dispense = () => {
+    if (shared) {
+      const sent = shared.send({ action: 'dispense' }, accepted => { attach?.announce(accepted); soundEvents.select(accepted, visible()); });
+      if (!sent) attach?.unavailable();
+      return sent;
+    }
     const accepted = pile.dispense();
     attach?.announce(accepted);
     soundEvents.select(accepted, visible());
@@ -59,8 +70,8 @@ export function createVendingDispenser(root: THREE.Group, events: VendingDispens
   };
   function syncMeshes() {
     for (const batch of batches.values()) batch.count = 0;
-    shadows.count = pile.bodies.length;
-    for (const [index, body] of pile.bodies.entries()) {
+    shadows.count = bodies.length;
+    for (const [index, body] of bodies.entries()) {
       const batch = batches.get(snackKind(body.id))!;
       transform.position.copy(body.position); transform.quaternion.copy(body.quaternion); transform.scale.setScalar(1);
       transform.updateMatrix(); batch.setMatrixAt(batch.count++, transform.matrix);
@@ -74,27 +85,42 @@ export function createVendingDispenser(root: THREE.Group, events: VendingDispens
 
   return {
     dispense,
-    get bodies(): readonly VendingCanBody[] { return pile.bodies; },
+    get bodies(): readonly VendingCanBody[] { return bodies; },
     take(id: number) {
+      if (shared) return;
       const taken = pile.take(id);
       // Picking up a sleeping item removes it from the floor in this same frame,
       // even if no remaining body needs another physics update.
       if (taken) { soundEvents.remove(id); syncMeshes(); }
       return taken;
     },
-    get count() { return pile.bodies.length; },
-    get queued() { return pile.queued; },
+    get count() { return bodies.length; },
+    get queued() { return queued(); },
     get visible() { return visible(); },
     attachInteraction(options: VendingInteractionOptions) {
       attach?.dispose();
+      shared = options.shared;
       soundEvents.configure(options.sounds);
-      attach = attachVendingInteraction(root, options, dispense, () => pile.bodies.length + pile.queued, () => events.rockAngle?.() ?? 0);
+      attach = attachVendingInteraction(root, options, dispense, () => bodies.length + queued(), () => events.rockAngle?.() ?? 0);
     },
     update(dt: number) {
       // All particles pause offscreen along with the floor, avoiding surprise
       // object movement behind an open room/computer/phone view.
       const isVisible = visible();
-      if (isVisible) {
+      if (shared) {
+        const state = shared.state;
+        if (state && sharedEpoch !== state.epoch) { sharedEpoch = state.epoch; dispenses = undefined; lastReleasedId = -1; soundEvents.dispose(); }
+        if (state && dispenses !== undefined && state.dispenses > dispenses && isVisible) events.accepted?.();
+        bodies = shared.sampleBodies();
+        if (dispenses === undefined || !isVisible || !sharedWasVisible) soundEvents.prime(bodies);
+        sharedWasVisible = isVisible;
+        for (const body of bodies) if (body.id > lastReleasedId) {
+          if (dispenses !== undefined && isVisible && !body.sleeping && body.position.y > .12) events.released?.(body);
+          lastReleasedId = body.id;
+        }
+        if (state) dispenses = state.dispenses;
+        syncMeshes();
+      } else if (isVisible) {
         const before = pile.bodies.length;
         pile.update(dt);
         for (const body of pile.bodies) if (body.id > lastReleasedId) {
@@ -106,7 +132,7 @@ export function createVendingDispenser(root: THREE.Group, events: VendingDispens
         }
         wasActive = active;
       }
-      soundEvents.update(pile.bodies, isVisible);
+      soundEvents.update(bodies, isVisible);
       attach?.update();
     },
     dispose() {
@@ -140,6 +166,7 @@ function attachVendingInteraction(root: THREE.Group, options: VendingInteraction
   const project = new THREE.Vector3();
   return {
     visible: options.visible,
+    unavailable() { status.textContent = 'Reconnect to the factory to dispense a snack.'; },
     announce(accepted: boolean) {
       status.textContent = accepted ? `Snack ${count()} selected. Watch the pickup tray.` : 'The pickup area is full.';
     },
