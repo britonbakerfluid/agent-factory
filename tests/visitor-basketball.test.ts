@@ -68,6 +68,16 @@ describe('visitor shot physics', () => {
       expect(ball.scored,`shot from ${x}, ${z} at ${dt}`).toBe(true);
     }
   });
+  it('reaches the hoop from the front office and chill zone without clipping shot velocity', () => {
+    for (const x of [-3, 3]) for (const z of [7, 9, 11]) for (const dt of [1 / 60, .1]) {
+      const position = { x, y: 1.05, z };
+      const velocity = visitorShotVelocity(position);
+      expect(validBallVector(velocity, true)).toBe(true);
+      const ball: FlyingBall = { position: { ...position }, velocity, scored: false };
+      for (let t = 0; t < 3; t += dt) stepVisitorBall(ball, dt);
+      expect(ball.scored, `shot from ${x}, ${z} at ${dt}`).toBe(true);
+    }
+  });
   it('does not award a sideways miss or upward pass and keeps finite bounded positions', () => {
     const p = { ...position, x: 2.2 }, ball: FlyingBall = { position: p, velocity: visitorShotVelocity(p, { ...VISITOR_BALL_RIM, x: 2.2 }), scored: false };
     for (let i = 0; i < 60; i++) stepVisitorBall(ball, .1);

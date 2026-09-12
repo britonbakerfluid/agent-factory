@@ -152,21 +152,21 @@ function floorTexture(roughness = false): THREE.CanvasTexture {
     for (let y = 0; y < 32; y += 1) {
       for (let x = 0; x < 32; x += 1) {
         const alternate = (Math.floor(x / 2) + Math.floor(y / 2)) % 2 === 0;
-        context.fillStyle = roughness ? (alternate ? '#c8c8c8' : '#cbcbcb') : (alternate ? '#212335' : '#222436');
+        context.fillStyle = roughness ? '#c8c8c8' : (alternate ? '#212335' : '#222436');
         context.fillRect(x, y, 1, 1);
       }
     }
-    context.fillStyle = roughness ? '#d4d4d4' : 'rgba(16, 18, 32, 0.10)';
+    context.fillStyle = roughness ? '#d4d4d4' : 'rgba(16, 18, 32, 0.24)';
     context.fillRect(0, 0, 32, 1);
     context.fillRect(0, 0, 1, 32);
   }
   const texture = new THREE.CanvasTexture(floorCanvas);
   texture.colorSpace = roughness ? THREE.NoColorSpace : THREE.SRGBColorSpace;
   texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(14, 9);
+  texture.repeat.set(28, 32);
   return texture;
 }
 
@@ -178,7 +178,7 @@ const mainFloorMaterial = new THREE.MeshStandardMaterial({
   color: '#b5bbd4',
   emissive: '#0d1028',
   emissiveIntensity: 0.35,
-  roughness: 0.8,
+  roughness: 0.38,
   roughnessMap: floorRoughness,
   metalness: 0.02,
 });
@@ -188,15 +188,45 @@ mainFloor.position.z = 4.65;
 mainFloor.receiveShadow = true;
 scene.add(mainFloor);
 
+/** Staggered oak boards with quiet, pixel-sized grain; fixed pattern never shimmers. */
+function woodFloorTexture(width: number, depth: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const tones = ['#795636', '#80603d', '#745333', '#886443', '#7d5939', '#8a6744'];
+    for (let row = 0; row < 8; row++) {
+      const offset = (row % 3) * 21;
+      for (let col = -1; col < 3; col++) {
+        const x = col * 64 + offset, y = row * 16;
+        ctx.fillStyle = tones[(row * 3 + col + 7) % tones.length];
+        ctx.fillRect(x, y, 64, 16);
+        ctx.fillStyle = '#493522'; ctx.fillRect(x, y, 64, 1); ctx.fillRect(x, y, 1, 16);
+        ctx.fillStyle = 'rgba(234,191,131,.12)'; ctx.fillRect(x + 1, y + 1, 62, 1);
+        for (let grain = 0; grain < 5; grain++) {
+          ctx.fillStyle = grain % 2 ? 'rgba(40,25,15,.10)' : 'rgba(231,181,118,.09)';
+          ctx.fillRect(x + 4 + (row * 7 + grain * 11) % 22, y + 3 + grain * 2, 15 + (row * 13 + grain * 7) % 24, 1);
+        }
+      }
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(width / 2.8, depth / 1.76);
+  return texture;
+}
+
 function floorZone(width: number, depth: number, x: number, z: number, color: string): THREE.Mesh {
   const zone = new THREE.Mesh(
     new THREE.PlaneGeometry(width, depth),
     new THREE.MeshStandardMaterial({
-      color,
+      color: x < 0 ? '#ffffff' : color,
+      map: x < 0 ? woodFloorTexture(width, depth) : null,
       emissive: new THREE.Color(color).multiplyScalar(0.12),
       emissiveIntensity: 0.45,
-      roughness: 0.86,
-      roughnessMap: floorRoughness,
+      roughness: x < 0 ? 0.48 : 0.86,
+      roughnessMap: x < 0 ? null : floorRoughness,
       metalness: 0,
     }),
   );
@@ -256,7 +286,7 @@ const sideRoomBackground = new THREE.Color('#08091a');
 const patio = createSideRoom(sideRoomScene);
 const brandFlag = createBrandFlag(sideRoomScene);
 const mistFlag = createMistFlag(sideRoomScene, canvas);
-const sideRoom = createSideRoomNavigation(canvas, camera);
+const sideRoom = createSideRoomNavigation(canvas, camera, scene);
 
 // Outer passages enter beside the rooms, away from the central couch corner.
 for (const [left, right] of [[-8.1, -7.6], [-6.2, 5.8], [7.2, 8.1]]) {
@@ -392,7 +422,7 @@ function screenTexture(active: boolean): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(screenCanvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.wrapS = THREE.RepeatWrapping;
   texture.repeat.set(0.25, 1);
   return texture;

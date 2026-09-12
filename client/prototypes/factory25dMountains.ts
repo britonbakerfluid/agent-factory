@@ -134,13 +134,25 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
         const y=portalCamera.position.y;
         portalCamera.projectionMatrix.makePerspective((-7.92-eye.x)*near/depth,(7.92-eye.x)*near/depth,
           (viewHeight-y)*near/depth,-y*near/depth,near,portalCamera.far);
-        portalCamera.projectionMatrixInverse.copy(portalCamera.projectionMatrix).invert();
         portalCamera.updateMatrixWorld();
+        // Blend complete projections in the same world coordinates. Normalize at
+        // the landscape center so perspective depth cannot overwhelm the blend.
+        const progress = THREE.MathUtils.smoothstep(roomView.fov, 1, 48);
+        camera.updateMatrixWorld();
+        const restingView = camera.matrixWorldInverse.clone().multiply(new THREE.Matrix4().makeTranslation(0,0,6));
+        const restingProjection = camera.projectionMatrix.clone().multiply(restingView);
+        const movingProjection = portalCamera.projectionMatrix.clone().multiply(portalCamera.matrixWorldInverse);
+        const reference = new THREE.Vector4(0,viewHeight/2,-6,1).applyMatrix4(movingProjection);
+        movingProjection.multiplyScalar(1 / reference.w);
+        const elements = movingProjection.elements;
+        for (let i = 0; i < 16; i++) elements[i] = THREE.MathUtils.lerp(restingProjection.elements[i], elements[i], progress);
+        portalCamera.projectionMatrix.copy(movingProjection).multiply(portalCamera.matrixWorld);
+        portalCamera.projectionMatrixInverse.copy(portalCamera.projectionMatrix).invert();
         // The nearest meadow ends at z=5.4: place it just outside the glass.
         scene.position.z=-6;
         // The long lens moves the eye hundreds of units during the room blend.
         // That virtual camera travel is not extra atmosphere outside the window.
-        const fogNear=fog.near,fogFar=fog.far,eyeOffset=depth+6-camera.position.z;
+        const fogNear=fog.near,fogFar=fog.far,eyeOffset=portalCamera.position.z+6-camera.position.z;
         fog.near=fogNear+eyeOffset;fog.far=fogFar+eyeOffset;
         try { renderer.render(scene,portalCamera); }
         finally { fog.near=fogNear;fog.far=fogFar;scene.position.z=0; }

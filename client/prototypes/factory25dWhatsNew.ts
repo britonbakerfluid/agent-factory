@@ -8,18 +8,16 @@ export function createWhatsNew(visitPatio: () => void) {
   const abort = new AbortController(), events = { signal: abort.signal };
   const latest = factoryChangelog[0], storageKey = 'factory-whats-new-seen';
   const root = document.createElement('aside'); root.className = 'factory-updates'; root.setAttribute('aria-label', 'Factory updates');
-  root.innerHTML = `<div class="factory-update-preview" id="factory-update-preview" inert><div class="factory-update-content">${gamesArtwork}<span class="factory-update-eyebrow">JUST ADDED</span><h2></h2><p></p><div class="factory-update-actions"><button type="button" data-update="try">find Duck Hunt on the patio ↗</button><button type="button" data-update="history">view changelog</button></div></div></div><button type="button" class="factory-update-trigger" aria-expanded="false" aria-controls="factory-update-preview"><svg class="factory-update-gift" viewBox="0 0 32 32" aria-hidden="true" shape-rendering="crispEdges">
-<path fill="#a85450" d="M6 27h20v2H6z"/>
-<path fill="#eb554a" d="M5 14h14v14H5z"/><path fill="#a52d30" d="M19 14h8v10h-2v2h-4v2h-2z"/>
-<path fill="#ffe29a" d="M10 14h4v14h-4z"/><path fill="#d6ad66" d="M22 14h3v12h-3z"/>
-<g class="factory-gift-glow" fill="#fff0b8"><path opacity=".3" d="M7 14L2 -6h28l-5 20z"/><path opacity=".65" d="M11 14L8 -2h15l-2 16z"/><path d="M7 13h18v4H7zM15 2h3v10h-3z"/></g>
+  root.innerHTML = `<div class="factory-update-preview" id="factory-update-preview" inert><div class="factory-update-content">${gamesArtwork}<span class="factory-update-eyebrow">JUST ADDED</span><h2></h2><p></p><div class="factory-update-actions"><button type="button" data-update="try">find Duck Hunt on the patio ↗</button><button type="button" data-update="history">view changelog</button></div></div></div><button type="button" class="factory-update-trigger" aria-expanded="false" aria-controls="factory-update-preview"><svg class="factory-update-gift" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges">
+<path fill="#982b2b" d="M3 8h11v7H3z"/><path fill="#ec493f" d="M3 8h9v7H3z"/>
+<path fill="#ff7561" d="M3 8h2v7H3z"/><path fill="#ffe29a" d="M7 8h2v7H7z"/>
+<g class="factory-gift-glow" fill="#fff0b8"><path opacity=".3" d="M3 5h10v2H3zM4 7h8v2H4z"/><path d="M4 8h8v1H4z"/></g>
 <g class="factory-gift-lid">
-<path fill="#ffe09a" d="M3 11h4V9h4V7h14v2h4v6H19v2H3z"/>
-<path fill="#f36b5b" d="M3 12h16v5H3z"/><path fill="#b93735" d="M19 12h4v-2h6v5h-4v2h-6z"/>
-<path fill="#fff0b8" d="M10 12h4v5h-4zM14 7h4v2h-4v3h-4v-2h4z"/>
-<path fill="#a92d35" d="M10 3h4v2h2v2h-4V5h-2v2H8V5h2zM18 3h4v4h-2V5h-2v4h-4V7h2V5h2z"/>
+<path fill="#ffd779" d="M4 3h3v1h2V3h3v3H4z"/><path fill="#a9322e" d="M5 4h1v1H5zM10 4h1v1h-1z"/>
+<path fill="#ab302d" d="M2 6h12v3H2z"/><path fill="#ff6955" d="M2 6h10v2H2z"/>
+<path fill="#ffe29a" d="M7 5h2v4H7z"/>
 </g>
-<path class="factory-gift-spark" fill="#fff5d2" d="M26 2h2v2h2v2h-2v2h-2V6h-2V4h2z"/>
+<path class="factory-gift-spark" fill="#fff5d2" d="M14 3h1v1h1v1h-1v1h-1V5h-1V4h1z"/>
 </svg><span>what’s new</span><span class="factory-update-chevron" aria-hidden="true">↑</span></button>`;
   const trigger = root.querySelector<HTMLButtonElement>('.factory-update-trigger')!;
   const preview = root.querySelector<HTMLElement>('.factory-update-preview')!;

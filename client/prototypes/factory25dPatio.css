@@ -4,3 +4,7 @@
     bottom: max(154px, calc(env(safe-area-inset-bottom) + 144px));
   }
 }
+
+/* Accessible hit target for the solid arrow rendered in the scene. */
+#room-doorway.scene-arrow-target { color:transparent; background:transparent; }
+#room-doorway.scene-arrow-target::before { display:none; }

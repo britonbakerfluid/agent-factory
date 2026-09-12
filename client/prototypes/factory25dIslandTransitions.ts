@@ -17,8 +17,7 @@ export function createIslandTransitions(toolbar: HTMLElement) {
       const matrix=transform==='none' ? new DOMMatrixReadOnly() : new DOMMatrixReadOnly(transform);
       return [el,{left:box.left+matrix.e,top:box.top+matrix.f,width:box.width*matrix.a,height:box.height*matrix.d}] as const;
     }));
-    const shellTransform = shell?.playState==='running' ? getComputedStyle(toolbar,'::after').transform : 'none';
-    const shellScale = shellTransform==='none' ? 1 : new DOMMatrixReadOnly(shellTransform).a;
+    const renderedShellWidth = shell?.playState==='running' ? parseFloat(getComputedStyle(toolbar,'::after').width) : shellBox.width;
     const previousMotions=[...motions.entries()].map(([el,motion])=>({el,motion,time:motion.currentTime,running:motion.playState==='running'}));
     const previousShell=shell, shellTime=shell?.currentTime, shellRunning=shell?.playState==='running';
     for(const motion of motions.values())motion.cancel(); motions.clear(); shell?.cancel();
@@ -27,6 +26,11 @@ export function createIslandTransitions(toolbar: HTMLElement) {
     // A parent view group moves as one unit; do not animate its nested buttons twice.
     const items=controls.filter(el=>!controls.some(parent=>parent!==el&&parent.contains(el)));
     const next=new Map(items.map(el=>[el,el.getBoundingClientRect()]));
+    const audio = toolbar.querySelector<HTMLElement>('.factory-volume-control');
+    if (audio) {
+      const edge = audio.getBoundingClientRect().right;
+      toolbar.dataset.audioAtEdge = String(![...next].some(([el,rect]) => !audio.contains(el) && rect.left >= edge - .5));
+    }
     const unchanged=next.size===boxes.size && Math.abs(nextShell.width-shellBox.width)<.5 && [...next].every(([el,r])=>{const b=boxes.get(el);return b && Math.abs(b.left-r.left)<.5 && Math.abs(b.top-r.top)<.5 && Math.abs(b.width-r.width)<.5;});
     if(unchanged){
       for(const item of previousMotions)if(item.running){item.motion.play();item.motion.currentTime=item.time;motions.set(item.el,item.motion);}
@@ -34,21 +38,19 @@ export function createIslandTransitions(toolbar: HTMLElement) {
       return;
     }
     if(!reduced.matches) {
-      if(Math.abs(shellBox.width*shellScale-nextShell.width)>.5) shell=toolbar.animate([
-        {transform:`scaleX(${shellBox.width*shellScale/nextShell.width})`},{transform:'scaleX(1)'}
-      ],{...timing,pseudoElement:'::after'});
+      if(Math.abs(renderedShellWidth-nextShell.width)>.5) {
+        const inset = (nextShell.width-renderedShellWidth)/2;
+        const frames = Array.from({length:17},(_,i)=>{ const edge=Math.round(inset*(1-i/16)/2)*2; return {left:`${edge}px`,right:`${edge}px`,transform:'none'}; });
+        shell=toolbar.animate(frames,{...timing,pseudoElement:'::after',easing:'steps(16,end)'});
+      }
       for(const [el,rect] of next) {
         const old=rendered.get(el)??boxes.get(el);
         if(!old) { motions.set(el,el.animate([{opacity:0,translate:'0 5px'},{opacity:1,translate:'0 0'}],timing)); continue; }
         const x=old.left-rect.left,y=old.top-rect.top;
-        const ratio=old.width/rect.width;
-        if(Math.abs(x)>.5||Math.abs(y)>.5||Math.abs(old.width-rect.width)>.5) {
-          // Counter-scale inner labels/icons so widening a button doesn't squash its contents.
-          el.style.transformOrigin='0 0';
-          motions.set(el,el.animate([{transform:`translate(${x}px,${y}px) scaleX(${ratio})`},{transform:'translate(0,0) scaleX(1)'}],timing));
-          for(const child of el.children) if(child instanceof HTMLElement || child instanceof SVGElement) {
-            motions.set(child,child.animate([{transform:`scaleX(${1/ratio})`},{transform:'scaleX(1)'}],timing));
-          }
+        if(Math.abs(x)>.5||Math.abs(y)>.5) {
+          // Translate whole controls on the grid; never stretch their corners or artwork.
+          const frames=Array.from({length:17},(_,i)=>({transform:`translate(${Math.round(x*(1-i/16)/2)*2}px,${Math.round(y*(1-i/16)/2)*2}px)`}));
+          motions.set(el,el.animate(frames,{...timing,easing:'steps(16,end)'}));
         }
       }
     }

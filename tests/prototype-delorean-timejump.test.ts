@@ -18,6 +18,17 @@ function exit() {
 }
 
 describe('DeLorean hover and time-jump exit',()=>{
+  it('draws slightly off-center approaches into the exit without a collision',()=>{
+    for (const x of [9.8,10.9]) for (const yaw of [Math.PI-.25,Math.PI+.25]) {
+      const sim=new GarageDrivingSimulation();sim.claim('delorean','pilot');const car=sim.car('delorean');
+      Object.assign(car,{x,z:-.4,yaw,vx:.3,vz:-1.5,hoverHeight:GARAGE_HOVER_HEIGHT});
+      sim.setInput('delorean',{throttle:0,steer:0,drift:false});
+      let now=1000;
+      while(!car.timeJump && now<4000){sim.step(1/120,now);now+=1000/120;}
+      expect(car.timeJump,`approach ${x}, ${yaw}`).toBeDefined();expect(car.damage).toBe(0);
+    }
+  });
+
   it('retains sideways momentum, with even freer sliding while holding drift',()=>{
     const coast=(id:'mini'|'delorean',drift=false)=>{
       const sim=new GarageDrivingSimulation();sim.claim(id,'pilot');const car=sim.car(id);

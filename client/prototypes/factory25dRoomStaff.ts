@@ -29,6 +29,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
     const shadow = contactShadow(scene, { width: .22, depth: .12, spread: .065, opacity: .3, round: true });
     const label = createNameTag(name, false, canvas.parentElement!);
     label.setAvatar(avatar);
+    label.setStaffIdentity(name === 'board manager' ? 'Milo' : 'June', name === 'board manager' ? 'Board manager' : 'Front desk');
     label.element.classList.add('room-staff-label');
     label.element.dataset.roomStaff = name;
     const pickup=createStaffPickup(mesh,label.element.querySelector('button')!,canvas,avatar);
@@ -90,7 +91,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
         : holding ? 'putting the whiteboard back'
         : phase === 'writing' && managerLife.taskName ? `updating ${managerLife.taskName}’s note`
         : phase === 'walking-to-note' ? 'walking over to update a note' : 'keeping the board organized';
-      if (managerStatus !== managerActivity) { managerStatus = managerActivity; manager.label.setDetails('board manager', managerActivity, 'room staff'); }
+      if (managerStatus !== managerActivity) { managerStatus = managerActivity; manager.label.setDetails('Milo', managerActivity, ''); }
       // A receptionist finishes each small cleanup before returning to the desk.
       cleanup.update(desk.pickup.busy?0:dt, visible&&!desk.pickup.busy);
       clerkPoint.set(cleanup.position.x, .018, cleanup.position.z);
@@ -108,7 +109,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
         : cleanup.phase === 'cleaning' ? `putting the ${cleanup.job?.label ?? 'lamp'} back upright`
         : cleanup.phase === 'returning' ? 'heading back to the front desk'
         : data.connected ? `${people} people here · welcoming the team` : 'waiting for the factory connection';
-      if (deskStatus !== deskActivity) { deskStatus = deskActivity; desk.label.setDetails('front desk', deskActivity, 'room staff'); }
+      if (deskStatus !== deskActivity) { deskStatus = deskActivity; desk.label.setDetails('June', deskActivity, ''); }
       canvas.dataset.roomStaff = '2'; canvas.dataset.boardManager = phase;
       canvas.dataset.boardManagerPose = poses[row];
       canvas.dataset.boardManagerFrame = String(managerPose.frame);

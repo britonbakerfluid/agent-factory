@@ -98,12 +98,28 @@ describe('shared garage physics', () => {
     expect(sim.car('porsche').damage).toBeGreaterThan(0); expect(sim.cars.every(c => sim.isClear(c))).toBe(true);
   });
 
+  it('slides along a wall at close body clearance while taking impact damage', () => {
+    const sim = new GarageDrivingSimulation(); sim.claim('mini', 'driver');
+    const car = sim.car('mini');
+    Object.assign(car, { x: 10.5, z: 6, yaw: Math.PI / 4, vx: 5, vz: 5 });
+    sim.setInput('mini', { throttle: 1, steer: 0, drift: false });
+    step(sim, .4);
+    expect(car.z).toBeGreaterThan(6.8);
+    expect(car.vz).toBeGreaterThan(1);
+    expect(car.damage).toBeGreaterThan(0);
+    expect(sim.isClear(car)).toBe(true);
+    const p = GARAGE_DRIVE_PROFILES.mini;
+    const right = car.x + Math.abs(Math.cos(car.yaw)) * p.width / 2 + Math.abs(Math.sin(car.yaw)) * p.length / 2;
+    expect(11.8 - right).toBeLessThan(.07);
+    expect(right).toBeLessThan(11.8);
+  });
+
   it('transfers bumper momentum by mass, moves parked cars, then lets them settle without changing ownership', () => {
     const launch = (target: 'porsche' | 'f1') => {
       const sim = new GarageDrivingSimulation(); sim.claim('mini', 'driver');
       const car = sim.car('mini'), pushed = sim.car(target);
       Object.assign(car, { x: -3, z: 7, yaw: Math.PI / 2, vx: 6 });
-      const gap = (GARAGE_DRIVE_PROFILES.mini.length + GARAGE_DRIVE_PROFILES[target].length) / 2 + .28;
+      const gap = (GARAGE_DRIVE_PROFILES.mini.length + GARAGE_DRIVE_PROFILES[target].length) / 2 + .05;
       Object.assign(pushed, { x: -3 + gap + .01, z: 7, yaw: Math.PI / 2 });
       sim.step(1 / 120, 1000);
       expect(car.vx).toBeGreaterThan(0); expect(car.vx).toBeLessThan(6);
@@ -132,7 +148,7 @@ describe('shared garage physics', () => {
       expect(sim.cars.every(car => sim.isClear(car))).toBe(true);
     }
     expect(b.x).toBeGreaterThan(5.5); expect(c.x).toBeGreaterThan(8);
-    expect(c.x).toBeLessThan(10.52);
+    expect(c.x + GARAGE_DRIVE_PROFILES[c.id].length / 2).toBeLessThanOrEqual(11.8);
     expect(b).toMatchObject({ mode: 'driving', driverVisitorId: 'b' });
     expect(a).toMatchObject({ mode: 'driving', driverVisitorId: 'a' });
     expect(sim.claim('porsche', 'a')).toBe(false);

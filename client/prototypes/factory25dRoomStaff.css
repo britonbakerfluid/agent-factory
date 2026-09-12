@@ -20,3 +20,7 @@
 .agent-label.room-staff-label[data-card-placement="above-body"] > .agent-details {
   top:auto; bottom:calc(var(--staff-hit-height, 34px) + 12px);
 }
+
+.room-staff-label .agent-detail-heading .factory-portrait { --ui-pixel:2px; --portrait-size:40px; width:40px; height:40px; flex:0 0 40px; background:#3a5849; overflow:hidden; }
+.room-staff-label .staff-identity { display:flex; flex-direction:column; justify-content:center; gap:2px; min-width:0; }
+.room-staff-label .staff-job { color:#aebbb5; font-size:11px; line-height:16px; }

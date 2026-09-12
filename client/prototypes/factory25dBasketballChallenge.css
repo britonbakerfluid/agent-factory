@@ -25,11 +25,11 @@
 .factory-toolbar .horse-turn.horse-play { font-weight:600; }
 
 .factory-toolbar .horse-play-ball {
-  display:block; flex:none; width:22px; height:22px; overflow:hidden;
+  display:block; flex:none; width:24px; height:24px; overflow:hidden;
 }
 .factory-toolbar .horse-turn.horse-play .horse-play-ball svg { display:block; width:100%; height:100%; }
 
-.factory-toolbar .horse-play-ball { border-radius:0; background:linear-gradient(135deg,#ffbd57 0 25%,#ec8525 25% 65%,#b94b16 65%); box-shadow:none; clip-path:polygon(30% 0,70% 0,70% 10%,90% 10%,90% 30%,100% 30%,100% 70%,90% 70%,90% 90%,70% 90%,70% 100%,30% 100%,30% 90%,10% 90%,10% 70%,0 70%,0 30%,10% 30%,10% 10%,30% 10%); image-rendering:pixelated; }
+.factory-toolbar .horse-play-ball { border-radius:0; background:none; box-shadow:none; clip-path:none; image-rendering:pixelated; }
 .factory-toolbar .horse-play-ball svg { shape-rendering:crispEdges; }
 .factory-toolbar .horse-turn.horse-play:hover:not(:disabled) { background:#ffb764; color:#30200f; }
 .factory-toolbar .horse-turn.horse-play:active:not(:disabled) { background:#df8c35; color:#30200f; }
