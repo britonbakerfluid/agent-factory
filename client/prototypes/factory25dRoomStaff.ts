@@ -1,3 +1,4 @@
+import type { SharedPropsConnection } from './factory25dSharedProps';
 import { createStaffPickup, updatePickupShadow } from './factory25dPickup';
 import * as THREE from 'three';
 import { FRONT_COUNTER } from '@shared/factory25d-layout';
@@ -17,7 +18,7 @@ import './factory25dRoomStaff.css';
 const poses = ['idle', 'walk_right', 'walk_left', 'walk_up', 'work', 'board', 'walk_down', 'hold_left', 'hold_right', 'hold_up', 'hold_down'];
 /** Room staff use the normal avatar painter but never create agent sessions, levels, or activity credit. */
 export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: HTMLCanvasElement, openBoard: () => void,
-  boardMotion: ReturnType<typeof installBoardDragging>) {
+  boardMotion: ReturnType<typeof installBoardDragging>, shared?: SharedPropsConnection) {
   let eyeTime = 0, eyesFrozen = false;
   function staff(name: string, avatar: AvatarConfig, action: () => void) {
     const { sheet, texture } = avatarTexture(avatar, poses, true);
@@ -93,21 +94,22 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
         : phase === 'walking-to-note' ? 'walking over to update a note' : 'keeping the board organized';
       if (managerStatus !== managerActivity) { managerStatus = managerActivity; manager.label.setDetails('Milo', managerActivity, ''); }
       // A receptionist finishes each small cleanup before returning to the desk.
-      cleanup.update(desk.pickup.busy?0:dt, visible&&!desk.pickup.busy);
-      clerkPoint.set(cleanup.position.x, .018, cleanup.position.z);
-      const deskWalking = Math.hypot(cleanup.motion.x, cleanup.motion.z) > .0001;
-      const deskFrame = desk.walk.sample(cleanup.position, now / 1000, deskWalking, reduced);
-      const checking = cleanup.phase === 'idle' && !reduced && now % 18000 > 14500;
-      const face = cleanup.phase === 'cleaning' ? cleanup.facing : cleanup.motion;
-      const deskRow = cleanup.phase === 'cleaning'
+      if (!shared) cleanup.update(desk.pickup.busy?0:dt, visible&&!desk.pickup.busy);
+      const clerk = shared?.cleanup() ?? cleanup;
+      clerkPoint.set(clerk.position.x, .018, clerk.position.z);
+      const deskWalking = Math.hypot(clerk.motion.x, clerk.motion.z) > .0001;
+      const deskFrame = desk.walk.sample(clerk.position, now / 1000, deskWalking, reduced);
+      const checking = clerk.phase === 'idle' && !reduced && now % 18000 > 14500;
+      const face = clerk.phase === 'cleaning' ? clerk.facing : clerk.motion;
+      const deskRow = clerk.phase === 'cleaning'
         ? Math.abs(face.x) > Math.abs(face.z) ? face.x > 0 ? 8 : 7 : face.z < 0 ? 9 : 4
         : deskWalking ? Math.abs(face.x) > Math.abs(face.z) ? face.x > 0 ? 1 : 2 : face.z > 0 ? 6 : 3
         : checking ? 2 : 0;
       desk.pose(deskRow, deskWalking ? deskFrame : 0, clerkPoint, camera, visible);
       const people = new Set(data.agents.map(agent => agent.owner)).size;
-      const deskActivity = cleanup.phase === 'walking' ? `walking over to the ${cleanup.job?.label ?? 'lamp'}`
-        : cleanup.phase === 'cleaning' ? `putting the ${cleanup.job?.label ?? 'lamp'} back upright`
-        : cleanup.phase === 'returning' ? 'heading back to the front desk'
+      const deskActivity = clerk.phase === 'walking' ? `walking over to the ${clerk.job?.label ?? 'lamp'}`
+        : clerk.phase === 'cleaning' ? `putting the ${clerk.job?.label ?? 'lamp'} back upright`
+        : clerk.phase === 'returning' ? 'heading back to the front desk'
         : data.connected ? `${people} people here · welcoming the team` : 'waiting for the factory connection';
       if (deskStatus !== deskActivity) { deskStatus = deskActivity; desk.label.setDetails('June', deskActivity, ''); }
       canvas.dataset.roomStaff = '2'; canvas.dataset.boardManager = phase;
@@ -115,8 +117,8 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
       canvas.dataset.boardManagerFrame = String(managerPose.frame);
       canvas.dataset.boardManagerPosition = `${managerLife.position.x.toFixed(3)},${managerLife.position.z.toFixed(3)}`;
       canvas.dataset.boardPosition = `${board.position.x.toFixed(3)},${board.position.z.toFixed(3)}`;
-      canvas.dataset.frontDeskActivity = cleanup.phase;
-      canvas.dataset.frontDeskCleanup = cleanup.job?.id ?? '';
+      canvas.dataset.frontDeskActivity = clerk.phase;
+      canvas.dataset.frontDeskCleanup = clerk.job?.id ?? '';
       canvas.dataset.frontDeskPosition = `${clerkPoint.x.toFixed(3)},${clerkPoint.z.toFixed(3)}`;
     },
     dispose() { cleanup.dispose(); manager.dispose(); desk.dispose(); }

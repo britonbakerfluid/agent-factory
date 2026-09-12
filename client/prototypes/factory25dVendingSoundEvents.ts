@@ -19,7 +19,16 @@ export class VendingSoundEvents {
   configure(sounds: VendingSounds = {}) { this.sounds.stop?.(); this.sounds = sounds; }
   select(accepted: boolean, visible: boolean) { if (accepted && visible) this.sounds.select?.(); }
   remove(id: number) { this.emitted.delete(id); this.landed.delete(id); this.fallSpeed.delete(id); }
+  /** A room snapshot is not a fresh dispense; do not replay a whole settled pile on join/return. */
+  prime(bodies: readonly VendingCanBody[]) {
+    for (const body of bodies) {
+      this.emitted.add(body.id);
+      if (body.sleeping || body.supported) this.landed.add(body.id);
+    }
+  }
   update(bodies: readonly VendingCanBody[], visible: boolean) {
+    const present = new Set(bodies.map(body => body.id));
+    for (const id of this.emitted) if (!present.has(id)) this.remove(id);
     if (!visible) {
       if (this.wasVisible) this.sounds.stop?.();
       this.wasVisible = false;

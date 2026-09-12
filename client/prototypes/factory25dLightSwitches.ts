@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createFixtureRock } from './factory25dFixtureRock';
 import type { FixtureCleanupJob } from './factory25dStaffCleanup';
+import type { SharedPropsConnection } from './factory25dSharedProps';
 import './factory25dLightSwitches.css';
 
 export interface SceneLightSwitch {
@@ -37,10 +38,10 @@ export function readLightPreferences(storage: Pick<Storage, 'getItem'>): Record<
 export function createLightInteractions(canvas: HTMLCanvasElement, switches: RoomLightSwitch[],
   options: { camera: () => THREE.Camera; visible: (room: RoomLightSwitch['room']) => boolean;
     sound: (kind: SceneLightSwitch['kind'], on: boolean) => void;
-    onCleanup?: (job: FixtureCleanupJob) => void }) {
+    onCleanup?: (job: FixtureCleanupJob) => void; shared?: SharedPropsConnection }) {
   const host = canvas.parentElement!, abort = new AbortController();
   let saved: Record<string, boolean> = {};
-  try { saved = readLightPreferences(localStorage); } catch { /* Storage can be disabled. */ }
+  try { if (!options.shared) saved = readLightPreferences(localStorage); } catch { /* Storage can be disabled. */ }
   const point = new THREE.Vector3(), box = new THREE.Box3(), ray = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   let down: { x: number; y: number } | undefined;
@@ -57,7 +58,7 @@ export function createLightInteractions(canvas: HTMLCanvasElement, switches: Roo
     const center = box.isEmpty() ? new THREE.Vector3() : light.target.worldToLocal(box.getCenter(new THREE.Vector3()));
     const fall = light.room === 'factory' ? FALLING_FIXTURES[light.id] : undefined;
     const motion = createFixtureRock(light.motionTargets ?? [light.target], {
-      canFall: Boolean(fall && options.onCleanup), fallAxis: fall?.axis,
+      canFall: !options.shared && Boolean(fall && options.onCleanup), fallAxis: fall?.axis,
       onFallen() {
         if (!fall || !motion) return;
         const anchor = motion.worldAnchor(new THREE.Vector3());
@@ -66,9 +67,11 @@ export function createLightInteractions(canvas: HTMLCanvasElement, switches: Roo
           isPending: () => motion.isPending, recover: () => motion.recover() });
       },
     });
-    return { light, button, center, motion, x: 0, y: 0, lastOn: undefined as boolean | undefined };
+    return { light, button, center, motion, x: 0, y: 0, lastOn: undefined as boolean | undefined,
+      presses: undefined as number | undefined, epoch: '' };
   });
   function toggle(light: SceneLightSwitch) {
+    if (options.shared) { options.shared.send({ action: 'light', id: light.id, on: !light.isOn() }); return; }
     const on = !light.isOn(); light.setOn(on); saved[light.id] = on;
     entries.find(entry => entry.light === light)?.motion?.press();
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); } catch { /* Keep the current scene usable. */ }
@@ -130,7 +133,19 @@ export function createLightInteractions(canvas: HTMLCanvasElement, switches: Roo
       const camera = options.camera(), rect = canvas.getBoundingClientRect(), parent = host.getBoundingClientRect();
       camera.updateMatrixWorld();
       for (const entry of entries) {
-        entry.motion?.update(dt, reduced);
+        const shared = options.shared?.state?.lights.find(light => light.id === entry.light.id);
+        if (shared) {
+          if (entry.epoch !== options.shared!.state!.epoch) { entry.presses = undefined; entry.epoch = options.shared!.state!.epoch; }
+          if (shared.on !== null && entry.light.isOn() !== shared.on) entry.light.setOn(shared.on);
+          if (entry.presses !== undefined && entry.presses !== shared.presses && options.shared!.now() - shared.changedAt < 1000) {
+            entry.motion?.press();
+            if (options.visible(entry.light.room) && !document.hidden) options.sound(entry.light.kind, entry.light.isOn());
+          }
+          entry.presses = shared.presses;
+          // Only the upright press spring is local; falling and recovery use shared timestamps.
+          if (shared.fallenAt === null) entry.motion?.update(dt, reduced);
+          entry.motion?.sync(shared, options.shared!.now(), reduced);
+        } else if (!options.shared) entry.motion?.update(dt, reduced);
         const { light, button } = entry;
         button.hidden = document.hidden || !options.visible(light.room);
         if (button.hidden) continue;

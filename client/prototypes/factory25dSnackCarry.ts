@@ -1,3 +1,4 @@
+import type { SharedPropsConnection } from './factory25dSharedProps';
 import * as THREE from 'three';
 import type { WorldAgent } from '@shared/types';
 import { AVATAR_ANIMATIONS } from './factory25dAvatar';
@@ -35,9 +36,9 @@ export function snackHandPose(texture: THREE.Texture, target = new THREE.Vector3
   return target.set(handX * pixel, (16 - handY) * pixel, row === 4 || row === 5 || row === 7 || row === 8 ? -.012 : .012);
 }
 
-/** Browser-local prop ownership. Observes routes; never moves an agent or sends a command. */
+/** Render shared ownership in connected rooms; standalone previews retain local pickup physics. */
 export function createSnackCarry(source: SnackSource, canvas: Pick<HTMLCanvasElement, 'dataset'>,
-  entries: () => Iterable<SnackCarrier>, canPick: (entry: SnackCarrier) => boolean = () => true) {
+  entries: () => Iterable<SnackCarrier>, canPick: (entry: SnackCarrier) => boolean = () => true, shared?: SharedPropsConnection) {
   const held = new Map<string, HeldSnack>(), nextPickup = new Map<string, number>();
   const agentWorld = new THREE.Vector3(), itemWorld = new THREE.Vector3(), agentLocal = new THREE.Vector3();
   const target = new THREE.Vector3();
@@ -49,16 +50,31 @@ export function createSnackCarry(source: SnackSource, canvas: Pick<HTMLCanvasEle
     item.sprite.removeFromParent(); item.sprite.geometry.dispose(); item.sprite.material.dispose();
     held.delete(id); nextPickup.set(id, time + 12);
   }
+  function hold(entry: SnackCarrier, snackId: number, position: THREE.Vector3, since: number) {
+    const kind = snackKind(snackId), style = VENDING_SNACKS[kind];
+    const sprite = new THREE.Mesh(new THREE.PlaneGeometry(style.carryWidth, style.carryHeight),
+      new THREE.MeshStandardMaterial({ map: snackTexture(kind), alphaTest: .08, side: THREE.DoubleSide,
+        roughness: 1, emissive: '#101126', emissiveIntensity: .6 }));
+    sprite.name = `held-snack-${kind}`; sprite.userData.snackId = snackId; sprite.castShadow = true;
+    itemWorld.copy(position); itemWorld.y += .019; source.root.localToWorld(itemWorld);
+    const from = entry.mesh.worldToLocal(itemWorld.clone());
+    const item = { sprite, from, since }; entry.mesh.add(sprite);
+    held.set(entry.session.sessionId, item); pickups++; return item;
+  }
   return {
     update(time: number, allowPickup = true, reducedMotion = false) {
+      if (shared) time = shared.now() / 1000;
+      const ownership = new Map(shared?.state?.held.map(item => [item.sessionId, item]));
       const seen = new Set<string>();
       for (const entry of entries()) {
         const id = entry.session.sessionId; seen.add(id);
         let item = held.get(id);
-        if (item && (!available(entry) || time - item.since >= 21.2)) {
+        const owner = ownership.get(id);
+        if (item && (shared ? !owner || owner.id !== item.sprite.userData.snackId || owner.since / 1000 !== item.since : !available(entry) || time - item.since >= 21.2)) {
           release(id, time); item = undefined;
         }
-        if (!item && allowPickup && entry.mesh.visible && entry.mesh.userData.room === 'factory'
+        if (!item && shared && owner) item = hold(entry, owner.id, new THREE.Vector3().fromArray(owner.from), owner.since / 1000);
+        if (!shared && !item && allowPickup && entry.mesh.visible && entry.mesh.userData.room === 'factory'
           && available(entry) && time >= (nextPickup.get(id) ?? 0) && source.dispensedBodies.length) {
           entry.mesh.getWorldPosition(agentWorld); agentLocal.copy(agentWorld); source.root.worldToLocal(agentLocal);
           // Only reach from the open front of the cabinet, never through its back or side wall.
@@ -71,15 +87,7 @@ export function createSnackCarry(source: SnackSource, canvas: Pick<HTMLCanvasEle
               if (d < distance) { nearest = body; distance = d; }
             }
             if (nearest && source.takeDispensed(nearest.id)) {
-              const kind = snackKind(nearest.id), style = VENDING_SNACKS[kind];
-              const sprite = new THREE.Mesh(new THREE.PlaneGeometry(style.carryWidth, style.carryHeight),
-                new THREE.MeshStandardMaterial({ map: snackTexture(kind), alphaTest: .08, side: THREE.DoubleSide,
-                  roughness: 1, emissive: '#101126', emissiveIntensity: .6 }));
-              sprite.name = `held-snack-${kind}`; sprite.userData.snackId = nearest.id;
-              sprite.castShadow = true;
-              itemWorld.copy(nearest.position); itemWorld.y += .019; source.root.localToWorld(itemWorld);
-              const from = entry.mesh.worldToLocal(itemWorld.clone());
-              entry.mesh.add(sprite); item = { sprite, from, since: time }; held.set(id, item); pickups++;
+              item = hold(entry, nearest.id, nearest.position, time);
             }
           }
         }

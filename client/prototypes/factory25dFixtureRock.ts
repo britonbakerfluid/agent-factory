@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { VendingCabinetRock } from './factory25dVendingMotion';
+import { FIXTURE_FALL_MS, FIXTURE_RECOVER_MS, type SharedRoomLight } from '@shared/room-props';
 
 export type FixturePoseState = 'upright' | 'tipping' | 'fallen' | 'recovering';
 type FixtureRockOptions = { canFall?: boolean; fallAxis?: 'x' | 'z'; onFallen?: () => void };
@@ -62,6 +63,30 @@ export function createFixtureRock(objects: THREE.Object3D[], options: FixtureRoc
       if (disposed || state !== 'fallen') return;
       recoveryStart = angle; recovery = 0; taps = 0; quiet = 2;
       state = 'recovering';
+    },
+    /** Absolute server time also restores the correct pose for late joiners and sleeping tabs. */
+    sync(light: SharedRoomLight, now: number, reduced: boolean) {
+      if (light.fallenAt === null) {
+        if (state !== 'upright') {
+          state = 'upright'; angle = 0; rock.update(0, true);
+          pivot.rotation.set(0, 0, 0); pivot.position.copy(origin);
+        }
+        return;
+      }
+      rock.update(0, true);
+      if (light.recoverAt !== null) {
+        const progress = reduced ? 1 : Math.min(1, Math.max(0, now - light.recoverAt) / FIXTURE_RECOVER_MS);
+        state = progress >= 1 ? 'upright' : 'recovering';
+        angle = -Math.PI / 2 * (1 - progress * progress * (3 - 2 * progress));
+        setFallPose(Math.sin(progress * Math.PI) * Math.min(.055, size.y * .08));
+      } else {
+        const progress = reduced ? 1 : Math.min(1, Math.max(0, now - light.fallenAt) / FIXTURE_FALL_MS);
+        state = progress >= 1 ? 'fallen' : 'tipping';
+        // A weighted fall followed by one small contact bounce, not a free-running local simulation.
+        angle = progress < .78 ? -Math.PI / 2 * (progress / .78) ** 1.65
+          : -Math.PI / 2 + Math.sin((progress - .78) / .22 * Math.PI) * .055;
+        setFallPose();
+      }
     },
     update(dt: number, reduced: boolean) {
       if (disposed) return;
