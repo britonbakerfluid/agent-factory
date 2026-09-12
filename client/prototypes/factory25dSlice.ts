@@ -286,7 +286,7 @@ const sideRoomBackground = new THREE.Color('#08091a');
 const patio = createSideRoom(sideRoomScene);
 const brandFlag = createBrandFlag(sideRoomScene);
 const mistFlag = createMistFlag(sideRoomScene, canvas);
-const sideRoom = createSideRoomNavigation(canvas, camera, scene);
+const sideRoom = createSideRoomNavigation(canvas, camera, scene, sideRoomScene);
 
 // Outer passages enter beside the rooms, away from the central couch corner.
 for (const [left, right] of [[-8.1, -7.6], [-6.2, 5.8], [7.2, 8.1]]) {

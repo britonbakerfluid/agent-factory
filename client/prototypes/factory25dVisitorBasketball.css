@@ -3,8 +3,7 @@
 .holding-basketball { cursor: grabbing; touch-action: none; }
 .visitor-ball-hint { position: fixed; bottom: calc(var(--factory-toolbar-height, 70px) + 20px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); z-index: 35; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box; padding: 12px; font: 11px 'Geist Pixel', monospace; color: #d2e1d9; }
 .visitor-ball-hint[hidden], .visitor-ball-pickup[hidden] { display: none; }
-.visitor-ball-hint button { font: inherit; color: #d2e1d9; background: #263a3b; border: 1px solid #637d77; padding: 10px; cursor: pointer; }
-.visitor-ball-hint button[aria-pressed="true"] { background: #bcd5bb; color: #142923; }
+.visitor-ball-hint button { font: inherit; padding: 10px; cursor: pointer; }
 .visitor-ball-hint label { display: flex; align-items: center; gap: 5px; }
 .visitor-ball-hint input { width: 76px; accent-color: #bcd5bb; }
 .visitor-ball-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -18,13 +17,12 @@
 .factory-toolbar .visitor-ball-hint [data-action="back"] { display:none; }
 .factory-toolbar[data-view="basketball"] .factory-focus-title { display:none; }
 .factory-toolbar .visitor-ball-hint button { background:transparent;border:0; }
-.factory-toolbar .visitor-ball-hint button:hover { background:#ffffff12; }
 
 #slice-canvas.holding-basketball,body:has(#slice-canvas.holding-basketball) .visitor-ball-pickup { cursor:grabbing !important; }
 .visitor-ball-pickup { cursor:grab !important; }
 .visitor-ball-placement { position:fixed; z-index:35; width:200px; transform:translateX(-50%); text-align:center; pointer-events:none; color:#f1f5ef; font:12px/1.5 'Geist Pixel',monospace; text-shadow:0 1px 3px #000,0 0 6px #000b; }
 .visitor-ball-placement[hidden] { display:none; }
-.visitor-ball-placement button { pointer-events:auto; display:block; margin:5px auto 0; padding:5px 12px; border:0; background:#f5a34a; color:#30200f; font:inherit; font-weight:600; cursor:pointer; }
+.visitor-ball-placement button { pointer-events:auto; display:block; margin:5px auto 0; padding:10px 18px; border:0; text-shadow:none; font:inherit; font-weight:600; cursor:pointer; }
 .visitor-ball-placement button[hidden] { display:none; }
 
 /* The ball owns pointer input during pickup, aiming, and camera travel. */

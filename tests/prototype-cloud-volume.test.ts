@@ -39,6 +39,21 @@ function fixture(previousTarget: THREE.WebGLRenderTarget | null = null, cloudyBi
 }
 
 describe('volumetric window clouds', () => {
+  it('keeps a Fluid cloud in clear skies without changing weather cover, including at night', () => {
+    const {volume, frames} = fixture();
+    for (const night of [false, true]) {
+      volume.update(.1, CLEAR_WEATHER, day, 0, night, true);
+      const u = frames.at(-1)!.quad.material.uniforms;
+      expect(u.cloudCover.value).toBe(0);
+      expect(u.cloudFigure.value.x).toBe(.85);
+      expect(u.cloudFigure.value.y).toBe(1);
+      expect(u.cloudFigureCompany.value).toBe(-1);
+      expect(u.cloudBillows.value).toBe(1);
+    }
+    const off = fixture(null, true, 'off');
+    off.volume.update(.1, CLEAR_WEATHER, day, 0, false, true);
+    expect(off.frames[0].quad.material.uniforms.cloudFigure.value.x).toBe(0);
+  });
   it('keeps the preview figure inside eligible clouds and removes it in other weather', () => {
     const { volume, frames } = fixture(null, true, 'fluid');
     volume.update(.1, cloudy, day, 0, false, true);
@@ -46,7 +61,7 @@ describe('volumetric window clouds', () => {
     expect(figure.toArray()).toEqual([1, 1, 0]);
     volume.update(.1, cloudy, day, 0, true, true);
     expect(figure.x).toBe(0);
-    for (const mode of ['clear', 'rain', 'snow', 'thunderstorm', 'fog', 'post-rain']) {
+    for (const mode of ['rain', 'snow', 'thunderstorm', 'fog', 'post-rain']) {
       volume.update(.1, parseWeatherOverride(`?skyWeather=${mode}`)!, day, 0, false, true);
       expect(figure.x).toBe(0);
     }
@@ -114,7 +129,7 @@ describe('volumetric window clouds', () => {
     expect(uniforms.cloudBillows.value).toBe(1);
   });
 
-  it.each(['clear', 'fog', 'rain', 'thunderstorm', 'snow', 'post-rain'])('preserves the %s sky, including its lighting and precipitation deck', mode => {
+  it.each(['fog', 'rain', 'thunderstorm', 'snow', 'post-rain'])('preserves the %s sky, including its lighting and precipitation deck', mode => {
     const next = fixture(), legacy = fixture(null, false);
     const weather = parseWeatherOverride(`?skyWeather=${mode}`)!;
     for (const test of [next, legacy]) test.volume.update(.1, weather, day, -2, false, true, .6);

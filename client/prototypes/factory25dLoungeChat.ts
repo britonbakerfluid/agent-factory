@@ -8,6 +8,7 @@ import { blendCamera, cameraPose, type CameraPose } from './factory25dCameraMoti
 import { createPhoneMessage } from './factory25dPhoneMessages';
 import { avatarPortrait, createProfilePortrait } from './factory25dPortrait';
 import { createLoungePhone, phoneCameraPose, PHONE } from './factory25dLoungePhone';
+import { minimizedPlayerBounds } from './factory25dPlayerSpace';
 import { PhoneMessageArrivals, PhoneUnreadReminders } from './factory25dPhoneNotifications';
 import './factory25dLoungePhone.css';
 
@@ -205,7 +206,14 @@ export function createLoungeChat(
   }
   function closePose(): CameraPose {
     board.updateWorldMatrix(true, false); board.localToWorld(focus.set(0, 0, PHONE.faceZ));
-    return phoneCameraPose(board, canvas.clientWidth, canvas.clientHeight);
+    const player = minimizedPlayerBounds(), width = canvas.clientWidth, height = canvas.clientHeight;
+    // Portrait screens stack the phone below the player. Short screens use
+    // the space beside it. The original iframe stays mounted and visible.
+    const insets = player && width < 1000
+      ? height >= 650 ? { top: player.bottom + 16 }
+        : (player.left + player.right) / 2 < width / 2 ? { left: player.right + 16 } : { right: width - player.left + 16 }
+      : {};
+    return phoneCameraPose(board, width, height, insets);
   }
   function enter() {
     if (active || !canOpen) return;
@@ -220,7 +228,7 @@ export function createLoungeChat(
     dock.hidden = false; sheet.inert = true;
     dock.dataset.instant = String(reduced.matches);
     fit(); from.height *= canvas.clientHeight / Math.max(1, previousHeight);
-    layoutWidth = Math.max(300, Math.min(400, PHONE.screenWidth / closePose().height * canvas.clientHeight));
+    layoutWidth = PHONE.screenWidth / closePose().height * canvas.clientHeight;
     blendCamera(camera, from, closePose(), 0, canvas.clientWidth / Math.max(1, canvas.clientHeight), focus);
     list.scrollTop = list.scrollHeight;
     focusInputOnArrival = focusComposer; back.focus({ preventScroll: true }); focusComposer = false;
@@ -344,12 +352,16 @@ export function createLoungeChat(
       if (active) {
         if (lastWidth !== canvas.clientWidth || lastHeight !== canvas.clientHeight) {
           fit(); positionSuggestions();
-          if (open) layoutWidth = Math.max(300, Math.min(400, PHONE.screenWidth / closePose().height * canvas.clientHeight));
         }
         const t = reduced.matches || !moving ? 1 : THREE.MathUtils.clamp((now - started) / 720, 0, 1);
         const viewport = canvas.closest('.slice-viewport')!.getBoundingClientRect();
         const restoredHeight = Math.min(viewport.height, viewport.width * 141 / 200) - 2;
         const to = open ? closePose() : { ...room, height: room.height * canvas.clientHeight / Math.max(1, restoredHeight) };
+        if (open) {
+          // Use screen pixels for text and touch targets, even in a smaller phone.
+          layoutWidth = PHONE.screenWidth / to.height * canvas.clientHeight;
+          sheet.dataset.compact = String(layoutWidth < 280);
+        }
         blendCamera(camera, from, to, t, canvas.clientWidth / Math.max(1, canvas.clientHeight), focus);
         sheet.inert = !open || t < 1;
         if (t === 1) {

@@ -63,7 +63,8 @@ export function createDjDecks(parent:THREE.Group){
     const sprite=new THREE.Sprite(material);sprite.name='dj-speaker-music-note';sprite.visible=false;booth.add(sprite);return sprite;
   });
   let lastTime:number|undefined,phase=0;
-  return {booth,dispose(){notes.forEach(note=>{note.removeFromParent();note.material.dispose();});noteTexture.dispose();},update(time:number,playing:boolean,reduced:boolean){
+  const scratches = [0, 0], scratchTimes = [0, 0];
+  return {booth, records: platters, scratch(deck:number, offset:number) { scratches[deck] = offset; scratchTimes[deck] = performance.now(); },dispose(){notes.forEach(note=>{note.removeFromParent();note.material.dispose();});noteTexture.dispose();},update(time:number,playing:boolean,reduced:boolean){
     const dt=lastTime===undefined?0:Math.min(.1,Math.max(0,time-lastTime));lastTime=time;
     if(playing&&!reduced)phase+=dt;
     notes.forEach((note,i)=>{
@@ -74,7 +75,7 @@ export function createDjDecks(parent:THREE.Group){
       note.material.opacity=Math.min(1,progress*8)*(1-progress)*.85;
       note.material.rotation=side*Math.sin(progress*3)*.18;
     });
-    platters.forEach((disc,i)=>{disc.rotation.y=reduced?0:time*(playing?3.49:1.75)+i*Math.PI*.6;});
+    platters.forEach((disc,i)=>{disc.rotation.y=reduced?0:time*(playing?3.49:1.75)+i*Math.PI*.6 + (performance.now()-scratchTimes[i]<350?scratches[i]*5:0);});
     meters.forEach((led,i)=>{const on=playing&&(reduced?i%5<3:Math.sin(time*5+i*.8)>.05);(led.material as THREE.MeshBasicMaterial).color.set(on?(i%5===4?'#eac879':'#7acfb3'):'#263b36');});
   }};
 }

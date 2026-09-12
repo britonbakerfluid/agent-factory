@@ -1,6 +1,7 @@
 import type { AvatarConfig, WorldAgent, WorldDelta } from '../shared/types.js';
 import type { StoredTeamMember, TeamSnapshot } from '../shared/team.js';
 import { DEFAULT_AVATAR } from '../shared/constants.js';
+import { normalizeTeamAvatar } from './team-avatar.js';
 
 export interface TeamRepository {
   loadTeamMembers(): Promise<StoredTeamMember[]>;
@@ -24,7 +25,7 @@ export class TeamRoster {
   }
   private remember(member: StoredTeamMember) {
     const previous = this.members.get(member.id);
-    const next = { ...member, lastSeen: Math.max(previous?.lastSeen ?? 0, member.lastSeen) };
+    const next = { ...member, avatar: normalizeTeamAvatar(member.avatar), lastSeen: Math.max(previous?.lastSeen ?? 0, member.lastSeen) };
     if (JSON.stringify(previous) === JSON.stringify(next)) return;
     this.members.set(next.id, next); this.dirty.set(next.id, structuredClone(next));
   }

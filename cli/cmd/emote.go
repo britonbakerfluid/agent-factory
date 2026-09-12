@@ -69,7 +69,7 @@ func runEmote(cmd *cobra.Command, args []string) error {
 		ui.Error("Could not load installation identity: " + err.Error())
 		return err
 	}
-	resp, err := client.Do(request)
+	resp, err := doAuthenticatedRequest(client, request)
 	if err != nil {
 		ui.Error("Could not reach server at " + cfg.ServerURL)
 		return err

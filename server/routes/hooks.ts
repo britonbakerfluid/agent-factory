@@ -7,7 +7,8 @@ import type { AuthService } from '../auth.js';
 import type { PersistenceStatus } from '../persistence/world-repository.js';
 import type { RemoteSessionRegistry } from '../remote-registry.js';
 import { normalizeHookPayload } from '../hook-payload.js';
-import { usesSecureTransport } from '../request-security.js';
+import { isSameHostOrigin, usesSecureTransport } from '../request-security.js';
+import { readBrowserPrincipal } from './auth.js';
 
 export function registerHookRoutes(
   app: FastifyInstance,
@@ -56,7 +57,7 @@ export function registerHookRoutes(
   // session that goes quiet for 30 minutes while its terminal is still up --
   // parked on a question, or blocked behind a long build that fires no hooks --
   // is otherwise indistinguishable from one that ended.
-  app.post<{ Body: { session_ids?: unknown; username?: string } }>('/api/registry/heartbeat', async (request, reply) => {
+  app.post<{ Body: { session_ids?: unknown; username?: unknown } }>('/api/registry/heartbeat', async (request, reply) => {
     const { session_ids, username } = request.body || {};
 
     // Unlike /api/hooks this endpoint requires a credential. Every CLI that can
@@ -73,6 +74,9 @@ export function registerHookRoutes(
 
     if (!Array.isArray(session_ids)) {
       return reply.status(400).send({ error: 'Missing session_ids' });
+    }
+    if (username !== undefined && (typeof username !== 'string' || username.length > 100)) {
+      return reply.status(400).send({ error: 'Username must be text with at most 100 characters' });
     }
 
     const tracked = remoteRegistry.heartbeat(session_ids, device.ownerId);
@@ -117,8 +121,9 @@ export function registerHookRoutes(
       return reply.status(401).send({ error: 'Installation authentication required' });
     }
 
-    if (!username || !message) {
-      return reply.status(400).send({ error: 'Missing username or message' });
+    if (typeof username !== 'string' || !username.trim() || username.length > 100
+      || typeof message !== 'string' || !message.trim()) {
+      return reply.status(400).send({ error: 'Username and message must be non-empty text (username max 100 characters)' });
     }
 
     if (message.length > CHAT_MESSAGE_MAX_LENGTH) {
@@ -145,8 +150,8 @@ export function registerHookRoutes(
       return reply.status(401).send({ error: 'Installation authentication required' });
     }
 
-    if (!summary) {
-      return reply.status(400).send({ error: 'Missing summary' });
+    if (typeof summary !== 'string' || !summary.trim()) {
+      return reply.status(400).send({ error: 'Summary must be non-empty text' });
     }
 
     const requested = session_id ? state.get(session_id) : undefined;
@@ -163,7 +168,9 @@ export function registerHookRoutes(
   });
 
   app.get('/api/config', async (_request, reply) => {
-    return reply.send(serverConfig);
+    // The file also holds private installation settings. Never serialize it wholesale.
+    const { title, environment, graphicDeath } = serverConfig;
+    return reply.send({ title, environment, graphicDeath });
   });
 
   app.get('/api/health', async (_request, reply) => {
@@ -185,7 +192,24 @@ export function registerHookRoutes(
     return reply.send(state.getSnapshot());
   });
 
-  app.post('/api/vortex', async (_request, reply) => {
+  app.post('/api/vortex', async (request, reply) => {
+    const device = auth.authenticateDevice(request.headers.authorization);
+    if (device.kind === 'invalid') return reply.status(401).send({ error: 'Invalid installation credential' });
+    const browser = request.cookies && readBrowserPrincipal(request, auth);
+    if (device.kind !== 'authenticated' && !browser) {
+      return reply.status(401).send({ error: 'Connect your browser or authenticate your installation to start a vortex' });
+    }
+    if (!usesSecureTransport(request)) return reply.status(400).send({ error: 'HTTPS is required' });
+    // Browser cookies require an exact same-origin request; CLI credentials do not send Origin.
+    if ((request.headers.origin || device.kind !== 'authenticated')
+      && !isSameHostOrigin(request.headers.origin, request.headers.host)) {
+      return reply.status(403).send({ error: 'Invalid browser origin' });
+    }
+    const active = state.getSnapshot().events.find(event => event.effect === 'vortex' && event.expiresAt > Date.now());
+    if (active) {
+      return reply.header('Retry-After', Math.max(1, Math.ceil((active.expiresAt - Date.now()) / 1000)))
+        .status(429).send({ error: 'A vortex is already running. Wait for it to finish.' });
+    }
     const event = state.startGlobalEvent('vortex');
     return reply.send({ ok: true, eventId: event.id });
   });

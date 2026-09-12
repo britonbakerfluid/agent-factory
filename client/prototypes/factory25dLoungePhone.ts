@@ -5,15 +5,16 @@ import { PhoneNotificationPulse } from './factory25dPhoneNotifications';
 
 export const PHONE = { width: .23, height: .446, screenWidth: .202, screenHeight: .376, faceZ: .016 };
 
-export function phoneCameraPose(phone: THREE.Object3D, width: number, height: number): CameraPose {
+export function phoneCameraPose(phone: THREE.Object3D, width: number, height: number,
+  insets: { top?: number; left?: number; right?: number } = {}): CameraPose {
   phone.updateWorldMatrix(true, false);
   const quaternion = phone.getWorldQuaternion(new THREE.Quaternion());
   const focus = phone.localToWorld(new THREE.Vector3(0, 0, PHONE.faceZ));
-  const top = 36, bottom = 90;
-  const availableHeight = Math.max(180, height - top - bottom);
-  const availableWidth = Math.max(180, Math.min(440, width - 36));
+  const top = insets.top ?? 36, bottom = 90, left = insets.left ?? 18, right = insets.right ?? 18;
+  const availableHeight = Math.max(1, height - top - bottom);
+  const availableWidth = Math.max(1, Math.min(440, width - left - right));
   const span = Math.max(PHONE.height * height / availableHeight, PHONE.width * height / availableWidth);
-  const position = focus.add(new THREE.Vector3(0, -(bottom - top) / height * span / 2, .7).applyQuaternion(quaternion));
+  const position = focus.add(new THREE.Vector3((right - left) / height * span / 2, (top - bottom) / height * span / 2, .7).applyQuaternion(quaternion));
   return { position, quaternion, height: span };
 }
 

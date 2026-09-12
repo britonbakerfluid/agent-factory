@@ -165,7 +165,7 @@ export function createCloudVolume(renderer: THREE.WebGLRenderer, width: number, 
         return mix(puffs, sheet, cloudDeck) * cloudCover;
       }
       void main() {
-        if (cloudCover < 0.01 || uvCloud.y < 0.3) {
+        if ((cloudCover < 0.01 && cloudFigure.x < 0.001) || uvCloud.y < 0.3) {
           gl_FragColor = vec4(0.0); return;
         }
         vec3 ray = vec3((uvCloud.x - 0.5) * cloudSize.x, uvCloud.y * cloudSize.y, 2.8);
@@ -291,12 +291,15 @@ export function createCloudVolume(renderer: THREE.WebGLRenderer, width: number, 
       const deck = THREE.MathUtils.smoothstep(precipitation, 0, 0.8);
       uniforms.cloudDeck.value = Math.max(deck,
         THREE.MathUtils.smoothstep(weather.cloud01, 0.8, 1) * weather.cloudForm01);
-      // First visual pass is confined to dry, cloudy daytime. Rain, snow, fog,
-      // night and the solid overcast keep their existing density and lighting.
-      uniforms.cloudBillows.value = Number(cloudyBillows && weather.mode === 'cloudy'
-        && !night && precipitation === 0 && uniforms.cloudDeck.value === 0);
-      const figure = cloudFigureAt(figureElapsed, figurePreview);
-      uniforms.cloudFigureCompany.value = cloudFigureCompanyAt(figureElapsed, figurePreview);
+      // Clear skies keep one softly lit Fluid cloud without adding weather cover.
+      const clearBrand = weather.mode === 'clear' && precipitation === 0 && figurePreview !== 'off';
+      // Other weather retains its existing formation and lighting.
+      uniforms.cloudBillows.value = Number(cloudyBillows && (clearBrand || weather.mode === 'cloudy' && !night)
+        && precipitation === 0 && uniforms.cloudDeck.value === 0);
+      const figure = clearBrand
+        ? { presence: .85, shape: 1, drift: 3 + Math.sin(elapsed * .025) * .18 }
+        : cloudFigureAt(figureElapsed, figurePreview);
+      uniforms.cloudFigureCompany.value = clearBrand ? -1 : cloudFigureCompanyAt(figureElapsed, figurePreview);
       uniforms.cloudFigure.value.set(figure.presence * uniforms.cloudBillows.value,
         figure.shape, figure.drift);
       uniforms.cloudLight.value.set(arc * 0.35, 1.55 - Math.abs(arc) * 0.12, -0.35).normalize();

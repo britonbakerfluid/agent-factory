@@ -53,13 +53,22 @@ export function createWhatsNew(visitPatio: () => void) {
   document.body.append(root, dialog);
   let open = false;
   function position() {
-    const toolbar = document.querySelector('.factory-toolbar');
+    const toolbar = document.querySelector<HTMLElement>('.factory-toolbar');
     const dock = toolbar?.getBoundingClientRect();
-    // Reserve the expanded width so opening never relocates the pill.
-    const width = Math.min(340, innerWidth - 24);
-    const overlaps = dock && innerWidth - 12 - width < dock.right + 12;
+    // Share the bottom row. On narrow screens reserve only the gift button;
+    // its preview opens above that button without moving either dock upward.
+    const compact = innerWidth < 720;
+    root.dataset.compact = String(compact);
+    const width = compact ? 60 : open ? 340 : 196;
+    if (toolbar && dock) {
+      const available = Math.max(0, innerWidth - width - 36);
+      toolbar.style.setProperty('--factory-toolbar-max-width', `${available}px`);
+      toolbar.style.maxWidth = `${available}px`;
+      const toolbarWidth = toolbar.getBoundingClientRect().width;
+      toolbar.style.left = `${Math.max(12 + toolbarWidth / 2, Math.min(innerWidth / 2, innerWidth - width - 24 - toolbarWidth / 2))}px`;
+    }
     const bottom = dock
-      ? `${overlaps ? innerHeight - dock.top + 12 : innerHeight - (dock.top + dock.height / 2) - trigger.offsetHeight / 2}px`
+      ? `${innerHeight - (dock.top + dock.height / 2) - trigger.offsetHeight / 2}px`
       : 'max(12px, env(safe-area-inset-bottom))';
     root.style.bottom = bottom; root.style.setProperty('--updates-bottom', bottom);
   }
@@ -111,7 +120,7 @@ export function createWhatsNew(visitPatio: () => void) {
     }
     if (event.key === 'Escape' && open) { event.preventDefault(); event.stopImmediatePropagation(); root.dataset.instant = 'true'; expand(false); trigger.focus(); }
   }, { ...events, capture:true });
-  const observer = new ResizeObserver(position); const toolbar = document.querySelector('.factory-toolbar'); if (toolbar) observer.observe(toolbar);
+  const observer = new ResizeObserver(position); const toolbar = document.querySelector<HTMLElement>('.factory-toolbar'); if (toolbar) observer.observe(toolbar);
   window.addEventListener('resize', position, events); position();
-  return { dispose() { abort.abort(); modalMotion?.cancel(); clearContentMotion(); observer.disconnect(); dialog.remove(); root.remove(); } };
+  return { dispose() { abort.abort(); modalMotion?.cancel(); clearContentMotion(); observer.disconnect(); dialog.remove(); root.remove(); toolbar?.style.removeProperty('left'); toolbar?.style.removeProperty('max-width'); toolbar?.style.removeProperty('--factory-toolbar-max-width'); } };
 }

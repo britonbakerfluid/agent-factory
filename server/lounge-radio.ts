@@ -5,6 +5,10 @@ import { LoungeRadioQueue, youtubeVideoId, type RadioRequest } from '../shared/l
 export class LoungeRadio {
   private queue = new LoungeRadioQueue();
   private lastRequest = new Map<string, number>();
+  private scratchOwner = '';
+  private scratchUntil = 0;
+  private scratchStarted = 0;
+  private scratchCooldown = 0;
   constructor(private broadcast: BroadcastManager) {}
   sendActive(socket: WebSocket) {
     const now = Date.now();
@@ -16,10 +20,27 @@ export class LoungeRadio {
     const reply = (error: string) => this.broadcast.sendTo(socket, { type: 'radio_result', success: false, error, silent });
     const principal = this.broadcast.getSocketPrincipal(socket);
     if (!principal) { reply('Connect your browser to change the shared music queue.'); return; }
-    const now = Date.now(), key = `${principal.ownerId}:${silent ? 'duration' : 'queue'}`;
+    const now = Date.now();
+    // A request may reach the track boundary before the timer does. Publish that
+    // advance even when the request now refers to an expired entry or revision.
+    if (this.queue.advance(now)) this.broadcast.broadcastRadio(this.queue.snapshot(now));
+    if (message.action === 'scratch') {
+      const current = this.queue.snapshot(now).current;
+      if (!current || message.entryId !== current.id || ![0, 1].includes(message.deck)
+        || !Number.isFinite(message.offset) || Math.abs(message.offset) > .8) return;
+      if (now < this.scratchCooldown || now < this.scratchUntil && this.scratchOwner !== principal.ownerId) return;
+      const key = `${principal.ownerId}:scratch`;
+      if (now - (this.lastRequest.get(key) ?? -Infinity) < 120) return;
+      if (now >= this.scratchUntil) this.scratchStarted = now;
+      if (now - this.scratchStarted >= 3000) { this.scratchCooldown = now + 1000; return; }
+      this.lastRequest.set(key, now); this.scratchOwner = principal.ownerId;
+      this.scratchUntil = message.offset === 0 ? now : now + 350;
+      this.broadcast.broadcastRadio({ type: 'radio_scratch', entryId: current.id, deck: message.deck, offset: message.offset, serverTime: now });
+      return;
+    }
+    const key = `${principal.ownerId}:${silent ? 'duration' : 'queue'}`;
     if (now - (this.lastRequest.get(key) ?? -Infinity) < (silent ? 1000 : 500)) { reply('Give the queue a moment, then try again.'); return; }
     this.lastRequest.set(key, now);
-    this.queue.advance(now);
     let result;
     if (message.action === 'add') {
       const id = youtubeVideoId(message.videoId);

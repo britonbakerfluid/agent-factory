@@ -260,6 +260,7 @@ export interface ChatMessage {
 // === WebSocket Messages: Server -> Browser ===
 export type WSMessageToClient =
   | import('./lounge-radio.js').RadioState
+  | import('./lounge-radio.js').RadioScratch
   | import('./lounge-radio.js').RadioResult
   | import('./factory25d-driving.js').GarageDriveState
   | import('./factory25d-driving.js').GarageDriveResult

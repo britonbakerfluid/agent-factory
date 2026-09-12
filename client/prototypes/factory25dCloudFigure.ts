@@ -92,7 +92,7 @@ export const CLOUD_FIGURE_GLSL = `
     loose = roundedUnion(loose, 1.0 - length((q - vec3(0.49, 0.18, -0.16))
       / vec3(0.68, 0.45, 0.62)), 0.18);
     float field = mix(-loose * 0.30 + (folds - 0.5) * 0.08, shaped, cloudFigure.y);
-    float body = (1.0 - smoothstep(-0.045, 0.065, field)) * cloudCover * 1.7;
+    float body = (1.0 - smoothstep(-0.045, 0.065, field)) * max(cloudCover, 0.38) * 1.7;
     // Nearby wisps collect into the figure; they return as it breaks apart.
     float clearing = 1.0 - smoothstep(1.35, 1.7, length(q * vec3(0.8, 1.0, 0.5)));
     return max(background * (1.0 - cloudFigure.x * clearing), body * cloudFigure.x);

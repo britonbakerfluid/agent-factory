@@ -5,10 +5,12 @@
   max-height: min(260px, 34dvh);
   overflow: auto;
   overscroll-behavior: contain;
-  border: 2px solid #61796e;
-  background: #102628;
-  box-shadow: 0 4px 0 #080b1280;
-  color: #ecf2e4;
+  border: 0;
+  padding: 8px;
+  box-sizing: border-box;
+  clip-path: var(--island-control-cut);
+  background: #000;
+  color: var(--island-text);
   font: 13px/1.4 'Geist Pixel', monospace;
 }
 .lounge-chat-suggestions[hidden] { display: none; }
@@ -28,6 +30,5 @@
   font: inherit;
   cursor: pointer;
 }
-.lounge-chat-suggestions button[aria-selected='true'], .lounge-chat-suggestions button:hover { background: #35584e; }
 .lounge-chat-suggestions small { color: #b9cabb; font: 11px/1.4 'Geist Pixel', monospace; }
 .lounge-messages .system-msg { white-space: pre-line; }

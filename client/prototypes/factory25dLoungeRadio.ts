@@ -6,6 +6,7 @@ import { onFactoryMessage, onFactoryConnection, sendFactoryCommand, isControlPre
 import { LoungeRadioQueue, DJ_VIDEOS, type RadioState, type RadioRequest } from '@shared/lounge-radio';
 import './factory25dLoungeRadio.css';
 import { createYoutubePlayer } from './factory25dYoutubePlayer';
+import { createRecordScratch } from './factory25dRecordScratch';
 import { createRadioDj } from './factory25dRadioDj';
 
 /** Lounge DJ decks, with a nonmodal queue above the existing shared dock. */
@@ -16,7 +17,7 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
   const panel = document.createElement('section'); panel.className = 'lounge-radio-panel'; panel.hidden = true;
   panel.setAttribute('aria-label', 'Lounge radio');
-  panel.innerHTML = `<header><h2>room queue</h2><button type="button" aria-label="Close radio">×</button></header><div class="radio-browser"><aside><h3>now playing</h3><div class="radio-video"></div><p class="radio-playing"></p><div class="radio-actions"><button type="button" class="radio-listen">listen</button><button type="button" class="radio-skip">skip song</button></div></aside><main><form><div class="radio-add"><input id="radio-video-url" type="search" aria-label="Search YouTube or paste a link" placeholder="Search YouTube or paste a link" required maxlength="200"><button type="submit">search</button></div></form><section class="radio-results" hidden aria-label="YouTube search results"></section><h3>up next <span class="radio-queue-count"></span></h3><ol aria-label="Shared song queue"></ol></main></div><p class="radio-feedback" role="status"></p>`;
+  panel.innerHTML = `<header><h2>room queue</h2><button type="button" aria-label="Close radio">×</button><button type="button" class="radio-decks" aria-label="Show records">records</button></header><div class="radio-browser"><aside><h3>now playing</h3><div class="radio-video"></div><p class="radio-playing"></p><div class="radio-actions"><button type="button" class="radio-listen">listen</button><button type="button" class="radio-skip">skip song</button></div></aside><main><form><div class="radio-add"><input id="radio-video-url" type="search" aria-label="Search YouTube or paste a link" placeholder="Search YouTube or paste a link" required maxlength="200"><button type="submit">search</button></div></form><section class="radio-results" hidden aria-label="YouTube search results"></section><h3>up next <span class="radio-queue-count"></span></h3><ol aria-label="Shared song queue"></ol></main></div><p class="radio-feedback" role="status"></p>`;
   const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'lounge-radio-target'; trigger.textContent = 'radio';
   trigger.title = 'Lounge radio · open song queue';
   trigger.setAttribute('aria-label', 'Open lounge radio and song queue'); trigger.setAttribute('aria-expanded', 'false');
@@ -43,29 +44,26 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   const soundHost = document.querySelector<HTMLElement>('.scene-sound');
   const nowPlaying = document.createElement('p'); nowPlaying.className = 'factory-audio-now-playing';
   const transport = document.createElement('section'); transport.className='island-music-player';
-  transport.innerHTML='<input type="range" min="0" max="0" step="1" value="0" aria-label="Track position"><div class="island-track-times"><span>0:00</span><span>0:00</span></div><div class="island-transport"><button type="button" aria-label="Restart track">↤</button><button type="button" aria-label="Play music">▶</button><button type="button" aria-label="Next track">↦</button></div><p class="island-player-feedback" role="status"></p><button type="button" class="island-player-retry" hidden>retry playback</button>';
+  transport.innerHTML='<progress max="1" value="0" aria-label="Song progress"></progress><div class="island-track-times"><span>0:00</span><span>0:00</span></div><p class="island-stream-status">Shared DJ stream</p><div class="island-transport"><button type="button" class="radio-play-toggle" aria-label="Play music">▶</button><button type="button" class="radio-next" aria-label="Next track for everyone">next ↦</button></div><p class="island-player-feedback" role="status"></p><button type="button" class="island-player-retry" hidden>retry playback</button>';
   videoHost.after(transport);
   const credits = document.createElement('a'); credits.href = '/audio/factory/credits.html'; credits.target = '_blank'; credits.rel = 'noopener'; credits.textContent = 'credits'; transport.append(credits);
-  const scrub=transport.querySelector('input')!, timeLabels=transport.querySelectorAll('.island-track-times span'), transportButtons=transport.querySelectorAll('button');
+  const timeline=transport.querySelector('progress')!, timeLabels=transport.querySelectorAll('.island-track-times span');
+  const playToggle=transport.querySelector<HTMLButtonElement>('.radio-play-toggle')!;
+  const nextTrack=transport.querySelector<HTMLButtonElement>('.radio-next')!;
   const retry = transport.querySelector<HTMLButtonElement>('.island-player-retry')!;
-  retry.onclick = () => { player.reset(); void player.open(); };
-  let scrubbing=false;
+  retry.onclick = () => { player.reset(); player.play(); };
   const timestamp=(n:number)=>`${Math.floor(n/60)}:${String(Math.floor(n%60)).padStart(2,'0')}`;
-  scrub.addEventListener('pointerdown',()=>{scrubbing=true;});
-  scrub.addEventListener('input',()=>{timeLabels[0].textContent=timestamp(Number(scrub.value));});
-  scrub.addEventListener('change',()=>{player.seek(Number(scrub.value));scrubbing=false;});
-  scrub.addEventListener('pointercancel',()=>{scrubbing=false;});
-  transportButtons[0].onclick=()=>player.seek(0);
-  transportButtons[1].onclick=()=>{if(player.progress().playing)player.pause();else player.play();};
-  transportButtons[2].onclick=()=>{if(state?.current)command({type:'radio_queue',action:'skip',entryId:state.current.id});};
+  playToggle.onclick=()=>{if(player.progress().playing)player.pause();else player.play();};
+  nextTrack.onclick=()=>{if(state?.current)command({type:'radio_queue',action:'skip',entryId:state.current.id});};
   function paintTransport(){
-    retry.hidden = !feedback.textContent?.includes('Retry');
+    retry.hidden = !feedback.textContent?.includes('Press play to retry.');
     const progress=player.progress(); const length=Number.isFinite(progress.duration)?progress.duration:0;
-    scrub.disabled=!progress.ready || length<=0; scrub.max=String(length);
-    if(!scrubbing){scrub.value=String(progress.time);timeLabels[0].textContent=timestamp(progress.time);}
+    timeline.max=Math.max(1,length); timeline.value=progress.time;
+    timeLabels[0].textContent=timestamp(progress.time);
     timeLabels[1].textContent=timestamp(length);
-    transportButtons[0].disabled=!progress.ready;transportButtons[1].disabled=!progress.ready;transportButtons[2].disabled=!state?.current;
-    transportButtons[1].textContent=progress.playing?'Ⅱ':'▶';transportButtons[1].setAttribute('aria-label',progress.playing?'Pause music':'Play music');
+    playToggle.disabled=!state?.current;nextTrack.disabled=!state?.current;
+    playToggle.textContent=progress.playing?'Ⅱ':'▶';playToggle.setAttribute('aria-label',progress.playing?'Pause music':'Play music');
+    transport.querySelector('.island-stream-status')!.textContent=progress.playing?'Live with the room':'Play to join the shared DJ stream';
     transport.querySelector('.island-player-feedback')!.textContent=feedback.textContent;
   }
   function paint() {
@@ -106,6 +104,7 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   function receive(next: RadioState) { state = next; paint(); player.update(state); }
   function settle(error?: string) { pending = false; clearTimeout(timeout); feedback.textContent = error ?? 'Queue updated.'; paint(); }
   function command(message: RadioRequest) {
+    if (message.action === 'scratch') return;
     if (message.action !== 'duration' && pending) return;
     if (preview) {
       const now = Date.now();
@@ -143,9 +142,23 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   panel.querySelector('.radio-listen')!.addEventListener('click', () => player.play());
   panel.querySelector('.radio-skip')!.addEventListener('click', () => { if (state?.current) command({ type: 'radio_queue', action: 'skip', entryId: state.current.id }); });
   const station=createDjStation(group,canvas,panel,{listen:()=>player.play(),skip:()=>{if(state?.current)command({type:'radio_queue',action:'skip',entryId:state.current.id});}});
-  let minimized = false, joinedRadio = false;
+  let minimized = false, joinedRadio = false, deckOnly = false;
+  panel.querySelector<HTMLButtonElement>('.radio-decks')!.onclick = () => {
+    deckOnly = true; minimized = true; panel.classList.add('radio-minimized');
+    close.setAttribute('aria-label', 'Close radio');
+  };
+  function applyScratch(deck: number, offset: number, entryId: number) {
+    decks.scratch(deck, offset); player.scratch(entryId, offset);
+  }
+  const records = createRecordScratch(decks.records, canvas, (deck, offset) => {
+    if (!state?.current) return;
+    if (preview) applyScratch(deck, offset, state.current.id);
+    else if (!sendFactoryCommand({type: 'radio_queue', action: 'scratch', deck, offset, entryId: state.current.id})) {
+      feedback.textContent = 'Connect your browser to scratch the shared music.';
+    }
+  });
   function hide(restore = false, stop = false) {
-    station.setActive(false);
+    station.setActive(false); deckOnly = false;
     minimized = !stop && (minimized || player.progress().playing);
     panel.classList.toggle('radio-minimized', minimized);
     panel.hidden = !minimized;
@@ -157,18 +170,22 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   trigger.addEventListener('click', () => {
     if (!visible) return;
     if (!panel.hidden && !minimized) { hide(true); return; }
-    minimized = false; panel.classList.remove('radio-minimized'); panel.hidden = false;
+    deckOnly = false; minimized = false; panel.classList.remove('radio-minimized'); panel.hidden = false;
     close.setAttribute('aria-label', 'Close radio');
     station.setActive(true); trigger.setAttribute('aria-expanded', 'true');
     const agents = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (agents) agents.open = false;
     paint(); void player.open(); close.focus();
   });
-  close.addEventListener('click', () => hide(true, minimized));
-  const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !panel.hidden && !minimized) { event.stopPropagation(); hide(true); } };
+  close.addEventListener('click', () => hide(true, minimized && !deckOnly));
+  const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !panel.hidden && (!minimized || deckOnly)) { event.stopPropagation(); hide(true); } };
   document.addEventListener('keydown', onKey, true);
   const unsubscribe = onFactoryMessage(message => {
     if (preview) return;
     if (message.type === 'radio_state') receive(message);
+    if (message.type === 'radio_scratch' && message.entryId === state?.current?.id
+      && message.deck >= 0 && message.deck <= 1 && Math.abs(message.offset) <= .8) {
+      applyScratch(message.deck, message.offset, message.entryId);
+    }
     if (message.type === 'radio_result' && !message.silent) settle(message.success ? undefined : message.error ?? 'Could not add that song.');
   });
   const stopConnection = onFactoryConnection(connected => { if (!connected && !preview) { state = undefined; if (pending) settle('Connection lost. Reconnect to add music.'); paint(); } });
@@ -193,13 +210,22 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
       }
       trigger.hidden = !visible || !panel.hidden;
       station.update(camera);
+      records.update(camera, visible && deckOnly && station.isActive());
       if (!visible && !panel.hidden && !minimized) hide();
       if (visible) {
         receiver.localToWorld(projected.set(0, .6, 0)); projected.project(camera);
         trigger.hidden = projected.z < -1 || projected.z > 1;
         const rect = canvas.getBoundingClientRect();
-        trigger.style.left = `${rect.left + (projected.x + 1) * rect.width / 2}px`;
-        trigger.style.top = `${rect.top + (1 - projected.y) * rect.height / 2}px`;
+        const x=rect.left+(projected.x+1)*rect.width/2;
+        let y=rect.top+(1-projected.y)*rect.height/2;
+        const dock=document.querySelector<HTMLElement>('.factory-toolbar')?.getBoundingClientRect();
+        const obscured=!station.isActive()&&dock&&dock.width>0&&x+26>dock.left&&x-26<dock.right&&y+22>dock.top&&y-22<dock.bottom;
+        if(obscured)y=dock.top-30;
+        // If the booth falls behind the shared dock in a short window, expose
+        // its existing target just above the dock instead of inviting a misclick.
+        trigger.classList.toggle('lounge-radio-target-offset',!!obscured);
+        trigger.style.left = `${x}px`;
+        trigger.style.top = `${y}px`;
       }
       const now = performance.now();
       const audioPreferences=callbacks.preferences();
@@ -209,7 +235,7 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
       dj.update(camera, visible, state?.current?.id, state?.current?.dj ?? false);
     },
     dispose() {
-      searchRequest?.abort();clearTimeout(timeout); clearInterval(playbackTimer); unsubscribe(); stopConnection(); document.removeEventListener('keydown', onKey, true);
+      records.dispose();searchRequest?.abort();clearTimeout(timeout); clearInterval(playbackTimer); unsubscribe(); stopConnection(); document.removeEventListener('keydown', onKey, true);
       videoHome.after(videoHost); transport.remove(); videoHome.remove(); nowPlaying.remove(); if(soundHost) { delete soundHost.dataset.track; delete soundHost.dataset.playing; } station.dispose(); player.dispose(); dj.dispose(); decks.dispose(); panel.remove(); trigger.remove(); group.removeFromParent();
       const materials = new Set<THREE.Material>(); group.traverse(node => { if (node instanceof THREE.Mesh) { node.geometry.dispose(); for (const material of Array.isArray(node.material) ? node.material : [node.material]) materials.add(material); } });
       materials.forEach(material => material.dispose());
