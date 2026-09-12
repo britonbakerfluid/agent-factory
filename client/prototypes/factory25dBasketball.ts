@@ -138,7 +138,7 @@ export function createBasketball(
     const now = performance.now();
     if (now - lastAgentDunk < 900) return;
     lastAgentDunk = now;
-    hitRim(.25); swishNet(); sounds.swish?.();
+    hitRim(.25); swishNet(); showResult(true); sounds.swish?.();
   };
 
   const ball = miniBall(parent),

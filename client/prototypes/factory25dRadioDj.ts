@@ -46,7 +46,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
     installAvatarBack(mesh);
   mesh.name = 'lounge DJ'; mesh.castShadow = true; parent.add(mesh);
   // Behind the mixer, clear of the coffee table and soccer ball.
-  const point = new THREE.Vector3(DJ_BOOTH.x, .018, DJ_BOOTH.z - INTERIOR_Z - .60);
+  const point = new THREE.Vector3(DJ_BOOTH.x, .018, DJ_BOOTH.z - INTERIOR_Z - .80);
   const shadow = contactShadow(parent, { x: point.x, z: point.z, floorY: point.y,
     width: .22, depth: .12, spread: .065, opacity: .3, round: true });
   const label = createNameTag('lounge DJ', false, canvas.parentElement!);
