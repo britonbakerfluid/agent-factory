@@ -1,5 +1,6 @@
 .lounge-radio-target { position:fixed; z-index:12; width:52px; height:44px; transform:translate(-50%,-50%); opacity:0; cursor:pointer; }
 .lounge-radio-target:focus-visible { opacity:1; }
+.lounge-radio-target-offset {opacity:1;background:#000;color:#d9e4de;border:0;font:12px 'Geist Pixel',monospace;clip-path:polygon(8px 0,44px 0,44px 4px,48px 4px,48px 8px,52px 8px,52px 36px,48px 36px,48px 40px,44px 40px,44px 44px,8px 44px,8px 40px,4px 40px,4px 36px,0 36px,0 8px,4px 8px,4px 4px,8px 4px);}
 .lounge-radio-panel { position:fixed; z-index:24; left:50%; transform:translateX(-50%); bottom:calc(var(--factory-toolbar-height,64px) + max(12px,env(safe-area-inset-bottom)) + 12px); width:min(340px,calc(100vw - 28px)); max-height:calc(100dvh - 180px); overflow:auto; padding:16px; background:#18232af5; color:#d9e4de; border:2px solid #748a80; box-shadow:4px 4px #091116b8; font:12px 'Geist Pixel',monospace; }
 .lounge-radio-panel[hidden],.lounge-radio-target[hidden],.radio-sound-settings[hidden] { display:none !important; }
 .lounge-radio-panel header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -7,7 +8,7 @@
 .lounge-radio-panel button { font:inherit; min-height:36px; cursor:pointer; }
 .lounge-radio-panel p { line-height:1.6; }
 .lounge-radio-panel .radio-catalog { display:grid; gap:6px; }
-.lounge-radio-panel .radio-catalog button { text-align:left; padding:8px 10px; color:#dbe8df; background:#293b3c; border:1px solid #526e62; }
+.lounge-radio-panel .radio-catalog button { text-align:left; padding:8px 10px;  }
 .lounge-radio-panel button:disabled { opacity:.45; cursor:wait; }
 .lounge-radio-panel small { display:block; opacity:.7; margin-top:4px; }
 .lounge-radio-panel ol { padding-left:22px; line-height:1.8; }
@@ -16,9 +17,8 @@
 .radio-sound-settings label { display:flex; align-items:center; gap:5px; }
 .radio-sound-settings input { width:62px; accent-color:#b9d3a7; }
 .scene-sound { flex-wrap:wrap; max-width:calc(100vw - 24px); }
-.lounge-radio-panel header button { padding:3px 11px; border:1px solid #526e62; color:#dbe8df; background:#293b3c; }
-.lounge-radio-panel button:hover:not(:disabled) { background:#38524c; }
-.lounge-radio-panel button:focus-visible,.radio-sound-settings input:focus-visible { outline:2px solid #b4f3e4; outline-offset:2px; }
+.lounge-radio-panel header button { padding:3px 11px; }
+.radio-sound-settings input:focus-visible { outline:2px solid var(--island-focus); outline-offset:2px; }
 .radio-sound-settings input { height:36px; }
 .lounge-radio-panel { width:min(480px,calc(100vw - 28px)); box-sizing:border-box; }
 .radio-video { width:100%; height:clamp(200px,28vw,270px); min-width:200px; background:#080d12; margin-top:12px; }
@@ -28,58 +28,120 @@
 .lounge-radio-panel ol li { margin-bottom:8px; }
 .lounge-radio-panel ol li span { display:block; overflow-wrap:anywhere; }
 .lounge-radio-panel ol button { min-width:44px; margin-right:6px; }
-.lounge-radio-panel button { background:#293b3c; border:1px solid #526e62; color:#dbe8df; }
-.dj-station-screen { position:fixed;pointer-events:none;z-index:20;overflow:hidden; }
+.dj-station-screen { position:fixed;left:max(12px,env(safe-area-inset-left));top:max(12px,env(safe-area-inset-top));width:min(700px,calc(100vw - 24px));height:min(700px,calc(100dvh - 132px));max-height:calc(100dvh - 132px);pointer-events:none;z-index:24;overflow:hidden; }
 .dj-station-screen[hidden] { display:none; }
-.lounge-radio-panel.dj-mounted-panel { position:absolute;left:0;top:0;bottom:auto;width:640px;height:360px;max-width:none;max-height:none;box-sizing:border-box;overflow:auto;pointer-events:auto;padding:16px;background:#10202b;border:0;box-shadow:none;font-size:14px; }
-.dj-mounted-panel .radio-video { width:260px;float:left;margin:8px 14px 8px 0; }
-.dj-mounted-panel .radio-video iframe { width:100%;height:146px; }
-.dj-mounted-panel .radio-actions { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%); }
-.dj-mounted-panel form { clear:both; }
-.dj-mounted-panel small { display:none; }
+.lounge-radio-panel.dj-mounted-panel { position:relative;left:auto;top:auto;bottom:auto;transform:none;display:flex;flex-direction:column;width:100%;height:100%;max-width:none;max-height:inherit;box-sizing:border-box;overflow:hidden;overscroll-behavior:contain;pointer-events:auto;padding:16px;background:#000;border:0;box-shadow:none;font-size:14px;scrollbar-width:thin;scrollbar-color:#53605b #000; }
+.dj-mounted-panel header {flex:none;background:#000;padding:0 0 8px;}
+.dj-mounted-panel header h2 {flex:1;}
+.dj-mounted-panel header button[aria-label="Close radio"] {order:2;}
+.dj-mounted-panel header .radio-decks {width:auto;font-size:14px;}
+.dj-mounted-panel header button {width:44px;height:44px;flex:none;font-size:24px;line-height:1;border:0;background:transparent;}
+.dj-mounted-panel .radio-browser {display:grid;grid-template-columns:minmax(200px,240px) minmax(0,1fr);gap:16px;min-height:0;flex:1;}
+.dj-mounted-panel .radio-browser aside,.dj-mounted-panel .radio-browser main {min-width:0;overflow:auto;overscroll-behavior:contain;}
+.dj-mounted-panel h3 {font-size:14px;font-weight:400;color:#a8b8b1;margin:8px 0;}
+.dj-mounted-panel .radio-video {float:none;width:100%;height:200px;margin:0;}
+.dj-mounted-panel .radio-video iframe {height:100%;}
+.dj-mounted-panel .radio-playing {font-size:14px;overflow-wrap:anywhere;}
+.dj-mounted-panel .radio-actions {display:none;}
+.dj-mounted-panel .radio-add {margin:0;gap:8px;}
+.dj-mounted-panel .radio-add input {width:100%;font-size:16px;}
+.dj-mounted-panel ol {padding:0;margin:0;list-style:none;}
+.dj-mounted-panel ol li,.radio-search-row {display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 0;border-bottom:1px solid #ffffff20;font-size:14px;}
+.dj-mounted-panel ol li {cursor:grab;}
+.dj-mounted-panel ol li>span,.radio-search-row>span {flex:1;min-width:120px;overflow-wrap:anywhere;}
+.dj-mounted-panel ol img,.radio-search-row img {width:48px;height:36px;object-fit:cover;}
+.dj-mounted-panel button {min-width:44px;min-height:44px;margin:0;border:0;padding:8px;background:transparent;cursor:pointer;}
+.dj-mounted-panel :is(input,a):focus-visible {outline:2px solid var(--island-focus);outline-offset:-2px;}
+.dj-mounted-panel .radio-feedback {flex:none;font-size:14px;margin:8px 0;max-height:44px;overflow:auto;}
+.dj-mounted-panel .radio-feedback:empty {display:none;}
+.dj-mounted-panel .radio-results:not([hidden])~h3,.dj-mounted-panel .radio-results:not([hidden])~ol {display:none;}
+.dj-mounted-panel .island-music-player progress {display:block;appearance:none;width:100%;height:8px;margin:12px 0 8px;border:0;background:#242827;accent-color:#b9d9c7;}
+.dj-mounted-panel progress::-webkit-progress-bar {background:#242827;}
+.dj-mounted-panel progress::-webkit-progress-value {background:#b9d9c7;}
+.dj-mounted-panel progress::-moz-progress-bar {background:#b9d9c7;}
+.dj-mounted-panel .island-track-times {font-size:14px;}
+.dj-mounted-panel .island-stream-status {color:#a8b8b1;margin:8px 0;font-size:14px;}
+.dj-mounted-panel .island-player-feedback {display:none;}
+.dj-mounted-panel .island-music-player>a {display:inline-flex;align-items:center;min-height:44px;color:#a8b8b1;}
 .dj-station-open .agent-label { visibility:hidden; }
-.dj-mounted-panel .radio-video { height:146px;min-width:0; }
 .dj-physical-target { position:fixed;z-index:21;transform:translate(-50%,-50%);border:0;background:transparent;cursor:pointer;color:transparent; }
 .dj-physical-target:focus-visible { outline:2px solid #d5edda; }
 .dj-physical-target[hidden] { display:none; }
-.dj-mounted-panel .radio-browser {display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;height:266px;}
-.dj-mounted-panel .radio-browser aside,.dj-mounted-panel .radio-browser main {min-width:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#53605b #10202b;}
-.dj-mounted-panel h3 {font-size:12px;font-weight:400;color:#a8b8b1;margin:8px 0;}
-.dj-mounted-panel .radio-video {float:none;width:100%;height:102px;margin:0;}
-.dj-mounted-panel .radio-video iframe {height:102px;}
-.dj-mounted-panel .radio-playing {font-size:12px;}
-.dj-mounted-panel .radio-add {margin:0;gap:4px;}
-.dj-mounted-panel .radio-add input {width:100%;font-size:12px;}
-.dj-mounted-panel ol {padding:0;margin:0;list-style:none;}
-.dj-mounted-panel ol li,.radio-search-row {display:flex;align-items:center;gap:5px;padding:7px 0;border-bottom:1px solid #ffffff15;font-size:11px;}
-.dj-mounted-panel ol li {cursor:grab;flex-wrap:wrap;}
-.dj-mounted-panel ol li>span,.radio-search-row>span {flex:1;min-width:100px;}
-.dj-mounted-panel ol img,.radio-search-row img {width:48px;height:36px;object-fit:cover;}
-.dj-mounted-panel ol button {min-width:24px;margin:0;}
-.dj-mounted-panel button {border:0;padding:7px;background:transparent;cursor:pointer;}
-.dj-mounted-panel button:hover {background:#ffffff15;}
-.dj-mounted-panel .radio-feedback {font-size:11px;margin:6px 0;}
-.dj-mounted-panel .radio-results:not([hidden])~h3,.dj-mounted-panel .radio-results:not([hidden])~ol {display:none;}
+@media (max-width:600px) {
+  .dj-mounted-panel .radio-browser {grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:8px;overflow:hidden;}
+  .dj-mounted-panel .radio-browser aside {overflow:visible;}
+  .dj-mounted-panel .radio-browser aside>h3,.dj-mounted-panel .radio-playing {display:none;}
+  .dj-mounted-panel .island-music-player {display:grid;grid-template-columns:1fr auto;column-gap:8px;}
+  .dj-mounted-panel .island-music-player :is(progress,.island-track-times) {grid-column:1 / -1;}
+  .dj-mounted-panel .island-stream-status {align-self:center;margin:0;}
+  .dj-mounted-panel .island-music-player>a {display:none;}
+}
+
+/* Short windows keep the official player visible while the queue scrolls.
+   Its native transport remains available when duplicate controls cannot fit. */
+@media (max-height:600px) {
+  .dj-station-screen:not(.dj-station-minimized) {height:calc(100dvh - 88px);max-height:calc(100dvh - 88px);}
+  .dj-mounted-panel:not(.radio-minimized) {padding:12px;}
+  .dj-mounted-panel:not(.radio-minimized) header {padding:0;gap:8px;}
+  .dj-mounted-panel:not(.radio-minimized) .radio-browser aside>h3,
+  .dj-mounted-panel:not(.radio-minimized) .radio-playing,
+  .dj-mounted-panel:not(.radio-minimized) .island-music-player {display:none;}
+}
+@media (max-height:600px) and (min-width:520px) {
+  .dj-mounted-panel:not(.radio-minimized) {display:grid;grid-template-columns:200px minmax(0,1fr);grid-template-rows:44px minmax(0,1fr) auto;gap:8px 12px;}
+  .dj-mounted-panel:not(.radio-minimized) header {grid-column:2;grid-row:1;}
+  .dj-mounted-panel:not(.radio-minimized) header h2 {font-size:14px;}
+  .dj-mounted-panel:not(.radio-minimized) .radio-browser {display:contents;}
+  .dj-mounted-panel:not(.radio-minimized) .radio-browser aside {grid-column:1;grid-row:1 / 4;overflow:visible;}
+  .dj-mounted-panel:not(.radio-minimized) .radio-browser main {grid-column:2;grid-row:2;overflow:auto;}
+  .dj-mounted-panel:not(.radio-minimized) .radio-feedback {grid-column:2;grid-row:3;margin:0;}
+}
 
 /* Room overlays belong to the room camera, not the focused DJ camera. */
-.dj-station-open :is(.window-hotspot,.board-hotspot,.room-doorway,.mobile-explore,#keyboard-walk,.team-desk-hotspot,.visitor-ball-pickup) { display:none !important; }
+.dj-station-open :is(.window-hotspot,.board-hotspot,.room-doorway,.mobile-explore,#keyboard-walk,.team-desk-hotspot,.visitor-ball-pickup,.factory-preview-tools) { display:none !important; }
 
 /* Keep the same iframe mounted when leaving the deck; changing parents reloads playback. */
 .dj-station-screen.dj-station-minimized {
-  left:auto !important; top:12px !important; right:12px; width:288px !important;
-  height:256px !important; transform:none !important; z-index:24;
+  left:auto !important; top:12px !important; right:12px; width:216px !important;
+  height:248px !important; max-height:none; transform:none !important; z-index:24;
+}
+@media (max-height:600px) {
+  .dj-station-screen.dj-station-records {left:8px !important;right:auto;}
 }
 .dj-station-minimized .lounge-radio-panel.radio-minimized {
-  position:static; transform:none; width:100%; height:100%; padding:8px; background:#000; overflow:hidden;
+  display:block;position:static; transform:none; width:100%; height:100%; padding:8px; background:#000; overflow:hidden;
 }
+.radio-minimized header .radio-decks {display:none;}
 .radio-minimized header h2 {font-size:0;}
 .radio-minimized header h2::after {content:'now playing';font-size:12px;}
-.radio-minimized .radio-browser {display:block;height:auto;}
+.radio-minimized .radio-browser {display:block;height:auto;overflow:visible;}
 .radio-minimized .radio-browser aside {overflow:visible;}
 .radio-minimized .radio-browser main,.radio-minimized aside>h3,
 .radio-minimized .island-music-player,.radio-minimized .radio-feedback,
 .radio-minimized .radio-playing {display:none;}
 .radio-minimized .radio-video,.radio-minimized .radio-video iframe {width:100%;height:200px;}
 @media (max-width:480px) {
-  .dj-station-screen.dj-station-minimized {right:8px;top:8px !important;width:240px !important;}
+  .dj-station-screen.dj-station-minimized {right:8px;top:8px !important;width:216px !important;}
 }
+
+/* Focused panels use the right side on wider screens. Keep the existing
+   player in the opposite corner, including when it belongs to a dialog. */
+@media (min-width:700px) {
+  body:is(.chat-open,.avatar-stage-open,.brand-open) .dj-station-screen.dj-station-minimized {
+    left:12px !important; right:auto;
+  }
+}
+
+.radio-minimized header {height:32px;margin-bottom:0;padding:0;}
+.radio-minimized header button {
+  display:grid;place-items:center;min-width:32px;min-height:32px;width:32px;height:32px;padding:0;
+  border:0;background:transparent;color:#d9e4de;font-size:22px;line-height:1;
+  clip-path:polygon(8px 0,24px 0,24px 4px,28px 4px,28px 8px,32px 8px,32px 24px,28px 24px,28px 28px,24px 28px,24px 32px,8px 32px,8px 28px,4px 28px,4px 24px,0 24px,0 8px,4px 8px,4px 4px,8px 4px);
+}
+.radio-minimized header button:hover,.radio-minimized header button:focus-visible {background:var(--island-hover);}
+.dj-station-screen {clip-path:polygon(8px 0,calc(100% - 8px) 0,calc(100% - 8px) 4px,calc(100% - 4px) 4px,calc(100% - 4px) 8px,100% 8px,100% calc(100% - 8px),calc(100% - 4px) calc(100% - 8px),calc(100% - 4px) calc(100% - 4px),calc(100% - 8px) calc(100% - 4px),calc(100% - 8px) 100%,8px 100%,8px calc(100% - 4px),4px calc(100% - 4px),4px calc(100% - 8px),0 calc(100% - 8px),0 8px,4px 8px,4px 4px,8px 4px);}
+
+.dj-record-target {position:fixed;z-index:22;transform:translate(-50%,-50%);border:0;background:transparent;cursor:grab;touch-action:none;border-radius:50%;}
+.dj-record-target:active {cursor:grabbing;}
+.dj-record-target:focus-visible {outline:2px solid #ffe2a0;outline-offset:2px;}
+.dj-record-target[hidden] {display:none;}

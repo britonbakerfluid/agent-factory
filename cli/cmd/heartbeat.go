@@ -283,7 +283,7 @@ func postHeartbeat(batch heartbeatBatch) (int, error) {
 		return 0, err
 	}
 
-	response, err := heartbeatHTTPClient.Do(request)
+	response, err := doAuthenticatedRequest(heartbeatHTTPClient, request)
 	if err != nil {
 		return 0, err
 	}

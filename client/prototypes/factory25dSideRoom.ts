@@ -256,6 +256,7 @@ export function createSideRoomNavigation(
   canvas: HTMLCanvasElement,
   roomCamera: THREE.OrthographicCamera,
   scene: THREE.Scene,
+  patioScene: THREE.Scene,
 ) {
   const door = requireElement<HTMLButtonElement>("#room-doorway");
   const arrow = new THREE.Group(); arrow.name = 'patio-navigation-arrow'; scene.add(arrow);
@@ -346,6 +347,11 @@ export function createSideRoomNavigation(
       arrowScale = reduced.matches ? (arrowHovered ? 1.2 : 1) : THREE.MathUtils.damp(arrowScale, arrowHovered ? 1.2 : 1, 18, elapsed);
       arrow.scale.setScalar(arrowScale); arrow.rotation.y = open ? Math.PI : 0;
       arrow.position.x = SIDE_DOOR.x + (open ? .65 : -.85);
+      // Settled room views render only their own scene. Keep the actual mesh
+      // with the visible room, as well as moving its accessible hit target.
+      const arrowScene = open ? patioScene : scene;
+      if (arrow.parent !== arrowScene) arrowScene.add(arrow);
+      arrow.position.y = .16 + (open ? patioFloorHeight(arrow.position) : 0);
       if (door.hidden) return;
       const activeCamera = open ? camera : roomCamera;
       activeCamera.updateMatrixWorld();

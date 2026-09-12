@@ -11,6 +11,9 @@ import { LibSqlWorldRepository } from '../server/persistence/libsql-world-reposi
 import { StateManager } from '../server/state.js';
 import { registerTeamRoutes } from '../server/routes/team.js';
 import { DEFAULT_AVATAR } from '../shared/constants.js';
+import { createClient } from '@libsql/client';
+import { normalizeHookPayload } from '../server/hook-payload.js';
+import { parseAvatarConfig } from '../shared/avatar-customization.js';
 import { lastSeenLabel, type StoredTeamMember } from '../shared/team.js';
 import type { WorldAgent } from '../shared/types.js';
 
@@ -26,6 +29,34 @@ function memory(): TeamRepository {
 }
 
 describe('front-counter team presence', () => {
+  it('keeps a missing legacy hook avatar from poisoning the durable roster', async () => {
+    const state = new StateManager('factory25d');
+    state.handleHookEvent(normalizeHookPayload({ hook_event_name: 'SessionStart', session_id: 'missing-avatar', username: 'QA', cwd: '/qa' })!);
+    const repository = memory(), roster = new TeamRoster(repository, () => state.getAll(), () => undefined);
+    await roster.initialize();
+    const saved = await repository.loadTeamMembers();
+    expect(saved).toHaveLength(1); expect(saved[0].avatar).toEqual(DEFAULT_AVATAR);
+    expect(parseAvatarConfig(saved[0].avatar)).not.toBeNull();
+  });
+
+  it('repairs previously persisted partial roster avatars without dropping people or valid appearance fields', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'factory-team-legacy-')), url = `file:${join(dir, 'world.db')}`;
+    const repository = new LibSqlWorldRepository({ url, production: false });
+    const raw = createClient({ url });
+    try {
+      await repository.initialize();
+      for (const [id, avatar] of [['empty', {}], ['partial', { color: '#abc', hairStyle: 3, shirtColor: '#13579b', spriteIndex: 99 }]] as const) {
+        await raw.execute({ sql: 'INSERT INTO team_members(id,name,avatar,last_seen) VALUES(?,?,?,?)', args: [id, id, JSON.stringify(avatar), 1000000] });
+      }
+      const roster = new TeamRoster(repository, () => [], () => undefined); await roster.initialize();
+      const members = roster.snapshot().members;
+      expect(members).toHaveLength(2);
+      expect(members.find(m => m.id === 'empty')?.avatar).toEqual(DEFAULT_AVATAR);
+      expect(members.find(m => m.id === 'partial')).toMatchObject({ lastSeen: 1000000, avatar: { ...DEFAULT_AVATAR, color: '#aabbcc', hairStyle: 3, shirtColor: '#13579b' } });
+      for (const row of (await raw.execute('SELECT avatar FROM team_members')).rows) expect(parseAvatarConfig(JSON.parse(String(row.avatar)))).not.toBeNull();
+    } finally { raw.close(); await repository.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it('groups multiple sessions per owner but keeps different owners with matching names distinct', async () => {
     const agents = [agent('one'), agent('two'), agent('three', 'bob')];
     const roster = new TeamRoster(memory(), () => agents, () => undefined); await roster.initialize();

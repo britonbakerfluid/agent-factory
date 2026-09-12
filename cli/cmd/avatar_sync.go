@@ -52,9 +52,7 @@ func syncAvatar(ctx context.Context, client *http.Client, serverURL, secret stri
 	request.Header.Set("Authorization", "Bearer "+secret)
 	request.Header.Set("Content-Type", "application/json")
 	// Never forward installation credentials or an avatar payload to a redirect.
-	safeClient := *client
-	safeClient.CheckRedirect = avatarHTTPClient.CheckRedirect
-	response, err := safeClient.Do(request)
+	response, err := doAuthenticatedRequest(client, request)
 	if err != nil {
 		return result, fmt.Errorf("could not reach the factory")
 	}

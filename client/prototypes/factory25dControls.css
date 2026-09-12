@@ -1,3 +1,5 @@
+@import './factory25dButtons.css';
+
 .factory-controls [hidden] { display:none !important; }
 .factory-controls { width:max-content; }
 .factory-control-content { width:292px; box-sizing:border-box; }
@@ -11,7 +13,6 @@
 .factory-controls .factory-station-section summary::after { content:' +'; }
 .factory-controls .factory-station-section[open] summary::after { content:' −'; }
 .factory-controls:not(.is-controlling) .factory-play-actions { display:none; }
-.factory-controls .factory-claim { background:#32534c; color:#def2e5; border-color:#80aaa0; }
 .factory-control-status:empty { display:none; }
 .factory-control-status { color:#e3c291; }
 .factory-controls > summary { min-height:44px; box-sizing:border-box; }
@@ -36,9 +37,8 @@
 .factory-emote-bar summary::-webkit-details-marker { display:none; }
 .factory-emote-bar kbd { margin-left:12px; font:inherit; color:#93b3ab; border:1px solid #475d60; padding:2px 5px; }
 .factory-emote-choices { display:grid; grid-template-columns:repeat(6,minmax(52px,1fr)); gap:5px; padding:0 12px; }
-.factory-emote-choices button { display:grid; place-items:center; gap:6px; min-height:55px; padding:8px 4px; color:#c5d5d0; background:#22333c; border:1px solid #475f64; border-radius:0; cursor:pointer; font:10px 'Geist Pixel',monospace; }
+.factory-emote-choices button { display:grid; place-items:center; gap:6px; min-height:55px; padding:8px 4px;  cursor:pointer; font:10px 'Geist Pixel',monospace; }
 .factory-emote-choices button span { font-size:17px; color:#cde7db; }
-.factory-emote-choices button:is(:hover,:focus-visible) { outline:2px solid #a9e4d6; outline-offset:-2px; background:#35524d; }
 .factory-emote-bar p { padding:0 12px; color:#95aaa6; font-size:10px; }
 .factory-emote-bar[open] { max-width:calc(100vw - 24px); }
 .board-open .factory-emote-bar,.chat-open .factory-emote-bar,.weather-open .factory-emote-bar,.inspect-open .factory-emote-bar,.team-open .factory-emote-bar,.avatar-editor-open .factory-emote-bar { display:none; }
@@ -59,14 +59,13 @@
 
 /* One dock follows the room; personal controls never depend on a live session. */
 .factory-toolbar.pixel-island {
-  --pixel-face:#203932;
   bottom:max(12px,env(safe-area-inset-bottom)); z-index:70;
   flex-direction:column; gap:0; padding:10px 14px; box-sizing:border-box;
   min-width:300px; font:12px 'Geist Pixel',monospace; animation:none;
 }
 .factory-toolbar-actions { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; }
 .factory-toolbar-actions button { min-height:44px; white-space:nowrap; font:inherit; }
-.factory-toolbar-actions .factory-avatar-shortcut { --pixel-face:#29483f; --pixel-edge:#638f81; color:#e0f5e9; }
+.factory-toolbar-actions .factory-avatar-shortcut { color:#e0f5e9; }
 .factory-toolbar [hidden] { display:none !important; }
 .factory-toolbar-context { max-width:100%; }
 .factory-toolbar-context :is(#room-navigation,.garage-nav,.mobile-explore) {
@@ -106,14 +105,12 @@ body:is(.board-open,.chat-open,.weather-open,.inspect-open,.team-open,.avatar-ed
 /* The same dock stays usable during scene close-ups, including native dialogs. */
 .factory-toolbar.pixel-island { pointer-events:auto; }
 .factory-toolbar[data-focus]:not([data-focus=""]) .factory-toolbar-context { display:none; }
-.factory-toolbar-actions .factory-avatar-shortcut[aria-pressed="true"] { --pixel-face:#416553; --pixel-edge:#b4d8ba; }
 .factory-toolbar-actions .factory-context-action { color:#bfd3cf; }
 body.factory-toolbar-ready :is(.lounge-chat-dock,.team-desk-dock,.brand-library-dock,#inspect-navigation) { display:none; }
 body.factory-toolbar-ready #board-navigation { bottom:calc(var(--factory-toolbar-height,64px) + max(12px,env(safe-area-inset-bottom)) + 8px); }
 body.factory-toolbar-ready .window-view-dock { bottom:calc(var(--factory-toolbar-height,64px) + max(12px,env(safe-area-inset-bottom)) + 8px); }
 body.factory-toolbar-ready .avatar-editor { bottom:calc(84px + env(safe-area-inset-bottom)); max-height:calc(100dvh - 108px - env(safe-area-inset-bottom)); }
-.avatar-editor .factory-toolbar button { font:12px 'Geist Pixel',monospace; margin:0; padding:10px 12px; border:0; background:var(--pixel-edge,#46565f); color:#d6e5dc; }
-.avatar-editor .factory-toolbar button::before { background:var(--pixel-face,#203039); }
+.avatar-editor .factory-toolbar button { font:12px 'Geist Pixel',monospace; margin:0; padding:10px 12px; border:0; background:transparent; color:var(--island-text); }
 @media(max-width:679px) {
   body.factory-toolbar-ready .avatar-editor { max-height:min(50dvh,calc(100dvh - 180px)); }
   .factory-toolbar-actions button { padding-inline:9px; }
@@ -193,7 +190,7 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 }
 .factory-toolbar .factory-emote-bar summary { padding:14px 10px; border-radius:10px; font:11px/16px 'Geist Pixel',monospace; cursor:pointer; }
 .factory-toolbar .factory-emote-bar summary:hover { background:#ffffff12; }
-.factory-toolbar .factory-emote-bar .factory-emote-choices { position:absolute; bottom:calc(100% + 16px); left:50%; transform:translateX(-50%); width:min(320px,calc(100vw - 36px)); padding:8px; border:1px solid #ffffff21; border-radius:16px; background:#101111; box-shadow:0 8px 30px #0006; }
+.factory-toolbar .factory-emote-bar .factory-emote-choices { position:absolute; bottom:calc(100% + 16px); left:50%; transform:translateX(-50%); width:min(320px,calc(100vw - 36px)); padding:8px; border:0; border-radius:0; background:#000; clip-path:var(--island-control-cut); box-shadow:none; }
 .factory-toolbar .factory-emote-bar > p { display:none; }
 
 @media(max-width:600px) {
@@ -329,7 +326,7 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 /* Circular silhouettes on a subtle var(--ui-pixel) grid; the centers and spacing stay fixed. */
 .factory-toolbar.pixel-island, .factory-updates, .factory-changelog { --pixel-capsule:polygon(calc(100% - calc(var(--ui-pixel) * 7)) 0px,calc(100% - calc(var(--ui-pixel) * 7)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 5)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 5)) calc(var(--ui-pixel) * 2),calc(100% - calc(var(--ui-pixel) * 3)) calc(var(--ui-pixel) * 2),calc(100% - calc(var(--ui-pixel) * 3)) calc(var(--ui-pixel) * 3),calc(100% - calc(var(--ui-pixel) * 2)) calc(var(--ui-pixel) * 3),calc(100% - calc(var(--ui-pixel) * 2)) calc(var(--ui-pixel) * 5),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 5),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 7),100% calc(var(--ui-pixel) * 7),100% calc(100% - calc(var(--ui-pixel) * 7)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 7)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 5)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - calc(var(--ui-pixel) * 5)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - calc(var(--ui-pixel) * 3)),calc(100% - calc(var(--ui-pixel) * 3)) calc(100% - calc(var(--ui-pixel) * 3)),calc(100% - calc(var(--ui-pixel) * 3)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 5)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 5)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 7)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 7)) 100%,calc(var(--ui-pixel) * 7) 100%,calc(var(--ui-pixel) * 7) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 5) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 5) calc(100% - calc(var(--ui-pixel) * 2)),calc(var(--ui-pixel) * 3) calc(100% - calc(var(--ui-pixel) * 2)),calc(var(--ui-pixel) * 3) calc(100% - calc(var(--ui-pixel) * 3)),calc(var(--ui-pixel) * 2) calc(100% - calc(var(--ui-pixel) * 3)),calc(var(--ui-pixel) * 2) calc(100% - calc(var(--ui-pixel) * 5)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 5)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 7)),0px calc(100% - calc(var(--ui-pixel) * 7)),0px calc(var(--ui-pixel) * 7),var(--ui-pixel) calc(var(--ui-pixel) * 7),var(--ui-pixel) calc(var(--ui-pixel) * 5),calc(var(--ui-pixel) * 2) calc(var(--ui-pixel) * 5),calc(var(--ui-pixel) * 2) calc(var(--ui-pixel) * 3),calc(var(--ui-pixel) * 3) calc(var(--ui-pixel) * 3),calc(var(--ui-pixel) * 3) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 5) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 5) var(--ui-pixel),calc(var(--ui-pixel) * 7) var(--ui-pixel),calc(var(--ui-pixel) * 7) 0px); }
 .factory-toolbar.pixel-island::after { border-radius:0; clip-path:var(--pixel-capsule); }
-.factory-toolbar .factory-toolbar-actions button, .factory-update-actions button, .factory-changelog-try, .factory-changelog>header button { border-radius:0; clip-path:polygon(calc(100% - calc(var(--ui-pixel) * 5)) 0px,calc(100% - calc(var(--ui-pixel) * 5)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 3)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 3)) calc(var(--ui-pixel) * 2),calc(100% - calc(var(--ui-pixel) * 2)) calc(var(--ui-pixel) * 2),calc(100% - calc(var(--ui-pixel) * 2)) calc(var(--ui-pixel) * 3),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 3),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 5),100% calc(var(--ui-pixel) * 5),100% calc(100% - calc(var(--ui-pixel) * 5)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 5)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 3)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - calc(var(--ui-pixel) * 3)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 3)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 3)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 5)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 5)) 100%,calc(var(--ui-pixel) * 5) 100%,calc(var(--ui-pixel) * 5) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 3) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 3) calc(100% - calc(var(--ui-pixel) * 2)),calc(var(--ui-pixel) * 2) calc(100% - calc(var(--ui-pixel) * 2)),calc(var(--ui-pixel) * 2) calc(100% - calc(var(--ui-pixel) * 3)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 3)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 5)),0px calc(100% - calc(var(--ui-pixel) * 5)),0px calc(var(--ui-pixel) * 5),var(--ui-pixel) calc(var(--ui-pixel) * 5),var(--ui-pixel) calc(var(--ui-pixel) * 3),calc(var(--ui-pixel) * 2) calc(var(--ui-pixel) * 3),calc(var(--ui-pixel) * 2) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 3) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 3) var(--ui-pixel),calc(var(--ui-pixel) * 5) var(--ui-pixel),calc(var(--ui-pixel) * 5) 0px); }
+.factory-toolbar .factory-toolbar-actions button, .factory-update-actions button, .factory-changelog-try, .factory-changelog>header button { border-radius:0; clip-path:var(--island-control-cut); }
 .factory-nav-portrait,.factory-nav-portrait .factory-portrait,.agent-detail-heading .factory-portrait { border-radius:0; clip-path:polygon(calc(100% - calc(var(--ui-pixel) * 4)) 0px,calc(100% - calc(var(--ui-pixel) * 4)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 2)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 2)) calc(var(--ui-pixel) * 2),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 2),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 4),100% calc(var(--ui-pixel) * 4),100% calc(100% - calc(var(--ui-pixel) * 4)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 4)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 4)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 4)) 100%,calc(var(--ui-pixel) * 4) 100%,calc(var(--ui-pixel) * 4) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 2) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 2) calc(100% - calc(var(--ui-pixel) * 2)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 2)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 4)),0px calc(100% - calc(var(--ui-pixel) * 4)),0px calc(var(--ui-pixel) * 4),var(--ui-pixel) calc(var(--ui-pixel) * 4),var(--ui-pixel) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 2) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 2) var(--ui-pixel),calc(var(--ui-pixel) * 4) var(--ui-pixel),calc(var(--ui-pixel) * 4) 0px); }
 
 .factory-toolbar .factory-context-action:is([data-action="release"],[data-action="cancel"]) { background:#292d2b; color:#edf1ee; padding-inline:16px; }
@@ -421,7 +418,7 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 @media(max-width:600px) { .factory-audio-track { max-width:80px; } .factory-audio-dock>summary { padding:0 8px; } }
 
 /* One expanded surface and one flat row treatment across island controls. */
-.factory-toolbar:has(.factory-room-menu:not([hidden]),.factory-profile-menu:not([hidden])) { min-width:min(380px,calc(100vw - 24px)); }
+.factory-toolbar:has(.factory-room-menu:not([hidden]),.factory-profile-menu:not([hidden])) { min-width:min(380px,var(--factory-toolbar-max-width,calc(100vw - 24px))); }
 .factory-toolbar.pixel-island:has(.factory-room-menu:not([hidden]),.factory-profile-menu:not([hidden]))::after { top:calc(-1 * var(--menu-height,280px)); }
 .factory-toolbar .factory-room-menu,.factory-toolbar .factory-profile-menu {
   left:0 !important; right:0; bottom:60px; width:100%; max-height:calc(100dvh - 100px); overflow-y:auto; box-sizing:border-box;
@@ -474,9 +471,6 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 
 /* Island interaction contract: one fill per state; outline is keyboard-only.
    These state rules intentionally supersede legacy controls moved into the dock. */
-.factory-toolbar.pixel-island {
-  --island-hover:#242626; --island-pressed:#343636; --island-focus:#aeb6b1;
-}
 .factory-toolbar.pixel-island :is(.factory-room-picker,.factory-context-action,.factory-audio-mute,.factory-audio-dock>summary,.scene-sound button,.factory-room-menu button,.factory-profile-menu button) {
   box-shadow:none !important; border:0 !important;
   transition:background-color 120ms ease-out,color 120ms ease-out;
@@ -495,7 +489,7 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 }
 
 /* Inner 44px capsule matches the outer 60px capsule at its 8px inset. */
-.factory-toolbar.pixel-island { --island-control-cut:polygon(calc(100% - calc(var(--ui-pixel) * 5)) 0px,calc(100% - calc(var(--ui-pixel) * 5)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 3)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 3)) calc(var(--ui-pixel) * 2),calc(100% - calc(var(--ui-pixel) * 2)) calc(var(--ui-pixel) * 2),calc(100% - calc(var(--ui-pixel) * 2)) calc(var(--ui-pixel) * 3),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 3),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 5),100% calc(var(--ui-pixel) * 5),100% calc(100% - calc(var(--ui-pixel) * 5)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 5)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 3)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - calc(var(--ui-pixel) * 3)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 3)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 3)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 5)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 5)) 100%,calc(var(--ui-pixel) * 5) 100%,calc(var(--ui-pixel) * 5) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 3) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 3) calc(100% - calc(var(--ui-pixel) * 2)),calc(var(--ui-pixel) * 2) calc(100% - calc(var(--ui-pixel) * 2)),calc(var(--ui-pixel) * 2) calc(100% - calc(var(--ui-pixel) * 3)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 3)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 5)),0px calc(100% - calc(var(--ui-pixel) * 5)),0px calc(var(--ui-pixel) * 5),var(--ui-pixel) calc(var(--ui-pixel) * 5),var(--ui-pixel) calc(var(--ui-pixel) * 3),calc(var(--ui-pixel) * 2) calc(var(--ui-pixel) * 3),calc(var(--ui-pixel) * 2) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 3) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 3) var(--ui-pixel),calc(var(--ui-pixel) * 5) var(--ui-pixel),calc(var(--ui-pixel) * 5) 0px); }
+/* The capsule geometry is shared in factory25dButtons.css. */
 .factory-toolbar.pixel-island :is(.factory-audio-mute,.factory-audio-dock>summary) { clip-path:var(--island-control-cut); }
 .factory-toolbar.pixel-island :is(button,summary) { transition:none !important; }
 
@@ -704,3 +698,13 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
 .factory-toolbar .duck-hud-message { width:24ch; flex:0 0 24ch; max-width:none; }
 .factory-toolbar[data-focus="duck hunt"] .factory-view-group>div { display:flex; align-items:center; }
 @media(max-width:600px) { .factory-toolbar .duck-hud-message { width:12ch; flex-basis:12ch; } }
+
+/* Keep room, profile, audio and the game inside the space beside the gift. */
+@media(max-width:600px) {
+  .factory-toolbar .factory-room-picker { width:44px; padding-inline:0; gap:3px; }
+  .factory-toolbar .factory-room-label { display:none; }
+  .factory-toolbar .factory-toolbar-actions { min-width:0; }
+  .factory-toolbar.pixel-island .horse-turn.horse-play { flex:1 1 auto; min-width:44px; padding-inline:6px; }
+  .factory-toolbar .horse-action-label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .factory-toolbar .factory-toolbar-actions .duck-play.factory-game-action { flex:0 1 auto; min-width:44px; padding-inline:8px; gap:6px; }
+}

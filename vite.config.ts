@@ -22,7 +22,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:4242',
+      '/api': {
+        target: 'http://localhost:4242',
+        // Browser cookie mutations validate Origin against the original Host.
+        changeOrigin: false,
+      },
       '/ws': {
         target: 'ws://localhost:4242',
         ws: true,

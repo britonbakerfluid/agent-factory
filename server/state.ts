@@ -1392,6 +1392,9 @@ export class StateManager {
   private handleSessionEnd(payload: HookPayload): void {
     const session = this.sessions.get(payload.session_id);
     if (!session) return;
+    // Retries must retain the one cancellable exit timer, not orphan an earlier
+    // callback that could remove this session after it resumes.
+    if (this.pendingRemovals.has(payload.session_id)) return;
     console.log(`[state] SESSION_END: id=${payload.session_id} user=${session.username} was=${session.activity}`);
 
     session.activity = 'stopped';
@@ -1477,8 +1480,12 @@ export class StateManager {
     const session = this.ensureSession(payload);
     if (!session) return;
     const now = this.now();
+    const agentId = payload.agent_id || `sub-${randomUUID()}`;
+    // Hook deliveries may be retried. Preserve the child's current activity and
+    // emit its spawn effect only once for a given active child.
+    if (session.subagents.some(child => child.agentId === agentId)) return;
     const subagent: SubagentInfo = {
-      agentId: payload.agent_id || `sub-${now}`,
+      agentId,
       agentType: payload.agent_type || 'unknown',
       activity: 'thinking',
       startedAt: now,

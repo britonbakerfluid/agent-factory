@@ -21,7 +21,7 @@
 
 /* This control owns its fill; the legacy inset face must not cover it. */
 .factory-toolbar .horse-turn::before,.factory-toolbar .horse-turn::after { display:none; }
-.factory-toolbar .horse-turn.horse-play { --pixel-face:#f5a34a; box-shadow:none; }
+.factory-toolbar .horse-turn.horse-play { box-shadow:none; }
 .factory-toolbar .horse-turn.horse-play { font-weight:600; }
 
 .factory-toolbar .horse-play-ball {
@@ -43,7 +43,7 @@
 .basketball-challenge-picker[hidden] { display:none; }
 .basketball-challenge-picker summary { cursor:pointer; color:#ffbc70; }
 .basketball-challenge-picker>div { max-height:220px; overflow:auto; }
-.basketball-challenge-picker button { display:block; width:100%; margin-top:8px; padding:10px; border:0; text-align:left; background:#28332d; color:inherit; font:inherit; cursor:pointer; }
+.basketball-challenge-picker button { display:block; width:100%; margin-top:8px; padding:10px; border:0; text-align:left; color:inherit; font:inherit; cursor:pointer; }
 .basketball-challenge-picker button:disabled { opacity:.5; cursor:default; }
 
 /* The floor mesh owns the marker; the HTML hit target adds no second circle. */
@@ -60,12 +60,9 @@
 .factory-toolbar .basketball-challenge-picker summary::-webkit-details-marker { display:none; }
 .factory-toolbar .basketball-challenge-picker summary:hover { background:#242626; }
 .factory-toolbar .basketball-challenge-picker>div { position:absolute; left:0; right:0; bottom:60px; max-height:min(220px,calc(100dvh - 140px)); overflow:auto; padding:12px 16px; scrollbar-width:thin; scrollbar-color:#626666 #000; color-scheme:dark; box-sizing:border-box; background:transparent; }
-.factory-toolbar .basketball-challenge-picker button { display:flex; align-items:center; gap:10px; margin:0 0 4px; padding:8px 12px; min-height:48px; background:#242626; clip-path:var(--dock-cut); box-shadow:none; }
+.factory-toolbar .basketball-challenge-picker button { display:flex; align-items:center; gap:10px; margin:0 0 4px; padding:8px 12px; min-height:48px; }
 .factory-toolbar .basketball-challenge-picker button::before,
 .factory-toolbar .basketball-challenge-picker button::after { display:none; }
-.factory-toolbar .basketball-challenge-picker button:hover:not(:disabled) { background:#343636; }
-.factory-toolbar .basketball-challenge-picker button:focus-visible { outline:2px solid #aeb6b1; outline-offset:-3px; }
-.factory-toolbar .basketball-challenge-picker button:active:not(:disabled) { background:#444646; }
 .factory-toolbar .basketball-challenge-picker .factory-portrait { width:32px; height:32px; flex:none; }
 .factory-toolbar .basketball-challenge-picker .horse-opponent-name { min-width:0; overflow-wrap:anywhere; }
 .factory-toolbar .basketball-challenge-picker>div::-webkit-scrollbar { width:6px; }

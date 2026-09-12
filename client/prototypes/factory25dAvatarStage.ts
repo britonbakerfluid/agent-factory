@@ -7,6 +7,7 @@ import { avatarEyePose } from './factory25dAvatarEyes';
 import { AVATAR_FRAME_DISTANCE } from './factory25dAvatarGait';
 import { blendCamera, cameraPose } from './factory25dCameraMotion';
 import { avatarClearanceRoute, avatarWalkablePoint } from './factory25dAvatarClearance';
+import { minimizedPlayerBounds } from './factory25dPlayerSpace';
 import { factoryScenePoint, factoryWorldPoint, GARAGE_LEVEL, routeToStation,
   type FactoryRoom, type RoomPoint } from '@shared/factory25d-layout';
 import { patioFloorHeight } from '@shared/factory25d-patio';
@@ -45,6 +46,7 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
   let hiddenShadow: THREE.Object3D | undefined, originalShadowVisible = true, stageRoom: FactoryRoom = 'factory';
   let originalVisible = true, from = cameraPose(camera), room = from, floor = 0;
   let width = 0, height = 0, roomHeight = 1, lastProgress = -1;
+  let playerSpace = '';
   let route: THREE.Vector3[] = [], routeLength = 0, walkDuration = 0, travelDirection = 0, travelled = 0;
   let travelling = false;
   const anchor = new THREE.Vector3(), focus = new THREE.Vector3(), aim = new THREE.Vector3();
@@ -166,13 +168,21 @@ export function createAvatarStage(factory: THREE.Scene, patio: THREE.Scene, gara
       if (hiddenShadow) hiddenShadow.visible = false;
       walkAt(now);
       const w = canvas.clientWidth, h = Math.max(1, canvas.clientHeight), aspect = w / h;
-      const resized = width !== w || height !== h;
+      const player = minimizedPlayerBounds();
+      const nextPlayerSpace = player ? `${player.left}:${player.right}` : '';
+      const resized = width !== w || height !== h || nextPlayerSpace !== playerSpace;
       if (resized) {
+        playerSpace = nextPlayerSpace;
         width = w; height = h; renderer.setSize(Math.min(1280, w), Math.min(1280, w) / aspect, false);
-        const small = w < 680, span = small ? 2.55 : 2.75;
+        const small = w < 680;
+        const editorWidth = small ? 0 : Math.min(380, w * .38) + 32;
+        const playerOnLeft = player && (player.left + player.right) / 2 < w / 2;
+        const left = playerOnLeft ? player.right + 16 : 16;
+        const right = player && !playerOnLeft ? player.left - 16 : w - editorWidth - 16;
+        const span = player ? Math.max(small ? 2.55 : 2.75, .86 * h / Math.max(80, right - left - 16)) : small ? 2.55 : 2.75;
         focus.copy(route.at(-1) ?? anchor); focus.y += .43; aim.copy(focus);
         if (small) aim.y -= span * .27;
-        else aim.x += (Math.min(380, w * .38) + 32) * span / h / 2;
+        aim.x += (w / 2 - (left + right) / 2) * span / h;
         targetCamera.position.set(aim.x, aim.y + .48, aim.z + 3); targetCamera.lookAt(aim);
         destination.position.copy(targetCamera.position); destination.quaternion.copy(targetCamera.quaternion); destination.height = span;
         returning.height = room.height * h / roomHeight;

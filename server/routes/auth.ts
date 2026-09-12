@@ -25,7 +25,7 @@ export function registerAuthRoutes(
       return reply.status(401).send({ error: 'Valid installation authentication required' });
     }
 
-    const username = request.body?.username?.trim();
+    const username = typeof request.body?.username === 'string' ? request.body.username.trim() : '';
     if (!username || username.length > 100) {
       return reply.status(400).send({ error: 'Username must be between 1 and 100 characters' });
     }
@@ -34,7 +34,7 @@ export function registerAuthRoutes(
   });
 
   app.post<{ Body: { code?: string } }>('/api/auth/handoff/exchange', async (request, reply) => {
-    const principal = handoffs.consume(request.body?.code ?? '');
+    const principal = handoffs.consume(typeof request.body?.code === 'string' ? request.body.code : '');
     if (!principal) {
       return reply.status(400).send({ error: 'Login handoff is invalid or expired' });
     }

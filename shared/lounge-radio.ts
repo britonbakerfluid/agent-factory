@@ -5,9 +5,10 @@ export const DJ_VIDEOS = [
   { videoId: 'Nyx6SBixRE8', title: 'Sleepless Night · Lofi Girl', mood: 'night' },
 ] as const;
 export interface RadioEntry { id: number; videoId: string; title: string; queuedBy: string; dj: boolean }
+export interface RadioScratch { type: 'radio_scratch'; entryId: number; deck: number; offset: number; serverTime: number }
 export interface RadioState { type: 'radio_state'; serverTime: number; revision: number; current: (RadioEntry & { startedAt: number; duration: number; durationKnown: boolean }) | null; queue: RadioEntry[] }
 export type RadioRequest = { type: 'radio_queue' } & (
-  { action: 'add'; videoId: string } | { action: 'remove'; entryId: number; revision: number } | { action: 'reorder'; ids: number[]; revision: number } |
+  { action: 'scratch'; entryId: number; deck: number; offset: number } | { action: 'add'; videoId: string } | { action: 'remove'; entryId: number; revision: number } | { action: 'reorder'; ids: number[]; revision: number } |
   { action: 'duration'; entryId: number; seconds: number } | { action: 'skip'; entryId: number });
 export interface RadioResult { type: 'radio_result'; success: boolean; error?: string; silent?: boolean }
 export const RADIO_QUEUE_LIMIT = 8;

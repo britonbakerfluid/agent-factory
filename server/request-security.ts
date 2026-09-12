@@ -11,7 +11,8 @@ export function usesSecureTransport(request: FastifyRequest): boolean {
 export function isSameHostOrigin(origin: string | undefined, host: string | undefined): boolean {
   if (!origin || !host) return false;
   try {
-    return new URL(origin).host === host;
+    const url = new URL(origin);
+    return ['http:', 'https:'].includes(url.protocol) && url.origin === origin && url.host === host;
   } catch {
     return false;
   }

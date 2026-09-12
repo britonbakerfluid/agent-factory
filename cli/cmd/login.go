@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -85,14 +84,11 @@ func requestLoginHandoff(
 	}
 
 	endpoint := strings.TrimRight(serverURL, "/") + "/api/auth/handoff"
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	request, err := newDeviceJSONRequest(ctx, http.MethodPost, endpoint, payload, deviceSecret)
 	if err != nil {
 		return result, fmt.Errorf("create login request: %w", err)
 	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+deviceSecret)
-
-	response, err := client.Do(request)
+	response, err := doAuthenticatedRequest(client, request)
 	if err != nil {
 		return result, fmt.Errorf("request failed: %w", err)
 	}
@@ -104,6 +100,9 @@ func requestLoginHandoff(
 		}
 		_ = json.NewDecoder(io.LimitReader(response.Body, 16*1024)).Decode(&failure)
 		if failure.Error != "" {
+			if deviceSecret != "" {
+				failure.Error = strings.ReplaceAll(failure.Error, deviceSecret, "[redacted]")
+			}
 			return result, fmt.Errorf("server returned %d: %s", response.StatusCode, failure.Error)
 		}
 		return result, fmt.Errorf("server returned %d", response.StatusCode)

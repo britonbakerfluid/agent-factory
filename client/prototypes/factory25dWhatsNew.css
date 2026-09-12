@@ -88,3 +88,8 @@ body:has(dialog[open]) .factory-updates { visibility:hidden; }
 
 .factory-release-historical { aspect-ratio:auto; }
 .factory-release-historical img { height:auto; object-fit:contain; }
+
+.factory-updates[data-compact="true"] {width:60px;}
+.factory-updates[data-compact="true"] .factory-update-trigger {padding:8px;gap:0;font-size:0;}
+.factory-updates[data-compact="true"] .factory-update-chevron {display:none;}
+.factory-updates[data-compact="true"] .factory-update-preview {position:absolute;bottom:72px;right:0;width:min(340px,calc(100vw - 24px));background:#000;clip-path:var(--pixel-capsule);}

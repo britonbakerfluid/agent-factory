@@ -25,7 +25,7 @@ export function createDjStation(group:THREE.Group,canvas:HTMLCanvasElement,panel
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
   const abort=new AbortController();
   window.addEventListener('pointerdown',event=>{
-    if(!active||event.target!==canvas)return;
+    if(!active||!panel.classList.contains('radio-minimized')||event.target!==canvas)return;
     const r=canvas.getBoundingClientRect();pointer.set((event.clientX-r.left)/r.width*2-1,1-(event.clientY-r.top)/r.height*2);
     ray.setFromCamera(pointer,current);const hit=ray.intersectObjects(buttons,false)[0];if(!hit)return;
     event.preventDefault();event.stopImmediatePropagation();
@@ -43,29 +43,33 @@ export function createDjStation(group:THREE.Group,canvas:HTMLCanvasElement,panel
       group.localToWorld(goal.set(0,.65,0));group.localToWorld(eye.set(0,3.3,-2.0));
       closeCamera.copy(base);closeCamera.position.copy(eye);closeCamera.lookAt(goal);
       closeCamera.quaternion.slerp(base.quaternion,1-t);closeCamera.position.lerp(base.position,1-t);
-      const aspect=(base.right-base.left)/(base.top-base.bottom),height=THREE.MathUtils.lerp((base.top-base.bottom)/base.zoom,1.72,t);
+      const aspect=(base.right-base.left)/(base.top-base.bottom);
+      let height=THREE.MathUtils.lerp((base.top-base.bottom)/base.zoom,1.72,t);
+      const viewport=canvas.getBoundingClientRect();
+      const besidePlayer=active&&panel.classList.contains('radio-minimized')&&window.innerHeight<=600;
+      // In short windows the visible video occupies the left edge. Frame the
+      // records in the remaining space, including two separate 44px hit targets.
+      const recordSpace=Math.max(92,viewport.width-228);
+      if(besidePlayer)height*=Math.max(1,viewport.width*.28/(recordSpace-44));
       closeCamera.zoom=1;closeCamera.left=-height*aspect/2;closeCamera.right=height*aspect/2;closeCamera.top=height/2;closeCamera.bottom=-height/2;
+      if(besidePlayer){
+        const shift=(226+recordSpace/2-viewport.width/2)*height*aspect/viewport.width;
+        closeCamera.left-=shift;closeCamera.right-=shift;
+      }
       closeCamera.updateProjectionMatrix();closeCamera.updateMatrixWorld();return closeCamera;
     },
     update(camera:THREE.Camera){
       current=camera;
       const minimized=panel.classList.contains('radio-minimized');
       layer.classList.toggle('dj-station-minimized',minimized);
+      layer.classList.toggle('dj-station-records',active&&minimized);
       layer.hidden=!active&&!minimized;screenMount.visible=true;
       if(!active){targets.forEach(target=>{target.hidden=true;});return;}
       const r=canvas.getBoundingClientRect();
-      // Project the tabletop plane itself, so the UI shares its tilt and camera motion.
-      const project=(x:number,y:number)=>{
-        const p=screenMount.localToWorld(new THREE.Vector3(x,y,.001)).project(camera);
-        return new THREE.Vector2(r.left+(p.x+1)*r.width/2,r.top+(1-p.y)*r.height/2);
-      };
-      const topLeft=project(-.576,.324),topRight=project(.576,.324),bottomLeft=project(-.576,-.324);
-      layer.style.left='0';layer.style.top='0';layer.style.width='640px';layer.style.height='360px';
-      layer.style.transformOrigin='0 0';
-      layer.style.transform=`matrix(${(topRight.x-topLeft.x)/640},${(topRight.y-topLeft.y)/640},${(bottomLeft.x-topLeft.x)/360},${(bottomLeft.y-topLeft.y)/360},${topLeft.x},${topLeft.y})`;
-      panel.style.transform='none';
+      // Keep text and touch targets in viewport pixels. Only the physical deck
+      // buttons follow the camera; the existing video stays in the same DOM.
       targets.forEach((target,index)=>{
-        target.hidden=!active;
+        target.hidden=!active||!minimized;
         const point=buttons[index].getWorldPosition(new THREE.Vector3()).project(camera);
         target.style.left=`${r.left+(point.x+1)*r.width/2}px`;target.style.top=`${r.top+(1-point.y)*r.height/2}px`;
         target.style.width=`${.17*r.height/1.72}px`;target.style.height=`${.085*r.height/1.72}px`;

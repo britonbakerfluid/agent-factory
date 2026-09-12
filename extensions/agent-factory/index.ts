@@ -93,16 +93,26 @@ function writeConfig(cfg: UserConfig) {
 }
 
 async function postJson(path: string, body: Record<string, unknown>) {
-  const cfg = readConfig();
-  const deviceSecret = readOrCreateDeviceSecret();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (deviceSecret) headers.Authorization = `Bearer ${deviceSecret}`;
   try {
-    await fetch(`${cfg.serverUrl.replace(/\/$/, "")}${path}`, {
+    const cfg = readConfig();
+    // Parse the base before appending a route: URL parsing can otherwise turn a
+    // missing host such as "https://" into an unintended host named "api".
+    if (!/^https?:\/\/[^/?#\\\s]+(?:\/[^?#\\\s]*)?$/.test(cfg.serverUrl)) return;
+    const base = new URL(cfg.serverUrl);
+    const endpoint = new URL(`${base.href.replace(/\/$/, "")}${path}`);
+    const local = endpoint.hostname === "localhost" || /^127\.(?:\d{1,3}\.){2}\d{1,3}$/.test(endpoint.hostname)
+      || endpoint.hostname === "[::1]" || /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/i.test(endpoint.hostname);
+    if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash
+      || endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && local)) return;
+    const deviceSecret = readOrCreateDeviceSecret();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (deviceSecret) headers.Authorization = `Bearer ${deviceSecret}`;
+    await fetch(endpoint.href, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(2_000),
+      redirect: "error",
     });
   } catch {
     // Agent Factory visualization must never interfere with pi usage.

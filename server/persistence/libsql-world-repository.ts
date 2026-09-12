@@ -6,6 +6,7 @@ import { parseAvatarConfig } from '../../shared/avatar-customization.js';
 import type { StoredTeamMember } from '../../shared/team.js';
 import type { BasketballChallenge } from '../../shared/basketball-challenge.js';
 import { readContribution, type ContributionRecord } from '../../shared/factory-contributions.js';
+import { normalizeTeamAvatar } from '../team-avatar.js';
 import {
   WORLD_SCHEMA_VERSION,
   parseWorldSnapshot,
@@ -176,12 +177,19 @@ export class LibSqlWorldRepository implements WorldRepository {
 
   async loadTeamMembers(): Promise<StoredTeamMember[]> {
     const result = await this.requireClient().execute('SELECT id, name, avatar, last_seen FROM team_members');
-    return result.rows.map(row => {
-      const avatar = parseAvatarConfig(JSON.parse(String(row.avatar)));
+    const repaired: StoredTeamMember[] = [];
+    const members = result.rows.map(row => {
+      const rawAvatar = JSON.parse(String(row.avatar));
+      const avatar = normalizeTeamAvatar(rawAvatar);
       const lastSeen = Number(row.last_seen);
-      if (!avatar || !Number.isSafeInteger(lastSeen) || lastSeen < 0) throw new Error('Invalid stored team member');
-      return { id: String(row.id), name: String(row.name), avatar, lastSeen };
+      if (!Number.isSafeInteger(lastSeen) || lastSeen < 0) throw new Error('Invalid stored team member');
+      const member = { id: String(row.id), name: String(row.name), avatar, lastSeen };
+      if (!parseAvatarConfig(rawAvatar)) repaired.push(member);
+      return member;
     });
+    // Repair only derived portraits from older hooks, retaining identity and visit history.
+    await this.saveTeamMembers(repaired);
+    return members;
   }
 
   async saveTeamMembers(members: StoredTeamMember[]): Promise<void> {

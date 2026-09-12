@@ -1,0 +1,65 @@
+/* Shared with the Dynamic Island. Scene hit areas, color swatches and the
+   embedded video player's native controls deliberately keep their own shapes. */
+:root {
+  --ui-pixel: 3px;
+  --island-hover: #242626;
+  --island-pressed: #343636;
+  --island-focus: #aeb6b1;
+  --island-text: #e1e7e4;
+  --island-control-cut: polygon(calc(100% - calc(var(--ui-pixel) * 5)) 0px,calc(100% - calc(var(--ui-pixel) * 5)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 3)) var(--ui-pixel),calc(100% - calc(var(--ui-pixel) * 3)) calc(var(--ui-pixel) * 2),calc(100% - calc(var(--ui-pixel) * 2)) calc(var(--ui-pixel) * 2),calc(100% - calc(var(--ui-pixel) * 2)) calc(var(--ui-pixel) * 3),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 3),calc(100% - var(--ui-pixel)) calc(var(--ui-pixel) * 5),100% calc(var(--ui-pixel) * 5),100% calc(100% - calc(var(--ui-pixel) * 5)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 5)),calc(100% - var(--ui-pixel)) calc(100% - calc(var(--ui-pixel) * 3)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - calc(var(--ui-pixel) * 3)),calc(100% - calc(var(--ui-pixel) * 2)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 3)) calc(100% - calc(var(--ui-pixel) * 2)),calc(100% - calc(var(--ui-pixel) * 3)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 5)) calc(100% - var(--ui-pixel)),calc(100% - calc(var(--ui-pixel) * 5)) 100%,calc(var(--ui-pixel) * 5) 100%,calc(var(--ui-pixel) * 5) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 3) calc(100% - var(--ui-pixel)),calc(var(--ui-pixel) * 3) calc(100% - calc(var(--ui-pixel) * 2)),calc(var(--ui-pixel) * 2) calc(100% - calc(var(--ui-pixel) * 2)),calc(var(--ui-pixel) * 2) calc(100% - calc(var(--ui-pixel) * 3)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 3)),var(--ui-pixel) calc(100% - calc(var(--ui-pixel) * 5)),0px calc(100% - calc(var(--ui-pixel) * 5)),0px calc(var(--ui-pixel) * 5),var(--ui-pixel) calc(var(--ui-pixel) * 5),var(--ui-pixel) calc(var(--ui-pixel) * 3),calc(var(--ui-pixel) * 2) calc(var(--ui-pixel) * 3),calc(var(--ui-pixel) * 2) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 3) calc(var(--ui-pixel) * 2),calc(var(--ui-pixel) * 3) var(--ui-pixel),calc(var(--ui-pixel) * 5) var(--ui-pixel),calc(var(--ui-pixel) * 5) 0px);
+}
+
+:is(
+  .avatar-editor > form button:not(.avatar-swatch),
+  .brand-library-sheet :is(button, .brand-bundle, .brand-asset-actions a),
+  .lounge-radio-panel:not(.radio-minimized) button,
+  .lounge-chat-suggestions button,
+  .phone-composer button,
+  .visitor-ball-hint button,
+  .visitor-ball-placement button,
+  .basketball-challenge-picker button,
+  .factory-emote-choices button,
+  .garage-car-access button,
+  .factory-controls button,
+  .board-note-details button
+) {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: var(--island-control-cut);
+  background: var(--button-background, #000);
+  color: var(--button-color, var(--island-text));
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: var(--button-touch-action, manipulation);
+  -webkit-tap-highlight-color: transparent;
+  /* Keep the silhouette and its contents on the pixel grid when pressed. */
+  transition: none;
+  transform: none;
+  translate: none;
+
+  &:is([aria-pressed='true'], [aria-selected='true']) {
+    --button-background: var(--island-pressed);
+    --button-hover: #444646;
+  }
+  &:hover:not(:disabled) { background: var(--button-hover, var(--island-hover)); }
+  &:focus-visible {
+    background: var(--button-hover, var(--island-hover));
+    outline: 2px solid var(--island-focus);
+    outline-offset: -4px;
+  }
+  &:active:not(:disabled) { background: var(--button-pressed, var(--island-pressed)); }
+  &:disabled { opacity: .45; cursor: default; }
+}
+
+.factory-movement button { --button-touch-action: none; }
+
+/* The same warm action color as accepting a game in the Island. */
+:is(.avatar-editor .avatar-save, .visitor-ball-placement button) {
+  --button-background: #ffe15a;
+  --button-hover: #ffe982;
+  --button-pressed: #edcc3f;
+  --button-color: #292316;
+}

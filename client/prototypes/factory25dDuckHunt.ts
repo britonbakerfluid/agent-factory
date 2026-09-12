@@ -165,9 +165,22 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
   const disposables: Array<{ dispose(): void }> = [];
   if (options.sky) {
     const geometry = new THREE.PlaneGeometry(BACKDROP_WIDTH, 4.2);
-    const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
-    for (let i = 0; i < uv.count; i++) uv.setY(i, 0.995);
-    const material = new THREE.MeshBasicMaterial({ map: options.sky });
+    // Extend the sky's top color, not individual top-row pixels: repeating a
+    // star texel vertically turns it into a hanging bar in the close-up.
+    const material = new THREE.ShaderMaterial({
+      uniforms: { skyMap: { value: options.sky } },
+      vertexShader: `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform sampler2D skyMap;
+        void main() {
+          vec3 sky = vec3(0.0);
+          for (int i = 0; i < 32; i++) {
+            sky += texture2D(skyMap, vec2((float(i) + 0.5) / 32.0, 0.995)).rgb;
+          }
+          gl_FragColor = vec4(sky / 32.0, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    });
     const sky = new THREE.Mesh(geometry, material);
     sky.position.set(CENTER_X, 3.61 + 2.1, -4.63); sky.name = 'duck-hunt-sky';
     stage.add(sky); disposables.push(geometry, material);

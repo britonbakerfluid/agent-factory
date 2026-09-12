@@ -3,6 +3,25 @@ import * as THREE from 'three';
 import { PHONE, phoneCameraPose } from '../client/prototypes/factory25dLoungePhone';
 
 describe('lounge phone framing', () => {
+  it.each([
+    { width:390, height:844, insets:{top:272} },
+    { width:375, height:667, insets:{top:272} },
+    { width:844, height:390, insets:{left:244} },
+    { width:600, height:500, insets:{right:244} },
+  ])('keeps the phone inside the space left by the player at $width x $height', ({width,height,insets}) => {
+    const phone = new THREE.Group(); phone.rotation.set(-Math.PI/2,0,-.12);
+    const pose = phoneCameraPose(phone,width,height,insets);
+    const camera = new THREE.OrthographicCamera(-pose.height*width/height/2,pose.height*width/height/2,pose.height/2,-pose.height/2,.01,50);
+    camera.position.copy(pose.position); camera.quaternion.copy(pose.quaternion); camera.updateMatrixWorld();
+    for (const x of [-1,1]) for (const y of [-1,1]) {
+      const p = phone.localToWorld(new THREE.Vector3(x*PHONE.width/2,y*PHONE.height/2,PHONE.faceZ)).project(camera);
+      const pixelX = (p.x+1)*width/2, pixelY = (1-p.y)*height/2;
+      expect(pixelX).toBeGreaterThanOrEqual(('left' in insets ? insets.left : 18)-.1);
+      expect(pixelX).toBeLessThanOrEqual(width-('right' in insets ? insets.right : 18)+.1);
+      expect(pixelY).toBeGreaterThanOrEqual(('top' in insets ? insets.top : 36)-.1);
+      expect(pixelY).toBeLessThanOrEqual(height-89.9);
+    }
+  });
   it.each([[1280,720],[936,1044],[390,844],[844,390]])('fits the physical phone and leaves the return control clear at %ix%i', (width,height) => {
     const table = new THREE.Group(); table.position.set(2.15,.018,7.9);
     const phone = new THREE.Group(); phone.position.set(-.22,.435,.025); phone.rotation.set(-Math.PI/2,0,-.12); table.add(phone);
