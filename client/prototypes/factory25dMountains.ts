@@ -52,7 +52,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
   let currentWeather = CLEAR_WEATHER;
   let currentPalette = paletteForElevation(45, true);
   let lastWindFrame = -1;
-  let previousElapsed = 0,lastPerspectiveRender=-Infinity;
+  let previousElapsed = 0,lastPerspectiveRender=-Infinity,lastPortalEye='';
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const haze = new THREE.Color();
   const fog = new THREE.Fog(haze, 10, 80);
@@ -117,7 +117,7 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
         dirty = true;
       }
       const perspective=roomView instanceof THREE.PerspectiveCamera;
-      if(perspective){const frame=Math.floor(elapsed*30);if(frame===lastPerspectiveRender)return;lastPerspectiveRender=frame;dirty=true;}
+      if(perspective){const frame=Math.floor(elapsed*30),eye=roomView.position.toArray().join(',');if(frame===lastPerspectiveRender && eye===lastPortalEye)return;lastPerspectiveRender=frame;lastPortalEye=eye;dirty=true;}
       if (!dirty) return;
       const previousTarget = renderer.getRenderTarget();
       const previousAlpha = renderer.getClearAlpha();
@@ -138,8 +138,12 @@ export function createMountainView(renderer: THREE.WebGLRenderer, viewHeight: nu
         portalCamera.updateMatrixWorld();
         // The nearest meadow ends at z=5.4: place it just outside the glass.
         scene.position.z=-6;
-        renderer.render(scene,portalCamera);
-        scene.position.z=0;
+        // The long lens moves the eye hundreds of units during the room blend.
+        // That virtual camera travel is not extra atmosphere outside the window.
+        const fogNear=fog.near,fogFar=fog.far,eyeOffset=depth+6-camera.position.z;
+        fog.near=fogNear+eyeOffset;fog.far=fogFar+eyeOffset;
+        try { renderer.render(scene,portalCamera); }
+        finally { fog.near=fogNear;fog.far=fogFar;scene.position.z=0; }
         dirty=true;
       }else renderer.render(scene, camera);
       renderer.setRenderTarget(previousTarget);

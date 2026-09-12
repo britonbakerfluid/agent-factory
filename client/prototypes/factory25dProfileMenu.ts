@@ -1,5 +1,5 @@
 export type ProfileAgentItem = { id:string; name:string; detail:string; controlled?:boolean; pending?:boolean; unavailable?:boolean };
-/** A hoverable account panel that also works with click, touch and keyboard. */
+/** An explicitly opened account panel for click, touch and keyboard. */
 export function createProfileMenu(toolbar:HTMLElement, trigger:HTMLButtonElement,
   actions:{go:(id:string)=>void;control:(id:string)=>void;edit:()=>void;open?:()=>void;preview?:(id:string,canvas:HTMLCanvasElement)=>void}, id='factory-profile-menu') {
   const abort=new AbortController(), events={signal:abort.signal};
@@ -8,36 +8,18 @@ export function createProfileMenu(toolbar:HTMLElement, trigger:HTMLButtonElement
   menu.innerHTML='<header><span>your agents</span><button type="button" data-profile-action="edit" data-icon-only="true" aria-label="Edit avatar" title="Edit avatar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="7" r="3"/><path d="M3 20v-2a6 6 0 0 1 8-5.7M14 20l3.5-1 5-5-2.5-2.5-5 5L14 20Z"/></svg></button></header><div class="factory-profile-list"></div><p class="factory-profile-status" role="status"></p>';
   toolbar.append(menu); trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-controls',id);trigger.setAttribute('aria-expanded','false');
   trigger.dataset.tooltip='your agents & avatar';trigger.dataset.profileMenu='true';
-  let closeTimer:ReturnType<typeof setTimeout>|undefined,openTimer:ReturnType<typeof setTimeout>|undefined,motion:Animation|undefined,signature='',pinned=false,selectedId:string|undefined;
-  function close(focus=false){pinned=false;clearTimeout(closeTimer);clearTimeout(openTimer);motion?.cancel();menu.hidden=true;trigger.setAttribute('aria-expanded','false');if(focus)trigger.focus({preventScroll:true});}
+  let motion:Animation|undefined,signature='',selectedId:string|undefined;
+  function close(focus=false){motion?.cancel();menu.hidden=true;trigger.setAttribute('aria-expanded','false');if(focus)trigger.focus({preventScroll:true});}
   function open(keyboard=false){
-    clearTimeout(closeTimer);clearTimeout(openTimer);if(trigger.hidden||trigger.disabled)return;
+    if(trigger.hidden||trigger.disabled)return;
     actions.open?.();
     const wasHidden=menu.hidden;menu.hidden=false;trigger.setAttribute('aria-expanded','true');
     const dock=toolbar.getBoundingClientRect(),button=trigger.getBoundingClientRect();
     menu.style.left=`${Math.max(8-dock.left,Math.min(button.right-menu.offsetWidth-dock.left,innerWidth-menu.offsetWidth-8-dock.left))}px`;
     if(wasHidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches)motion=menu.animate([{opacity:0,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:140,easing:'ease-out'});
-    if(keyboard)pinned=true;
     if(keyboard)menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({preventScroll:true});
   }
-  // One continuous hover region includes the gap, including a clamped card on narrow screens.
-  let pointer: {x:number;y:number}|undefined;
-  function inHoverRegion() {
-    if(!pointer)return false;
-    const a=trigger.getBoundingClientRect(),b=menu.getBoundingClientRect();
-    const within=(r:DOMRect)=>pointer!.x>=r.left&&pointer!.x<=r.right&&pointer!.y>=r.top&&pointer!.y<=r.bottom;
-    return within(a)||within(b)||(pointer.y>=b.bottom-6&&pointer.y<=a.top+6&&pointer.x>=Math.min(a.left,b.left)-6&&pointer.x<=Math.max(a.right,b.right)+6);
-  }
-  const leave=()=>{clearTimeout(openTimer);clearTimeout(closeTimer);closeTimer=setTimeout(()=>{if(!pinned&&!inHoverRegion()&&!menu.contains(document.activeElement))close();},250);};
-  document.addEventListener('pointermove',e=>{
-    if(e.pointerType!=='mouse')return;
-    pointer={x:e.clientX,y:e.clientY};
-    if(menu.hidden||pinned)return;
-    if(inHoverRegion())clearTimeout(closeTimer);else leave();
-  },events);
-  trigger.addEventListener('pointerenter',e=>{clearTimeout(closeTimer);if(e.pointerType==='mouse'){pointer={x:e.clientX,y:e.clientY};clearTimeout(openTimer);openTimer=setTimeout(()=>open(),160);}},events);
-  trigger.addEventListener('pointerleave',leave,events);menu.addEventListener('pointerenter',()=>clearTimeout(closeTimer),events);menu.addEventListener('pointerleave',leave,events);
-  trigger.addEventListener('click',()=>menu.hidden||!pinned?open(true):close(),events);
+  trigger.addEventListener('click',event=>menu.hidden?open(event.detail===0):close(),events);
   trigger.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();e.stopPropagation();open(true);}},events);
   menu.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();close(true);}},events);
   menu.addEventListener('focusout',e=>{if(e.relatedTarget&&!menu.contains(e.relatedTarget as Node)&&e.relatedTarget!==trigger)close();},events);

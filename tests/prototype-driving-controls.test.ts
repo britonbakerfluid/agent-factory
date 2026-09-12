@@ -58,3 +58,19 @@ describe('direct car input without a driving panel', () => {
     f.controls.dispose();
   });
 });
+
+it('requires two distinct taps and clears the boost request after five seconds', () => {
+  let now = 1000; vi.stubGlobal('performance', { now: () => now });
+  const f = setup();
+  f.event('keydown', { code: 'Space', repeat: false });
+  expect(f.actions.input.mock.lastCall?.[0].celebrate).toBeUndefined();
+  now += 100; f.event('keydown', { code: 'Space', repeat: true });
+  expect(f.actions.input.mock.lastCall?.[0].celebrate).toBeUndefined();
+  f.event('keyup', { code: 'Space' }); now += 100;
+  f.event('keydown', { code: 'Space', repeat: false });
+  f.event('keydown', { code: 'ArrowRight' });
+  expect(f.actions.input.mock.lastCall?.[0]).toMatchObject({ celebrate: true, steer: 1 });
+  now += 5001; f.controls.tick();
+  expect(f.actions.input.mock.lastCall?.[0].celebrate).toBeUndefined();
+  f.controls.dispose();
+});

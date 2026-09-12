@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createCarCelebration } from './factory25dCarCelebration';
 import { clearFactorySegment, GARAGE_WORLD_Z, GARAGE_LEVEL } from '@shared/factory25d-layout';
 import { GARAGE_MARK_LIFETIME_MS, GARAGE_MAX_MARKS, type GarageDriveCar, type GarageDriveInput, type GarageDriveRequest, type GarageDriveResult, type GarageDriveState, type GarageTireMark } from '@shared/factory25d-driving';
 import { garageRampHeightAt, type GarageCarId } from '@shared/factory25d-garage';
@@ -18,6 +19,7 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
   let available = false, disposed = false, lastSend = -Infinity, lastPacket = -Infinity, serverClock = Date.now(), packetClock = performance.now();
   let engine: { car: GarageCarId; throttle: number } | undefined;
   const busy = new Set<string>();
+  const celebration = createCarCelebration(cars);
   // Explicit playground-only offsets never send avatar commands or change live identities.
   const previewNudges = new Map<string, { x: number; z: number }>();
   const controls = createDrivingControls(canvas, {
@@ -83,6 +85,7 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
       if (!send({ type: 'garage_drive', action: 'claim', car })) { pending = undefined; controls.announce('driving needs the updated factory connection · use the local playground to try it here'); }
     },
     update(dt: number, now: number, visible: boolean, reduced: boolean) {
+      controls.tick();
       available = visible; controls.visible(visible); controls.enable(visible && !!owned && !pending && !document.hidden);
       if (!visible && owned) send({ type: 'garage_drive', action: 'release', car: owned });
       const pedestrians = [...agents.entries.values()].filter(entry => entry.mesh.userData.room === 'garage')
@@ -112,6 +115,10 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
         car.position.set(state.x, .025 + (state.hoverHeight ?? 0), state.z); car.rotation.y = state.yaw;
         for (const shadow of car.children) if (shadow.userData.role === 'ground_shadow') shadow.position.y = shadow.userData.restY + (garageRampHeightAt(state.x, state.z) - (state.hoverHeight ?? 0)) / car.scale.y;
         visuals.poseCar(state);
+      }
+      celebration.update(rendered, serverClock + now - packetClock, reduced);
+      for (const state of rendered) {
+        const car = cars.get(state.id); if (!car) continue;
         if (state.mode !== 'parked' && visible) {
           const throttle = Math.min(1, Math.abs(state.throttle) * .4 + Math.hypot(state.vx, state.vz) / 9);
           if (!engine || state.id === owned) engine = { car: state.id, throttle };
@@ -132,6 +139,6 @@ export function createGarageDriving(room: THREE.Group, cars: Map<string, THREE.G
       }
       visuals.update(dt, { visible, reducedMotion: reduced, now: serverClock + now - packetClock });
     },
-    dispose() { if (owned) send({ type: 'garage_drive', action: 'release', car: owned }); disposed = true; abort.abort(); stopMessages(); stopConnection(); controls.dispose(); visuals.dispose(); preview?.dispose(); },
+    dispose() { if (owned) send({ type: 'garage_drive', action: 'release', car: owned }); disposed = true; abort.abort(); stopMessages(); stopConnection(); controls.dispose(); celebration.dispose(); visuals.dispose(); preview?.dispose(); },
   };
 }

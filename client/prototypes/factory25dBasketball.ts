@@ -43,6 +43,7 @@ export function createBasketball(
 ) {
   const hoopScale = 0.84;
   const rim = new THREE.Vector3(1.3, 1.68, -6.18 + 0.22 * hoopScale);
+  const pickupRim = new THREE.Object3D(); pickupRim.name = 'agent-dunk-rim'; pickupRim.position.copy(rim); parent.add(pickupRim);
   const hoop = new THREE.Group();
   // Leave space in front of the wet glass so the board and its hardware read clearly.
   hoop.position.set(rim.x, 0, -6.18);

@@ -28,7 +28,7 @@ export function createAmbientBackdrop(source: HTMLCanvasElement) {
             for(let c=0;c<3;c++) sum[c]+=pixels[i+c]; count++;
           }
           const mean=sum.map(value=>value/count), gray=(mean[0]+mean[1]+mean[2])/3;
-          colors.push(mean.map(value=>Math.max(0,Math.min(50,(gray+(value-gray)*1.1)*.42))));
+          colors.push(mean.map(value=>Math.max(12,Math.min(150,(gray+(value-gray)*1.25)*.82))));
         }
         // A long running average rejects passing characters, flicker, and camera motion.
         averaged = colors.map((color,i) => color.map((value,c) => averaged ? averaged[i][c] + (value-averaged[i][c])*.22 : value));
@@ -40,7 +40,7 @@ export function createAmbientBackdrop(source: HTMLCanvasElement) {
         if (!brush) return;
         layer.style.transition = 'none'; layer.style.opacity = '0'; layer.style.zIndex = '1';
         layers[front].style.zIndex = '0'; layers[front].style.opacity = '1';
-        brush.fillStyle = '#050607'; brush.fillRect(0,0,64,64);
+        brush.fillStyle = '#15191d'; brush.fillRect(0,0,64,64);
         for (const i of [3,2,1,0]) {
           const x=i%2 ? 58 : 6, y=i<2 ? 13 : 51;
           const gradient=brush.createRadialGradient(x,y,0,x,y,65);

@@ -1,3 +1,5 @@
+import { createWindowReflections } from './factory25dWindowReflections';
+import { createWhatsNew } from './factory25dWhatsNew';
 import { startSceneLoop } from './factory25dSceneLoop';
 import {batchStaticSiblings} from './factory25dStaticBatch';
 import { createAmbientBackdrop } from './factory25dAmbientBackdrop';
@@ -95,6 +97,7 @@ installWeatherShortcut();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#171a35');
+const windowReflections = createWindowReflections(scene);
 
 // Retired visual experiments should not linger in bookmarked preview URLs.
 const cleanPreviewUrl = new URL(location.href);
@@ -927,6 +930,7 @@ function animate(): void {
   garage.setStationFeedback(stationFeedback);
   const feet = [...liveAgents.entries.values()].filter(entry => entry.mesh.userData.room === 'factory').map(entry => ({ x: entry.mesh.position.x, z: entry.mesh.position.z - 1.95 }));
   floorKeyboard.update(dt, feet, mainRoomVisible);
+  indoorPlants.update(elapsed, reducedSceneMotion.matches, mainRoomVisible ? feet : []);
 
   vendingMachine.update(elapsed,reducedSceneMotion.matches,dt);
   loungeDetails.update(elapsed, reducedSceneMotion.matches, factoryData, camera, mainRoomVisible);
@@ -951,6 +955,7 @@ function animate(): void {
     if (entry) liveAgents.placeOverride(player.id, { x: player.position.x, z: player.position.z + 1.95 }, basketball.jump);
   }
   factoryControls.update();
+  windowReflections.update(liveAgents.entries.values(),viewCamera,dt,mainRoomVisible && !avatarStage.isActive());
   garage.carAnimation.update(garage.isActive() && !garage.isTransitioning() && !avatarStage.isActive(), reducedSceneMotion.matches, garageDriving.busy);
   garage.miniWork.update(reducedSceneMotion.matches, !avatarStage.isActive() && !garageDriving.busy.has('mini'));
   garageDriving.update(dt, now, garage.isActive() && !garage.isTransitioning() && roomNavigationAvailable, reducedSceneMotion.matches);
@@ -1029,6 +1034,7 @@ function animate(): void {
   ambientBackdrop.update(now);
 }
 
+const whatsNew = createWhatsNew(() => roomNavigation.request('patio'));
 const stopSceneLoop = startSceneLoop(animate);
 
-if (import.meta.hot) import.meta.hot.dispose(() => { stopSceneLoop(); duckHunt.dispose(); sceneEvents.abort(); titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); basketballChallenges.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); weatherStatus.remove(); renderer.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { stopSceneLoop(); windowReflections.dispose(); whatsNew.dispose(); duckHunt.dispose(); sceneEvents.abort(); titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); basketballChallenges.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); weatherStatus.remove(); renderer.dispose(); });

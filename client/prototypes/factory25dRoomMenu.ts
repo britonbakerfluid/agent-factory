@@ -4,7 +4,7 @@ import type { FactoryRoom } from '@shared/factory25d-layout';
 export function createRoomMenu(toolbar: HTMLElement, trigger: HTMLButtonElement, visit: (room: FactoryRoom) => void, id = 'factory-room-menu', onOpen:()=>void=()=>{}) {
   const events = new AbortController(), options = {signal:events.signal};
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  const rooms = {factory:'workspace',patio:'patio',garage:'garage'} as const;
+  const rooms = {factory:'arcade',patio:'patio',garage:'garage'} as const;
   const icons:Record<FactoryRoom,string>={
     factory:pixelIcon('building'),
     patio:pixelIcon('tree-pine'),

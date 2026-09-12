@@ -488,3 +488,21 @@ describe('driver-relative steering', () => {
     }
   });
 });
+
+describe('garage rocket celebration', () => {
+  it('anchors the car, steers its twist, expires after five seconds and does not retrigger a held request', () => {
+    const sim = new GarageDrivingSimulation(); sim.claim('mini', 'visitor');
+    const car = sim.car('mini'); Object.assign(car, { x: -5, z: 7, vx: 5 });
+    sim.setInput('mini', { throttle: 1, steer: 1, drift: false, celebrate: true });
+    sim.step(1 / 60, 1000); step(sim, 4, 1000);
+    expect(car.x).toBe(-5); expect(car.z).toBe(7);
+    expect(car.vx).toBe(0); expect(car.celebration?.turn).toBeGreaterThan(1);
+    sim.setInput('mini', { throttle: 0, steer: 0, drift: false, celebrate: true });
+    sim.step(1 / 60, 6001); sim.step(1 / 60, 6020);
+    expect(car.celebration).toBeUndefined();
+    sim.setInput('mini', { throttle: 0, steer: 0, drift: false }); sim.step(1 / 60, 6040);
+    sim.setInput('mini', { throttle: 0, steer: -1, drift: false, celebrate: true }); sim.step(1 / 60, 6060);
+    expect(car.celebration?.turn).toBeLessThan(0);
+    sim.release('mini'); expect(car.celebration).toBeUndefined();
+  });
+});

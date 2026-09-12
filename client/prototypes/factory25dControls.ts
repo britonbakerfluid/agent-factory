@@ -141,11 +141,11 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     quickMute.classList.toggle('is-silent', !audible);
     quickMute.querySelectorAll<HTMLElement>('i').forEach((bar, i) => {
       const time = performance.now();
-      const pulse = !audible || audioReducedMotion.matches || document.hidden ? 0 : music
+      const pulse = audioReducedMotion.matches || document.hidden ? 0 : music
         ? (Math.sin(time/180 + i*1.8)+1)*.32+.2
         : (Math.sin(time/420 + i*1.3)+Math.sin(time/730-i*.8)+2)*.075;
-      const restingHeight = [3, 5, 8, 11, 8, 5, 3][i];
-      bar.style.height = `${Math.round(restingHeight + Math.min(1, pulse + (audioReducedMotion.matches ? 0 : energy) * (1 - Math.abs(i-3)/5))*10)}px`;
+      const restingHeight = (audible ? [3, 5, 8, 11, 8, 5, 3] : [2, 3, 5, 7, 5, 3, 2])[i];
+      bar.style.height = `${Math.round(restingHeight + Math.min(1, pulse + (audioReducedMotion.matches ? 0 : energy) * (1 - Math.abs(i-3)/5))*(audible ? 10 : 4))}px`;
     });
   };
   const soundObserver = new MutationObserver(syncSound);
@@ -272,7 +272,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   }
   editAvatar.addEventListener('click', openAvatar, options);
   const profileMenu=createProfileMenu(toolbar,avatarShortcut,{
-    open:()=>{panel.open=false;roomMenu.close();},
+    open:()=>{delete soundDock.dataset.open;panel.open=false;roomMenu.close();},
     preview:(id,canvas)=>{
       const entry=agents.entries.get(id);if(!entry)return;
       const texture=entry.texture,ctx=canvas.getContext('2d')!;
@@ -289,6 +289,9 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     go:id=>{if(!available()||!state.owned().some(a=>a.sessionId===id))return;picker.value=id;panel.open=false;goToAgent(id);},
     control:id=>{if(!available()||!data.connected||!state.owned().some(a=>a.sessionId===id))return;picker.value=id;state.claim(id);goToAgent(id);panel.open=!!state.error;paint();},
   });
+  const openVolume = () => { profileMenu.close(); roomMenu.close(); panel.open = false; };
+  soundDock.addEventListener('pointerenter', openVolume, options);
+  soundDock.addEventListener('focusin', openVolume, options);
   panel.addEventListener('toggle',()=>{if(panel.open){profileMenu.close();roomMenu.close();}},options);
   function goToAgent(id:string){
     const entry=agents.entries.get(id);if(!entry)return;
@@ -436,7 +439,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       const entry=agents.entries.get(agent.sessionId);
       const room=entry?((entry.mesh.userData.room as FactoryRoom)??factoryRoomAt({x:entry.lastX,z:entry.lastZ})):'factory';
       return {id:agent.sessionId,name:agent.sessionName||agent.cwd.split('/').filter(Boolean).at(-1)||agent.username,
-        detail:`${room==='factory'?'workspace':room} · ${agent.activity}`,controlled:state.active===agent.sessionId,
+        detail:`${room==='factory'?'arcade':room} · ${agent.activity}`,controlled:state.active===agent.sessionId,
         pending:state.pending===agent.sessionId,unavailable:!!agent.manualControl&&state.active!==agent.sessionId};
     }),data.connected,available(),state.error);
     }
