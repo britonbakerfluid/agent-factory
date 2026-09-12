@@ -70,9 +70,8 @@
   height:256px !important; transform:none !important; z-index:24;
 }
 .dj-station-minimized .lounge-radio-panel.radio-minimized {
-  position:static; width:100%; height:100%; padding:8px; background:#000; overflow:hidden;
+  position:static; transform:none; width:100%; height:100%; padding:8px; background:#000; overflow:hidden;
 }
-.radio-minimized header h2 {font-size:12px;}
 .radio-minimized header h2 {font-size:0;}
 .radio-minimized header h2::after {content:'now playing';font-size:12px;}
 .radio-minimized .radio-browser {display:block;height:auto;}

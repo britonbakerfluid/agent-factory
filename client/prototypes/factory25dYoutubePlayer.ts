@@ -93,7 +93,9 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
               if (!shown || !inView || document.hidden) { player?.pauseVideo(); return; }
               if (!consent) callbacks.enable();
               else if (!callbacks.preferences().enabled) { player?.pauseVideo(); return; }
-              consent = true; wasAllowed = true; retryOnGesture = false; callbacks.feedback(''); reportDuration(); publishPlayback();
+              consent = true; wasAllowed = true; retryOnGesture = false;
+              lastVolume = Math.round(callbacks.preferences().volume); player?.setVolume(lastVolume);
+              callbacks.feedback(''); reportDuration(); publishPlayback();
             }
           },
           onAutoplayBlocked: () => { retryOnGesture = true; callbacks.feedback('Click in the room to join the DJ, or press play in the video.'); },

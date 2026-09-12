@@ -1,4 +1,4 @@
-import { rememberVolume } from './factory25dVolumeMemory';
+import { rememberVolume, savedVolume } from './factory25dVolumeMemory';
 import { requireElement } from './dom';
 import { CLEAR_WEATHER } from '../sky/weather';
 import { createSoundscape, loadSoundscapeSamples, type SoundEnvironment } from './factory25dSoundscape';
@@ -122,7 +122,19 @@ export function createFactoryAudio() {
 
   return {
     musicPreferences() { return { enabled: !disposed && enabled && !document.hidden, volume: musicVolume }; },
-    enableMusic() { if (!enabled) { enabled = true; paint(); void syncPlayback(); } },
+    enableMusic() {
+      if (!enabled) {
+        // The dock zeros faders while the master is off; restore music's previous
+        // level when joining the DJ, but preserve an individually muted channel.
+        try {
+          const restore = JSON.parse(localStorage.getItem('factory-master-restore-v1') ?? 'null');
+          if (musicVolume === 0 && Array.isArray(restore) && restore[0] === true) {
+            musicVolume = savedVolume('factory-music-level-v2', musicVolume, localStorage);
+          }
+        } catch { /* Storage is optional. */ }
+        enabled = true; paint(); void syncPlayback();
+      }
+    },
     vendingSelect() { if (propsAudible()) graph!.vendingSelect(); },
     vendingDispense() { if (propsAudible()) graph!.vendingDispense(); },
     vendingLand(energy = 1) { if (propsAudible()) graph!.vendingLand(energy); },
