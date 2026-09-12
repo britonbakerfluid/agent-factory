@@ -155,16 +155,17 @@ export function createSoundscape(context: BaseAudioContext, samples: SoundSample
       loop.next = start + duration - fade;
     }
   }
-  function oneShot(name: SoundName, target: GainNode, gain: number, rate = 1, pan = 0.1) {
+  function oneShot(name: SoundName, target: GainNode, gain: number, rate = 1, pan = 0.1, impact = false) {
     if (disposed) return;
     const source = context.createBufferSource(); source.buffer = samples[name];
     source.playbackRate.value = rate;
-    const duration = samples[name].duration / rate;
+    const duration = impact ? Math.min(.24, samples[name].duration / rate) : samples[name].duration / rate;
     const start = context.currentTime;
     const envelope = context.createGain();
     envelope.gain.setValueAtTime(0, start);
-    envelope.gain.linearRampToValueAtTime(gain, start + 0.012);
-    envelope.gain.setValueAtTime(gain, start + Math.max(0.013, duration - 0.04));
+    envelope.gain.linearRampToValueAtTime(gain, start + (impact ? .001 : .012));
+    if (impact) envelope.gain.exponentialRampToValueAtTime(Math.max(.0001,gain * .06), start + duration * .8);
+    else envelope.gain.setValueAtTime(gain, start + Math.max(0.013, duration - 0.04));
     envelope.gain.linearRampToValueAtTime(0, start + duration);
     const panner = context.createStereoPanner(); panner.pan.value = pan;
     source.connect(envelope).connect(panner).connect(target);
@@ -193,7 +194,7 @@ export function createSoundscape(context: BaseAudioContext, samples: SoundSample
       return mix;
     },
     ballTap(energy = 1) { oneShot('bounce', effects, 0.22 * clamp01(energy), 1.08); },
-    ballBounce(energy = 1) { oneShot('bounce', effects, 0.38 * clamp01(energy), 0.94 + Math.random() * 0.06); },
+    ballBounce(energy = 1) { const strength=clamp01(energy); oneShot('bounce', effects, .65 * Math.pow(strength,.75), 1.04 - strength * .16 + Math.random() * .035, .1, true); },
     ballSwish() { oneShot(Math.random() < 0.5 ? 'swish-a' : 'swish-b', effects, 0.5, 0.96 + Math.random() * 0.06); },
     bird() { oneShot(Math.random() < 0.5 ? 'bird-a' : 'bird-b', birds, 0.85, 1, Math.random() * 1.2 - 0.6); },
     thunder(energy = 1, pan = 0) { thunder(energy, pan); },

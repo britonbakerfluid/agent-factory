@@ -63,3 +63,24 @@
 
 /* Room overlays belong to the room camera, not the focused DJ camera. */
 .dj-station-open :is(.window-hotspot,.board-hotspot,.room-doorway,.mobile-explore,#keyboard-walk,.team-desk-hotspot,.visitor-ball-pickup) { display:none !important; }
+
+/* Keep the same iframe mounted when leaving the deck; changing parents reloads playback. */
+.dj-station-screen.dj-station-minimized {
+  left:auto !important; top:12px !important; right:12px; width:288px !important;
+  height:256px !important; transform:none !important; z-index:24;
+}
+.dj-station-minimized .lounge-radio-panel.radio-minimized {
+  position:static; width:100%; height:100%; padding:8px; background:#000; overflow:hidden;
+}
+.radio-minimized header h2 {font-size:12px;}
+.radio-minimized header h2 {font-size:0;}
+.radio-minimized header h2::after {content:'now playing';font-size:12px;}
+.radio-minimized .radio-browser {display:block;height:auto;}
+.radio-minimized .radio-browser aside {overflow:visible;}
+.radio-minimized .radio-browser main,.radio-minimized aside>h3,
+.radio-minimized .island-music-player,.radio-minimized .radio-feedback,
+.radio-minimized .radio-playing {display:none;}
+.radio-minimized .radio-video,.radio-minimized .radio-video iframe {width:100%;height:200px;}
+@media (max-width:480px) {
+  .dj-station-screen.dj-station-minimized {right:8px;top:8px !important;width:240px !important;}
+}

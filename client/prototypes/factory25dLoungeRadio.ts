@@ -143,10 +143,28 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   panel.querySelector('.radio-listen')!.addEventListener('click', () => player.play());
   panel.querySelector('.radio-skip')!.addEventListener('click', () => { if (state?.current) command({ type: 'radio_queue', action: 'skip', entryId: state.current.id }); });
   const station=createDjStation(group,canvas,panel,{listen:()=>player.play(),skip:()=>{if(state?.current)command({type:'radio_queue',action:'skip',entryId:state.current.id});}});
-  function hide(restore = false) { station.setActive(false); panel.hidden = true; player.hide(); trigger.setAttribute('aria-expanded', 'false'); if (restore && visible) trigger.focus(); }
-  trigger.addEventListener('click', () => { if (!visible) return; panel.hidden = !panel.hidden; station.setActive(!panel.hidden); trigger.setAttribute('aria-expanded', String(!panel.hidden)); if (!panel.hidden) { const agents = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (agents) agents.open = false; paint(); void player.open(); close.focus(); } else player.hide(); });
-  close.addEventListener('click', () => hide(true));
-  const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !panel.hidden) { event.stopPropagation(); hide(true); } };
+  let minimized = false, joinedRadio = false;
+  function hide(restore = false, stop = false) {
+    station.setActive(false);
+    minimized = !stop && (minimized || player.progress().playing);
+    panel.classList.toggle('radio-minimized', minimized);
+    panel.hidden = !minimized;
+    close.setAttribute('aria-label', minimized ? 'Stop music and close player' : 'Close radio');
+    if (!minimized) player.hide();
+    trigger.setAttribute('aria-expanded', 'false');
+    if (restore && visible) trigger.focus();
+  }
+  trigger.addEventListener('click', () => {
+    if (!visible) return;
+    if (!panel.hidden && !minimized) { hide(true); return; }
+    minimized = false; panel.classList.remove('radio-minimized'); panel.hidden = false;
+    close.setAttribute('aria-label', 'Close radio');
+    station.setActive(true); trigger.setAttribute('aria-expanded', 'true');
+    const agents = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (agents) agents.open = false;
+    paint(); void player.open(); close.focus();
+  });
+  close.addEventListener('click', () => hide(true, minimized));
+  const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !panel.hidden && !minimized) { event.stopPropagation(); hide(true); } };
   document.addEventListener('keydown', onKey, true);
   const unsubscribe = onFactoryMessage(message => {
     if (preview) return;
@@ -167,9 +185,15 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
     isActive:station.isActive,
     update(nextCamera: THREE.Camera, isVisible: boolean) {
       camera = nextCamera; visible = isVisible;
+      if (visible && state?.current && !joinedRadio) {
+        joinedRadio = true; minimized = true;
+        panel.classList.add('radio-minimized'); panel.hidden = false;
+        close.setAttribute('aria-label', 'Stop music and close player');
+        void player.join();
+      }
       trigger.hidden = !visible || !panel.hidden;
       station.update(camera);
-      if (!visible) hide();
+      if (!visible && !panel.hidden && !minimized) hide();
       if (visible) {
         receiver.localToWorld(projected.set(0, .6, 0)); projected.project(camera);
         trigger.hidden = projected.z < -1 || projected.z > 1;
