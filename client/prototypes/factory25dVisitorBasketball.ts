@@ -95,7 +95,9 @@ export function createVisitorBasketball(parent: THREE.Group, canvas: HTMLCanvasE
   }
   function keyboardAim() {
     const strength = keyboardPower / 100 * 2.5;
-    pull.set(Math.sin(keyboardAngle) * strength, 0, -Math.cos(keyboardAngle) * strength); aim();
+    if (basketballMode) pull.set(0, 0, -strength);
+    else pull.set(Math.sin(keyboardAngle) * strength, 0, -Math.cos(keyboardAngle) * strength);
+    aim();
   }
   function shotVelocity(){
     if(!basketballMode)return visitorPullVelocity(pull);
@@ -109,6 +111,9 @@ export function createVisitorBasketball(parent: THREE.Group, canvas: HTMLCanvasE
     const target=new THREE.Vector3(VISITOR_BALL_RIM.x,VISITOR_BALL_RIM.y,VISITOR_BALL_RIM.z)
       .addScaledVector(shotForward,powerError*Math.max(.45,distance*.28))
       .addScaledVector(shotRight,pull.x*.28);
+    const dx = target.x - selected.physics.position.x, dz = target.z - selected.physics.position.z;
+    target.x = selected.physics.position.x + dx * Math.cos(keyboardAngle) - dz * Math.sin(keyboardAngle);
+    target.z = selected.physics.position.z + dx * Math.sin(keyboardAngle) + dz * Math.cos(keyboardAngle);
     return visitorShotVelocity(selected.physics.position,target);
   }
   function aim() {
@@ -182,7 +187,7 @@ export function createVisitorBasketball(parent: THREE.Group, canvas: HTMLCanvasE
     // A ball chosen while the camera is already close skips the approach wait.
     phase = wasMode && viewBlend >= APPROACH_LIFT_AT ? 'lifting' : 'approach'; liftProgress = 0;
     hint.hidden = false; gesture = 'aim';
-    status.textContent = 'basketball mode. swipe the ball upward and release to shoot, tap it to dribble. Arrow keys aim and adjust power. Space shoots. Escape returns to the room.';
+    status.textContent = 'basketball mode. swipe the ball upward and release to shoot, tap it to dribble. A/D or left/right arrows aim; up/down arrows adjust power. Space shoots. Escape returns to the room.';
   }
   function begin(index: number, shooting = true, spot?: BallVector) {
     if (!available || (!locals.has(index) && !canPick(index))) return false;
@@ -334,7 +339,7 @@ export function createVisitorBasketball(parent: THREE.Group, canvas: HTMLCanvasE
     const target = event.target as HTMLElement;
     if (target.matches?.('input, textarea, select, [contenteditable="true"]')) return;
     if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); putBack(); return; }
-    const key = event.code === 'Space' ? ' ' : event.key;
+    const key = event.code === 'Space' ? ' ' : event.code === 'KeyA' ? 'ArrowLeft' : event.code === 'KeyD' ? 'ArrowRight' : event.key;
     if (!selected || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(key)) return;
     // Let Enter activate the island's Back button normally.
     if ((key === 'Enter' || key === ' ') && target.closest?.('.factory-toolbar, .visitor-ball-hint')) return;
@@ -347,8 +352,8 @@ export function createVisitorBasketball(parent: THREE.Group, canvas: HTMLCanvasE
       if (validHorseSpot(next)) { p.x = next.x; p.z = next.z; selected.mesh.position.copy(p); send('hold'); }
       return;
     }
-    if (key === 'ArrowLeft') keyboardAngle -= .08;
-    else if (key === 'ArrowRight') keyboardAngle += .08;
+    if (key === 'ArrowLeft') keyboardAngle = Math.max(-Math.PI / 3, keyboardAngle - .04);
+    else if (key === 'ArrowRight') keyboardAngle = Math.min(Math.PI / 3, keyboardAngle + .04);
     else if (key === 'ArrowUp') keyboardPower = Math.min(100, keyboardPower + 5);
     else if (key === 'ArrowDown') keyboardPower = Math.max(10, keyboardPower - 5);
     else { if (!event.repeat) { keyboardAim(); shoot(); } return; }

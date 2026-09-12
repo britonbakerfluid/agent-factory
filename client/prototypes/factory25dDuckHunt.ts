@@ -155,9 +155,9 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
 
   // A stable orthographic view from the deck edge: reeds along the bottom, the
   // valley in the middle, open sky above. The near plane keeps the deck and its
-  // furniture out of the frame; only the backdrop and the game props are closer than -4.15.
+  // furniture out of the frame while leaving clearance for the full 3D wing span.
   const gameCamera = new THREE.OrthographicCamera();
-  const CENTER_X = 16, EYE_Z = -4.05, FRAME_BOTTOM = -0.55, MAX_HEIGHT = 5.4, BACKDROP_WIDTH = 15.84;
+  const CENTER_X = 16, EYE_Z = -4.0, FRAME_BOTTOM = -0.55, MAX_HEIGHT = 5.4, BACKDROP_WIDTH = 15.84;
   let cameraBlend = 0, viewHeight = MAX_HEIGHT, halfWidth = 3.4, viewTop = FRAME_BOTTOM + MAX_HEIGHT;
   let wasOpen = false;
 
@@ -220,7 +220,7 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
     });
     return {mesh,wings};
   }
-  const DUCK_Z = -4.05, DUCK_W = 0.66, DUCK_H = 0.64;
+  const DUCK_Z = -4.24, DUCK_W = 0.66, DUCK_H = 0.64;
   type Duck = { mesh: THREE.Group; wings: THREE.Group[]; button: HTMLButtonElement; x: number; y: number; vx: number; vy: number; scale: number; turnIn: number; state: 'flying' | 'falling' | 'escaping' | 'gone'; age: number };
   const ducks: Duck[] = Array.from({ length: DUCKS_PER_WAVE }, (_, i) => {
     const {mesh,wings} = model();
@@ -230,7 +230,13 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
     button.className = "duck-target";
     button.hidden = true;
     button.setAttribute("aria-label", `Shoot duck ${i + 1}`);
-    button.addEventListener("click", (event) => { event.stopPropagation(); shoot(i); }, listen);
+    button.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      event.preventDefault(); event.stopPropagation(); shoot(i);
+    }, listen);
+    button.addEventListener('click', event => {
+      event.stopPropagation(); if (event.detail === 0) shoot(i);
+    }, listen);
     canvas.parentElement!.append(button);
     return { mesh, wings, button, x: CENTER_X, y: 0, vx: 0, vy: 0, scale: 0.8, turnIn: 0, state: 'gone', age: 0 };
   });
@@ -340,6 +346,7 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
       gameCamera.position.set(CENTER_X, centerY, EYE_Z); gameCamera.lookAt(CENTER_X, centerY, -5);
       gameCamera.position.lerp(base.position, 1 - t); gameCamera.quaternion.slerp(base.quaternion, 1 - t);
       const h = THREE.MathUtils.lerp((base.top - base.bottom) / base.zoom, viewHeight, t);
+      gameCamera.near = .05;
       gameCamera.zoom = 1; gameCamera.left = -h * aspect / 2; gameCamera.right = h * aspect / 2;
       gameCamera.top = h / 2; gameCamera.bottom = -h / 2;
       gameCamera.updateProjectionMatrix(); gameCamera.updateMatrixWorld(); return gameCamera;
@@ -421,7 +428,7 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
         mesh.visible = round.phase === 'wave' && duck.state !== 'gone';
         if (mesh.visible) {
           mesh.position.set(duck.x, duck.y, DUCK_Z);
-          mesh.scale.setScalar(duck.scale);
+          mesh.scale.set(duck.scale, duck.scale, duck.scale * .4);
           // Face travel without mirroring the model. Upward flight pitches the bill up.
           mesh.rotation.y = direction < 0 ? Math.PI + .25 : -.25;
           const pitch = Math.atan2(duck.vy, Math.max(.3,Math.abs(duck.vx)));

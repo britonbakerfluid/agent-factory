@@ -166,6 +166,12 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
       portrait = createProfilePortrait(avatar); heading.prepend(portrait);
     },
     dispose() { resize?.disconnect();events.abort(); element.remove(); },
+    setStaffIdentity(name: string, role: string) {
+      nameText.textContent = title.textContent = name;
+      const identity = document.createElement('div'); identity.className = 'staff-identity';
+      const job = document.createElement('span'); job.className = 'staff-job'; job.textContent = role;
+      title.replaceWith(identity); identity.append(title, job); source.hidden = true;
+    },
     setDetails(name: string, activityText: string, sourceText: string) {
       nameText.textContent = title.textContent = name;
       activity.textContent = activityText; source.textContent = sourceText;

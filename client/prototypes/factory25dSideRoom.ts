@@ -20,12 +20,24 @@ export function createDoorFrame(scene: THREE.Scene) {
   }
   propPart(frame, [0.085, 0.075, 1.58], [SIDE_DOOR.x, 1.66, -2.5], trim);
   propPart(frame, [0.26, 0.012, 1.4], [SIDE_DOOR.x, 0.012, -2.5], trim);
+  const darkTrim = standard('#273e43', .55);
+  for (const z of [SIDE_DOOR.near - .05, SIDE_DOOR.far + .05])
+    propPart(frame, [.18, 1.78, .14], [SIDE_DOOR.x + .03, .89, z], darkTrim);
+  propPart(frame, [.2,.16,1.8], [SIDE_DOOR.x,.09,-2.5], darkTrim);
+  propPart(frame, [.26,.12,1.85], [SIDE_DOOR.x,1.83,-2.5], darkTrim);
+  const warmStrip = new THREE.MeshBasicMaterial({color:'#ffe2a0'});
+  propPart(frame, [.035,.035,1.35], [SIDE_DOOR.x-.11,1.76,-2.5], warmStrip);
   const leaf = new THREE.Group();
   leaf.position.set(SIDE_DOOR.x, 0.04, SIDE_DOOR.near);
   leaf.rotation.y = 0.92;
   frame.add(leaf);
-  const paint = standard("#486260", 1, "#132422");
+  const paint = standard("#426b65", .48, "#132422");
   propPart(leaf, [1.1, 0.73, 0.045], [-0.55, 0.365, 0], paint);
+  const inset = standard('#304c49', .58);
+  propPart(leaf, [.84,.48,.025], [-.55,.38,.034], inset);
+  const brass = standard('#d8b66b', .3);
+  propPart(leaf, [.92,.11,.035], [-.55,.12,.045], brass);
+  propPart(leaf, [.055,.25,.09], [-.94,.72,.07], brass);
   for (const x of [-1.055, -0.045])
     propPart(leaf, [0.09, 1.49, 0.055], [x, 0.745, 0], paint);
   for (const y of [0.77, 1.45])
@@ -243,8 +255,26 @@ export function createSideRoom(scene: THREE.Scene) {
 export function createSideRoomNavigation(
   canvas: HTMLCanvasElement,
   roomCamera: THREE.OrthographicCamera,
+  scene: THREE.Scene,
 ) {
   const door = requireElement<HTMLButtonElement>("#room-doorway");
+  const arrow = new THREE.Group(); arrow.name = 'patio-navigation-arrow'; scene.add(arrow);
+  const outline = new THREE.Shape();
+  outline.moveTo(-.32,-.1); outline.lineTo(.02,-.1); outline.lineTo(.02,-.23);
+  outline.lineTo(.16,-.23); outline.lineTo(.16,-.14); outline.lineTo(.25,-.14);
+  outline.lineTo(.25,-.07); outline.lineTo(.34,-.07); outline.lineTo(.34,.07);
+  outline.lineTo(.25,.07); outline.lineTo(.25,.14); outline.lineTo(.16,.14);
+  outline.lineTo(.16,.23); outline.lineTo(.02,.23); outline.lineTo(.02,.1); outline.lineTo(-.32,.1); outline.closePath();
+  const arrowFace = standard('#f5dc87', .42, '#67501c');
+  const arrowMesh = new THREE.Mesh(new THREE.ExtrudeGeometry(outline, {depth:.09,bevelEnabled:false,steps:1}), [arrowFace,standard('#97713c',.65)]);
+  arrowMesh.rotation.x = -Math.PI / 2; arrowMesh.castShadow = true; arrow.add(arrowMesh);
+  arrow.position.set(SIDE_DOOR.x - .85,.16,-1.55);
+  door.classList.add('scene-arrow-target');
+  let arrowHovered = false, arrowScale = 1, lastArrowTime = performance.now();
+  door.addEventListener('pointerenter', () => { arrowHovered = true; });
+  door.addEventListener('pointerleave', () => { arrowHovered = false; });
+  door.addEventListener('focus', () => { arrowHovered = true; });
+  door.addEventListener('blur', () => { arrowHovered = false; });
   const mobile = requireElement<HTMLButtonElement>("#mobile-room");
   const navigation = requireElement<HTMLElement>("#room-navigation");
   const back = requireElement<HTMLButtonElement>("#room-return");
@@ -311,6 +341,11 @@ export function createSideRoomNavigation(
       }
       const hidden = Boolean(motion) || (!open && !canOpen);
       if (door.hidden !== hidden) door.hidden = hidden;
+      arrow.visible = !hidden && !document.body.matches('.garage-open,.garage-travelling,.inspect-open,.chat-open,.team-open,.brand-open,.dj-station-open,.avatar-stage-open,.duck-hunt-open,.basketball-mode');
+      const elapsed = Math.min(.1, Math.max(0, (now - lastArrowTime) / 1000)); lastArrowTime = now;
+      arrowScale = reduced.matches ? (arrowHovered ? 1.2 : 1) : THREE.MathUtils.damp(arrowScale, arrowHovered ? 1.2 : 1, 18, elapsed);
+      arrow.scale.setScalar(arrowScale); arrow.rotation.y = open ? Math.PI : 0;
+      arrow.position.x = SIDE_DOOR.x + (open ? .65 : -.85);
       if (door.hidden) return;
       const activeCamera = open ? camera : roomCamera;
       activeCamera.updateMatrixWorld();
@@ -323,7 +358,7 @@ export function createSideRoomNavigation(
       projection.multiplyMatrices(activeCamera.projectionMatrix, activeCamera.matrixWorldInverse);
       if (lastWidth === width && lastHeight === height && lastProjection.equals(projection)) return;
       lastWidth = width; lastHeight = height; lastProjection.copy(projection);
-      center.set(SIDE_DOOR.x, .08, (SIDE_DOOR.near + SIDE_DOOR.far) / 2).applyMatrix4(projection);
+      center.copy(arrow.position).applyMatrix4(projection);
       const x = ((center.x + 1) * width) / 2, y = ((1 - center.y) * height) / 2;
       door.style.left = `${Math.max(4, Math.min(width - 48, x - 22))}px`;
       door.style.top = `${Math.max(4, Math.min(height - 48, y - 22))}px`;

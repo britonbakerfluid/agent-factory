@@ -52,7 +52,8 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
   const label = createNameTag('lounge DJ', false, canvas.parentElement!);
   label.setAvatar(avatar);
   label.element.classList.add('room-staff-label'); label.element.dataset.roomStaff = 'lounge DJ'; label.element.dataset.cardPlacement = 'above-body';
-  label.setDetails('lounge DJ', 'keeping the lounge music flowing', 'room staff');
+  label.setStaffIdentity('Remy', 'Lounge DJ');
+  label.setDetails('Remy', 'keeping the lounge music flowing', '');
   const button = label.element.querySelector('button')!;
   const pickup=createStaffPickup(mesh,button,canvas,avatar);
   button.setAttribute('aria-label', 'Lounge DJ · open radio');
@@ -94,7 +95,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
       }
       const activity = choosing ? 'choosing the next lounge track'
         : entryId === undefined ? 'keeping the radio ready' : isDj ? 'playing a lounge selection' : 'listening to the shared queue';
-      if (activity !== lastActivity) { lastActivity = activity; label.setDetails('lounge DJ', activity, 'room staff'); }
+      if (activity !== lastActivity) { lastActivity = activity; label.setDetails('Remy', activity, ''); }
     },
     dispose() {
       if (disposed) return;

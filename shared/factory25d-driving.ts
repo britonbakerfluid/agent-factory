@@ -59,7 +59,7 @@ export function validGarageDriveInput(value: unknown): value is GarageDriveInput
   const v = value as GarageDriveInput;
   return Number.isFinite(v.throttle) && Math.abs(v.throttle) <= 1 && Number.isFinite(v.steer) && Math.abs(v.steer) <= 1 && typeof v.drift === 'boolean' && (v.celebrate === undefined || typeof v.celebrate === 'boolean');
 }
-export function garageCarHull(car: Pick<GarageDriveCar, 'id' | 'x' | 'z' | 'yaw' | 'hoverHeight'>, margin = .14): Point[] {
+export function garageCarHull(car: Pick<GarageDriveCar, 'id' | 'x' | 'z' | 'yaw' | 'hoverHeight'>, margin = .025): Point[] {
   const p = GARAGE_DRIVE_PROFILES[car.id];
   const width = car.id === 'delorean' ? p.width + .366 * clamp((car.hoverHeight ?? 0) / 1.1, 0, 1) : p.width;
   const w = width / 2 + margin, l = p.length / 2 + margin;
@@ -169,7 +169,7 @@ export class GarageDrivingSimulation {
     this.returnStalls.delete(car.id); this.shoved.delete(car.id);
   }
   private blocker(car: GarageDriveCar, clearance = 0, ignored = new Set<GarageCarId>()): 'scene' | 'pedestrian' | GarageDriveCar | undefined {
-    const hull = garageCarHull(car, .14 + clearance);
+    const hull = garageCarHull(car, .025 + clearance);
     const flying = car.id === 'delorean' && (car.hoverHeight ?? 0) >= 1.25;
     const throughDoor = (p: Point) => flying && p.x >= GARAGE_RAMP.left && p.x <= GARAGE_RAMP.right && p.z >= -5.6;
     if (hull.some(p => p.x < -11.8 || p.x > 11.8 || (p.z < -4.3 && !throughDoor(p)) || p.z > 16)
@@ -274,6 +274,18 @@ export class GarageDrivingSimulation {
       const airSpeed = Math.hypot(car.vx, car.vz);
       if (airSpeed > topSpeed) { car.vx *= topSpeed / airSpeed; car.vz *= topSpeed / airSpeed; }
     }
+    // Funnel an approaching hover car through the last stretch of the ramp.
+    // Reverse remains an escape; passing sideways never activates the pull.
+    if (flying && car.mode === 'driving' && input.throttle >= 0 && car.z < -.3 && car.z > GARAGE_RAMP.doorZ
+      && car.x > GARAGE_RAMP.left - .45 && car.x < GARAGE_RAMP.right
+      && Math.cos(car.yaw) < -.5 && car.vz < -.15) {
+      const center = (GARAGE_RAMP.left + Math.min(11.8,GARAGE_RAMP.right)) / 2;
+      const blend = 1 - Math.exp(-9 * dt);
+      car.yaw = angle(car.yaw + angle(Math.PI - car.yaw) * blend);
+      car.vx += (clamp((center - car.x) * 6,-2.5,2.5) - car.vx) * blend;
+      car.vz += (-Math.max(3.2,Math.min(5,-car.vz)) - car.vz) * blend;
+      car.steer *= 1 - blend;
+    }
     car.x += car.vx * dt; car.z += car.vz * dt; car.throttle = input.throttle;
     if (!this.resolveDriveContacts(car, before)) { this.tires.delete(car.id); return; }
     if (flying && car.mode === 'driving' && before.z >= GARAGE_RAMP.doorZ && car.z < GARAGE_RAMP.doorZ && car.vz < 0
@@ -292,10 +304,49 @@ export class GarageDrivingSimulation {
     if (previous) tires.forEach((point, i) => this.marks.push({ id: this.nextMark++, car: car.id, x1: previous[i].x, z1: previous[i].z, x2: point.x, z2: point.z, width, opacity: clamp(.35 + Math.abs(car.slip) * .7, .35, .8), createdAt: now }));
     this.tires.set(car.id, tires);
   }
+  /** Remove only the velocity into a surface, preserving motion along it. */
+  private slideScene(car: GarageDriveCar): boolean {
+    let impact = 0;
+    const separate = (x: number, z: number, depth: number) => {
+      car.x -= x * (depth + .001); car.z -= z * (depth + .001);
+      const closing = Math.max(0, car.vx * x + car.vz * z);
+      impact = Math.max(impact, closing);
+      car.vx -= x * closing; car.vz -= z * closing;
+    };
+    const flying = car.id === 'delorean' && (car.hoverHeight ?? 0) >= 1.25;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const hull = garageCarHull(car);
+      const left = Math.min(...hull.map(p => p.x)), right = Math.max(...hull.map(p => p.x));
+      const near = Math.min(...hull.map(p => p.z)), far = Math.max(...hull.map(p => p.z));
+      if (left < -11.8) { separate(-1,0,-11.8-left); continue; }
+      if (right > 11.8) { separate(1,0,right-11.8); continue; }
+      if (far > 16) { separate(0,1,far-16); continue; }
+      const throughDoor = flying && hull.every(p => p.x >= GARAGE_RAMP.left && p.x <= GARAGE_RAMP.right && p.z >= -5.6);
+      if (near < -4.3 && !throughDoor) { separate(0,-1,-4.3-near); continue; }
+      const obstruction = obstacleHulls.find(o => !(flying && o.box.ramp) && overlap(hull,o.hull));
+      if (obstruction) {
+        const c = contact(hull,obstruction.hull);
+        if (!c) return false;
+        separate(c.x,c.z,c.depth); continue;
+      }
+      if (this.blocker(car)) return false;
+      if (impact > 1.1) {
+        car.damage = clamp(car.damage + impact * impact * GARAGE_DRIVE_PROFILES[car.id].mass * .018,0,1);
+        this.repairTime.delete(car.id);
+      }
+      return true;
+    }
+    return false;
+  }
   /** Resolve a whole contact chain atomically; a wall never lets an upstream body clip through. */
   private resolveDriveContacts(car: GarageDriveCar, before: GarageDriveCar): boolean {
     const hit = this.blocker(car);
     if (!hit) return true;
+    if (hit === 'scene') {
+      const candidate = { ...car };
+      if (this.slideScene(car)) return true;
+      Object.assign(car,candidate);
+    }
     const bodies = this.cars.map(body => ({ ...body })), people = this.pedestrians.map(p => ({ ...p }));
     const shovedBefore = new Set(this.shoved);
     const impact = typeof hit === 'object' ? Math.hypot(car.vx - hit.vx, car.vz - hit.vz) : Math.hypot(car.vx, car.vz);

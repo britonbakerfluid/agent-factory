@@ -43,7 +43,7 @@ function createFloorMark(parent: THREE.Group, canvas: HTMLCanvasElement, onMatch
   const point = new THREE.Vector3();
   return {
     set(spot: { x: number; z: number } | undefined, matchable: boolean, label: string, accepting = false) {
-      ghost.visible = !!spot && accepting;
+      ghost.visible = !!spot && (accepting || matchable);
       if (spot) ghost.position.set(spot.x, .073, spot.z);
       ring.visible = !!spot; hotspot.dataset.matchable = String(matchable || accepting);
       hotspot.dataset.accepting = String(accepting);
@@ -61,7 +61,7 @@ function createFloorMark(parent: THREE.Group, canvas: HTMLCanvasElement, onMatch
       sweep.visible = active && visible && !reducedMarkerMotion.matches;
       sweep.rotation.z = performance.now() / 4800 * Math.PI * 2;
       sweepMaterial.opacity = .16 + pulse * .08;
-      ghost.visible = invitation && ring.visible && visible;
+      ghost.visible = active && ring.visible && visible;
       attention.visible = active && ring.visible && visible;
       if (attention.visible) {
         attention.position.set(ring.position.x, .34, ring.position.z);
@@ -255,7 +255,7 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
         : game.status === 'pending' && game.challengee.ownerId === mine ? `Accept HORSE from ${other!.name}` : describeChallenge(game, mine);
       const playable = horseCanShoot(game, mine) || (game.status === 'pending' && game.challengee.ownerId === mine);
       turnButton.classList.toggle('horse-play', playable && !showFeedback);
-      if (playable && !showFeedback) turnButton.innerHTML = '<span class="horse-play-ball" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#673111" stroke-width="1.3"><path d="M2 12h20M12 2v20M5 4c8 3 12 8 14 16M20 5C12 6 6 12 4 19"/></svg></span><span class="horse-action-label"></span>';
+      if (playable && !showFeedback) turnButton.innerHTML = '<span class="horse-play-ball" aria-hidden="true"><svg viewBox="0 0 24 24" shape-rendering="crispEdges"><path fill="#f78a24" d="M7 1h10v2h4v4h2v10h-2v4h-4v2H7v-2H3v-4H1V7h2V3h4z"/><path fill="#ffb44c" d="M7 1h10v2H7zM3 3h4v4H3zM1 7h2v4H1z"/><path fill="#c75417" d="M21 12h2v5h-2v4h-4v2H7v-2h10v-2h2v-4h2z"/><path fill="#663016" d="M11 1h2v10h10v2H13v10h-2V13H1v-2h10zM5 3h2v4H5zM7 7h2v10H7zM5 17h2v4H5zM17 3h2v4h-2zM15 7h2v10h-2zM17 17h2v4h-2z"/></svg></span><span class="horse-action-label"></span>';
       else turnButton.textContent = showFeedback ? feedback : game.status === 'pending' ? 'invite sent' : horseActive(game) ? `Waiting for ${other!.name}` : text;
       const actionLabel = turnButton.querySelector('.horse-action-label');
       if (actionLabel) actionLabel.textContent = basketball.placingChallenge ? 'confirm challenge' : game.status === 'pending' ? 'accept game' : 'your turn';

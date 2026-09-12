@@ -35,7 +35,9 @@ export function visitorBallFloor(p: BallVector, room: FactoryRoom = 'factory') {
 /** A gentle arc toward the release target, shared by keyboard and pointer shots. */
 export function visitorShotVelocity(start: BallVector, aim: BallVector = VISITOR_BALL_RIM): BallVector {
   const flight = Math.max(Math.sqrt(2 * Math.max(0, aim.y - start.y) / 9.8) + .18,
-    Math.min(.9, .52 + Math.hypot(aim.x - start.x, aim.z - start.z) * .12));
+    Math.min(.9, .52 + Math.hypot(aim.x - start.x, aim.z - start.z) * .12),
+    // Long shots need time to travel without clipping the horizontal velocity.
+    Math.abs(aim.x - start.x) / 10, Math.abs(aim.z - start.z) / 10);
   const limit = (n: number) => Math.max(-10, Math.min(10, n));
   return { x: limit((aim.x - start.x) / flight), y: limit((aim.y - start.y) / flight + 4.9 * flight), z: limit((aim.z - start.z) / flight) };
 }
