@@ -16,3 +16,7 @@
 
 .is-grabbing .agent-details { display:none; }
 .room-staff-label > .agent-name { touch-action:none; }
+
+.agent-label.room-staff-label[data-card-placement="above-body"] > .agent-details {
+  top:auto; bottom:calc(var(--staff-hit-height, 34px) + 12px);
+}

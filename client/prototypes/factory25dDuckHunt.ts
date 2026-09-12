@@ -112,36 +112,6 @@ function pixelTexture(canvas: HTMLCanvasElement, repeatX = 1) {
   return texture;
 }
 
-function duckTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 96;
-  canvas.height = 24;
-  const ctx = canvas.getContext("2d")!;
-  for (let frame = 0; frame < 3; frame++) {
-    const offset = frame * 32;
-    const rect = (color: string, x: number, y: number, w: number, h: number) => {
-      ctx.fillStyle = color;
-      ctx.fillRect(offset + x, y, w, h);
-    };
-    rect("#263839", 5, 10, 19, 9);
-    rect("#263839", 3, 8, 7, 7);
-    rect("#886950", 7, 11, 16, 6);
-    rect("#b39268", 8, 11, 12, 2);
-    rect("#e0d5b6", 19, 9, 4, 7);
-    rect("#1b5848", 21, 4, 7, 8);
-    rect("#347762", 22, 4, 5, 3);
-    rect("#d59a42", 27, 8, 5, 3);
-    rect("#182c30", 25, 6, 1, 1);
-    rect("#e2d9b1", 26, 6, 1, 1);
-    rect("#4b615d", 10, frame === 0 ? 3 : frame === 1 ? 10 : 14, 8, frame === 1 ? 5 : 7);
-    rect("#8fada0", 11, frame === 0 ? 3 : frame === 1 ? 10 : 18, 6, 2);
-    rect("#427b9c", 11, frame === 0 ? 7 : frame === 1 ? 12 : 17, 6, 2);
-    rect("#d19949", 10, 19, 5, 1);
-    rect("#d19949", 16, 18, 4, 1);
-  }
-  return pixelTexture(canvas, 1 / 3);
-}
-
 /** Original pixel reeds: blades with a few seed heads, opaque along the bottom rows. */
 function reedTexture(seed: number, blades: string[], heads: string, density: number) {
   const canvas = document.createElement("canvas");
@@ -219,17 +189,42 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
     return { mesh, texture: layer.texture, sway: layer.sway };
   });
 
-  const texture = duckTexture();
-  const material = new THREE.MeshStandardMaterial({
-    map: texture, alphaTest: 0.1, roughness: 1, emissive: "#283f40", emissiveIntensity: 0.55, side: THREE.DoubleSide,
+  // Solid, flat-shaded pieces use the same simple construction as the room props.
+  const palette = ['#886950', '#bca47a', '#28654f', '#eee1bb', '#d99b3e', '#172827', '#4e6864', '#427b9c'].map(color => {
+    const material = new THREE.MeshStandardMaterial({ color, roughness:1, flatShading:true });
+    disposables.push(material); return material;
   });
-  disposables.push(texture, material);
-  const DUCK_Z = -4.36, DUCK_W = 0.6, DUCK_H = 0.45;
-  type Duck = { mesh: THREE.Mesh; button: HTMLButtonElement; x: number; y: number; vx: number; vy: number; scale: number; turnIn: number; state: 'flying' | 'falling' | 'escaping' | 'gone'; age: number };
+  const cube = new THREE.BoxGeometry(1,1,1); disposables.push(cube);
+  function model() {
+    const mesh = new THREE.Group();
+    const part = (parent: THREE.Group, color: number, x: number,y: number,z: number,w: number,h: number,d: number) => {
+      const block = new THREE.Mesh(cube,palette[color]); block.position.set(x,y,z); block.scale.set(w,h,d); parent.add(block); return block;
+    };
+    part(mesh,0,-.035,0,0,.34,.19,.22);
+    part(mesh,1,-.04,-.055,0,.28,.10,.20);
+    part(mesh,0,.10,.06,0,.14,.20,.17);
+    part(mesh,3,.13,.15,0,.12,.045,.15);
+    part(mesh,2,.15,.235,0,.16,.14,.15);
+    part(mesh,4,.265,.215,0,.12,.045,.11);
+    for (const side of [-1,1]) {
+      part(mesh,5,.19,.26,side*.078,.027,.027,.012);
+      part(mesh,4,-.10,-.115,side*.065,.10,.025,.035);
+    }
+    const tail = part(mesh,6,-.235,.035,0,.13,.055,.16); tail.rotation.z=-.25;
+    const wings = [-1,1].map(side => {
+      const wing = new THREE.Group(); wing.position.set(-.04,.065,side*.07); mesh.add(wing);
+      part(wing,6,-.035,0,side*.12,.23,.045,.26);
+      part(wing,1,-.055,0,side*.27,.19,.035,.09);
+      part(wing,7,-.095,.027,side*.16,.065,.014,.15);
+      return wing;
+    });
+    return {mesh,wings};
+  }
+  const DUCK_Z = -4.05, DUCK_W = 0.66, DUCK_H = 0.64;
+  type Duck = { mesh: THREE.Group; wings: THREE.Group[]; button: HTMLButtonElement; x: number; y: number; vx: number; vy: number; scale: number; turnIn: number; state: 'flying' | 'falling' | 'escaping' | 'gone'; age: number };
   const ducks: Duck[] = Array.from({ length: DUCKS_PER_WAVE }, (_, i) => {
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(DUCK_W, DUCK_H), material);
-    mesh.visible = false;
-    stage.add(mesh); disposables.push(mesh.geometry);
+    const {mesh,wings} = model();
+    mesh.name = `duck-hunt-mallard-${i}`; mesh.visible = false; stage.add(mesh);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "duck-target";
@@ -237,7 +232,7 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
     button.setAttribute("aria-label", `Shoot duck ${i + 1}`);
     button.addEventListener("click", (event) => { event.stopPropagation(); shoot(i); }, listen);
     canvas.parentElement!.append(button);
-    return { mesh, button, x: CENTER_X, y: 0, vx: 0, vy: 0, scale: 0.8, turnIn: 0, state: 'gone', age: 0 };
+    return { mesh, wings, button, x: CENTER_X, y: 0, vx: 0, vy: 0, scale: 0.8, turnIn: 0, state: 'gone', age: 0 };
   });
 
   // Deterministic per wave so a round plays the same way for everyone testing it.
@@ -418,7 +413,7 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
           paint();
         }
       }
-      texture.offset.x = (Math.floor(flightClock * 7) % 3) / 3;
+
       if (stage.visible && !reduced.matches) for (const layer of reedLayers) layer.texture.offset.x = Math.sin(performance.now() / 1300) * layer.sway;
       ducks.forEach((duck, i) => {
         const { mesh, button } = duck;
@@ -426,15 +421,21 @@ export function createDuckHunt(scene: THREE.Scene, canvas: HTMLCanvasElement, op
         mesh.visible = round.phase === 'wave' && duck.state !== 'gone';
         if (mesh.visible) {
           mesh.position.set(duck.x, duck.y, DUCK_Z);
-          mesh.scale.set(direction * duck.scale, duck.scale, 1);
-          mesh.rotation.z = duck.state === 'falling' ? direction * Math.min(duck.age * 2.2, 1.3) : duck.state === 'escaping' ? -direction * 0.35 : 0;
+          mesh.scale.setScalar(duck.scale);
+          // Face travel without mirroring the model. Upward flight pitches the bill up.
+          mesh.rotation.y = direction < 0 ? Math.PI + .25 : -.25;
+          const pitch = Math.atan2(duck.vy, Math.max(.3,Math.abs(duck.vx)));
+          mesh.rotation.z = duck.state === 'falling' ? direction * -Math.min(duck.age * 3,1.5) : direction * THREE.MathUtils.clamp(pitch*.45,-.35,.65);
+          const poses = [-.95,-.35,.5,.95,.35,-.5];
+          const flap = reduced.matches ? .15 : duck.state === 'falling' ? .75 : poses[Math.floor(flightClock*10+i*2)%poses.length];
+          duck.wings.forEach((wing,index) => { wing.rotation.x = (index === 0 ? -1 : 1)*flap; });
         }
         const hidden = !mesh.visible || duck.state !== 'flying' || round.hit.has(i) || !enabled || cameraBlend < 0.99;
         if (button.hidden !== hidden) button.hidden = hidden;
         if (button.hidden) return;
         point.copy(mesh.position).project(camera);
         if (Math.abs(point.x) > 1 || Math.abs(point.y) > 1 || point.z < -1 || point.z > 1) { button.hidden = true; return; }
-        // The hit area is the projected sprite, never smaller than a finger.
+        // The hit area covers the body and wing span, never smaller than a finger.
         edge.set(mesh.position.x + DUCK_W / 2 * duck.scale, mesh.position.y + DUCK_H / 2 * duck.scale, mesh.position.z).project(camera);
         const width = Math.max(36, Math.abs(edge.x - point.x) * canvasWidth);
         const height = Math.max(36, Math.abs(edge.y - point.y) * canvasHeight);

@@ -125,6 +125,7 @@ describe('contribution roster refresh', () => {
 
 // The scene's DOM tests use small EventTarget-based doubles, avoiding a browser dependency.
 class Element extends EventTarget {
+  getContext() { return null; } // Canvas decoration is not rendered by this DOM double.
   className = ''; textContent = ''; hidden = false; id = ''; type = ''; value = 0; max = 0;
   parent?: Element;
   children: Element[] = [];

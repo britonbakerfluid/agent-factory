@@ -21,6 +21,7 @@ export function pickupLanding(point:{x:number;z:number},room:FactoryRoom){
 
 /** Preserve the spring velocity on release and resolve the resulting landing safely. */
 export function pickupReleaseLanding(mesh:THREE.Mesh){
+  if(mesh.userData.pickupDunkRim) { const rim=mesh.userData.pickupDunkRim; return factoryScenePoint(fromFactoryWorld(pickupLanding({x:rim.x,z:rim.z+.55},'factory'))); }
   const landing=mesh.userData.pickupLanding,velocity=mesh.userData.pickupVelocity;
   if(!landing||!velocity)return landing;
   const gravity=GRAB_GRAVITY*(.86/32),up=velocity.y;
@@ -57,18 +58,30 @@ const UNIT=.86/32;
 export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
   const material=mesh.material as THREE.Material,depthTest=material.depthTest,depthWrite=material.depthWrite,transparent=material.transparent,renderOrder=mesh.renderOrder;
   const fold=createPickupFold(mesh,avatar),body={x:0,y:0,vx:0,vy:0};
-  let phase:'idle'|'held'|'falling'|'landing'='idle',last=performance.now(),lifted=false,liftedAt=0;
+  let phase:'idle'|'held'|'falling'|'landing'|'dunking'='idle',last=performance.now(),lifted=false,liftedAt=0;
+  const dunkStart=new THREE.Vector3(),dunkRim=new THREE.Vector3(),baseScale=mesh.scale.clone(); let dunkAt=0;
   let landedAt=0,highFall=false,landingSlide=0;const impactPoint=new THREE.Vector3(),fallHome=new THREE.Vector3();
   const spriteMaterial=material as THREE.MeshStandardMaterial,normalMap=spriteMaterial.map;let heroMap:THREE.CanvasTexture|undefined;
   const planted={x:0,y:0};let heldZ=0;
   const world=new THREE.Vector3(),local=new THREE.Vector3(),home=new THREE.Vector3(),target=new THREE.Vector3();
   const ray=new THREE.Raycaster(),plane=new THREE.Plane(new THREE.Vector3(0,0,1));
-  return {get active(){return phase!=='idle';},get shadowAirborne(){return lifted&&(phase==='held'||phase==='falling');},get stage(){return phase==='held'?(lifted?'lifted':'pulling'):phase;},
+  return {get active(){return phase!=='idle';},get shadowAirborne(){return lifted&&(phase==='held'||phase==='falling'||phase==='dunking');},get stage(){return phase==='held'?(lifted?'lifted':'pulling'):phase;},
     update(camera:THREE.Camera,canvas:HTMLCanvasElement,pointer?:{x:number;y:number}){
       const now=performance.now(),dt=Math.min(.05,Math.max(0,(now-last)/1000));last=now;home.copy(mesh.position);
       if(pointer){
         if(phase!=='held'){mesh.getWorldPosition(world);plane.constant=-world.z;heldZ=mesh.position.z;body.x=mesh.position.x/UNIT;body.y=-mesh.position.y/UNIT;body.vx=body.vy=0;planted.x=body.x;planted.y=body.y;lifted=false;liftedAt=0;mesh.userData.pickupHeight=.18;phase='held';}
-        const rect=canvas.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((pointer.x-rect.left)/rect.width*2-1,1-(pointer.y-rect.top)/rect.height*2),camera);
+        delete mesh.userData.pickupDunkRim;
+        let root:THREE.Object3D=mesh;while(root.parent)root=root.parent;
+        const rimMarker=root.getObjectByName('agent-dunk-rim');
+        const rect=canvas.getBoundingClientRect();
+        if(lifted && (mesh.userData.room??'factory')==='factory' && rimMarker){
+          const rimWorld=rimMarker.getWorldPosition(new THREE.Vector3()),screen=rimWorld.clone().project(camera);
+          const edge=rimWorld.clone().add(new THREE.Vector3(.48,0,0)).project(camera);
+          const radius=Math.max(18,Math.abs(edge.x-screen.x)*rect.width/2);
+          const dx=pointer.x-(rect.left+(screen.x+1)*rect.width/2),dy=pointer.y-(rect.top+(1-screen.y)*rect.height/2);
+          if(Math.abs(dx)<radius && dy>-radius*2 && dy<radius*.7) mesh.userData.pickupDunkRim=mesh.parent!.worldToLocal(rimWorld);
+        }
+        ray.setFromCamera(new THREE.Vector2((pointer.x-rect.left)/rect.width*2-1,1-(pointer.y-rect.top)/rect.height*2),camera);
         if(ray.ray.intersectPlane(plane,target)){
           local.copy(target);mesh.parent!.worldToLocal(local);const pin={x:local.x/UNIT,y:-local.y/UNIT},offset=-fold.base/UNIT;
           const hanging={x:pin.x,y:pin.y+GRAB_REST_LENGTH-offset};
@@ -115,6 +128,12 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
           else fallHome.x=(body.x+body.vx*flight)*UNIT;
           highFall=(mesh.userData.pickupHeight??0)>1||(-body.y*UNIT-fallHome.y)>1;
           phase='falling';
+          if(mesh.userData.pickupDunkRim){
+            dunkRim.copy(mesh.userData.pickupDunkRim);
+            dunkStart.set(body.x*UNIT,-body.y*UNIT,heldZ);
+            dunkAt=now;phase='dunking';highFall=true;landingSlide=0;
+            delete mesh.userData.pickupDunkRim;
+          }
         }
         fold.set(false);mesh.rotation.z=0;
         if(phase==='falling'){
@@ -122,6 +141,22 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
           body.y+=body.vy*dt+.5*GRAB_GRAVITY*dt*dt;body.vy+=GRAB_GRAVITY*dt;
           if(body.y>=-fallHome.y/UNIT&&body.vy>=0){phase=highFall?'landing':'idle';mesh.position.copy(fallHome);impactPoint.copy(fallHome);landedAt=now;}
           else mesh.position.set(body.x*UNIT,-body.y*UNIT,fallHome.z);
+        }
+      }
+      if(phase==='dunking'){
+        const age=(now-dunkAt)/1000,reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const perch=dunkRim.clone().add(new THREE.Vector3(0,.32,0));
+        if(age<.25){const t=1-Math.pow(1-age/.25,3);mesh.position.lerpVectors(dunkStart,perch,t);}
+        else if(age<.6){
+          mesh.position.copy(perch);const t=(age-.25)/.35;
+          mesh.scale.set(baseScale.x*(1-.35*Math.sin(t*Math.PI)),baseScale.y*(1+.15*Math.sin(t*Math.PI)),baseScale.z);
+          mesh.rotation.z=reduced?0:Math.sin(t*Math.PI*4)*.16;
+        }else{
+          const t=Math.min(1,(age-.6)/.65);
+          mesh.position.lerpVectors(perch,fallHome,t*t);
+          mesh.rotation.z=reduced?0:Math.PI*2*t;
+          mesh.scale.copy(baseScale);mesh.scale.x*=1-.35*Math.sin(t*Math.PI);
+          if(t===1){phase='landing';mesh.scale.copy(baseScale);mesh.rotation.z=0;impactPoint.copy(fallHome);landedAt=now;}
         }
       }
       if(phase==='landing'){
@@ -136,11 +171,11 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
       if(phase==='idle'&&heroMap)spriteMaterial.map=normalMap;
       const airborne=phase==='held'&&lifted;material.transparent=phase==='held'?true:transparent;material.depthTest=airborne?false:depthTest;material.depthWrite=airborne?false:depthWrite;mesh.renderOrder=phase==='held'?1000:renderOrder;
       if(phase==='held')mesh.userData.pickupVelocity={x:body.vx*UNIT,y:-body.vy*UNIT};
-      mesh.userData.pickupFalling=phase==='falling';
+      mesh.userData.pickupFalling=phase==='falling'||phase==='dunking';
       mesh.userData.pickupActive=phase!=='idle';
       if(phase==='idle')delete mesh.userData.pickupLanding;
       return phase;
-    },dispose(){delete mesh.userData.pickupActive;spriteMaterial.map=normalMap;heroMap?.dispose();material.transparent=transparent;material.depthTest=depthTest;material.depthWrite=depthWrite;mesh.renderOrder=renderOrder;fold.dispose();}};
+    },dispose(){delete mesh.userData.pickupDunkRim;mesh.scale.copy(baseScale);mesh.rotation.z=0;delete mesh.userData.pickupActive;spriteMaterial.map=normalMap;heroMap?.dispose();material.transparent=transparent;material.depthTest=depthTest;material.depthWrite=depthWrite;mesh.renderOrder=renderOrder;fold.dispose();}};
 }
 
 /** Staff preserve click actions, fall when released, then return to their post. */

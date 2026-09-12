@@ -12,6 +12,7 @@ export function createDrivingControls(canvas: HTMLCanvasElement, actions: { inpu
   const held = new Map<string, string>(), fingers = new Set<number>();
   let drag: { id: number; x: number; y: number; steer: number; throttle: number } | undefined;
   let car: GarageCarId | undefined, enabled = false, previous = '', suppressClickUntil = 0, moved = false;
+  let lastSpace = -Infinity, celebrationUntil = 0;
   let restoreFocus: HTMLElement | null = null;
   // Retain announcements for assistive technology and DOM diagnostics, with
   // no visible HUD, condition banner, buttons or recovery shortcut.
@@ -23,12 +24,13 @@ export function createDrivingControls(canvas: HTMLCanvasElement, actions: { inpu
       throttle: enabled && drag ? drag.throttle : Number(down('up')) - Number(down('down')),
       steer: enabled && drag ? drag.steer : Number(down('right')) - Number(down('left')),
       drift: down('drift') || enabled && fingers.size > 1,
+      ...(enabled && performance.now() < celebrationUntil ? {celebrate:true} : {}),
     };
     const signature = JSON.stringify(input);
     if (force || signature !== previous) { previous = signature; actions.input(input); }
   }
   function stop() {
-    held.clear(); drag = undefined;
+    held.clear(); drag = undefined; lastSpace = -Infinity; celebrationUntil = 0;
     const captured = [...fingers]; fingers.clear();
     for (const id of captured) if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id);
     send(true);
@@ -38,6 +40,11 @@ export function createDrivingControls(canvas: HTMLCanvasElement, actions: { inpu
     if (event.code === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); stop(); actions.leave(); return; }
     const direction = keys[event.code]; if (!direction) return;
     if (event.code === 'Space' && event.target instanceof HTMLElement && event.target.closest('button,summary')) return;
+    if(event.code === 'Space' && !event.repeat) {
+      const now = performance.now();
+      if(now-lastSpace <= 320 && now >= celebrationUntil) { celebrationUntil=now+5000; lastSpace=-Infinity; notice.textContent='Rocket celebration · left and right to twist · five seconds'; }
+      else lastSpace=now;
+    }
     event.preventDefault(); event.stopImmediatePropagation(); held.set(event.code, direction); send();
   }, { ...options, capture: true });
   document.addEventListener('keyup', event => {
@@ -77,6 +84,7 @@ export function createDrivingControls(canvas: HTMLCanvasElement, actions: { inpu
   document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); }, options);
   return {
     dock,
+    tick() { if (celebrationUntil && performance.now() >= celebrationUntil) { celebrationUntil = 0; send(true); } },
     show(next: GarageCarId | undefined) {
       if (next === car) return;
       const entering = !car && !!next; car = next; enabled = !!next;

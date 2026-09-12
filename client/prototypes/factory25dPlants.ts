@@ -5,6 +5,9 @@ import { contactShadow } from "./factory25dContactShadows";
 import { createHouseplantFoliage } from './factory25dHouseplantFoliage';
 
 export function createIndoorPlants(interior: THREE.Group) {
+  const flexible: {group: THREE.Group; foliage: THREE.Group; radius: number}[] = [];
+  const plantPoint = new THREE.Vector3();
+  let lastTime: number | undefined;
   type PlantKind =
     | "broad"
     | "rubber"
@@ -273,7 +276,11 @@ export function createIndoorPlants(interior: THREE.Group) {
         bloom.add(beak);
       }
     }
-    group.userData.plantBatchSavings=batchStaticProp(group);
+    // Keep foliage as a movable assembly while still batching its individual leaves.
+    foliage.removeFromParent();
+    group.userData.plantBatchSavings=batchStaticProp(group)+batchStaticProp(foliage);
+    group.add(foliage);
+    if (!['cactus','succulent','bonsai'].includes(kind)) flexible.push({group,foliage,radius:.52*scale});
     interior.userData.plantBatchSavings=(interior.userData.plantBatchSavings??0)+group.userData.plantBatchSavings;
     group.position.set(x, baseY, z);
     group.scale.setScalar(scale);
@@ -317,7 +324,21 @@ export function createIndoorPlants(interior: THREE.Group) {
       });
       return shelf;
     },
-    // Indoor foliage keeps its authored resting pose; there is no indoor wind.
-    update(_elapsed: number, _reduced: boolean) {},
+    update(elapsed: number, reduced: boolean, people: readonly {x:number; z:number}[] = []) {
+      const dt = lastTime === undefined ? 1/60 : Math.min(.05,Math.max(0,elapsed-lastTime)); lastTime=elapsed;
+      for (const item of flexible) {
+        item.group.getWorldPosition(plantPoint); interior.worldToLocal(plantPoint);
+        let bendX=0,bendZ=0;
+        if (plantPoint.y < .65) for (const person of people) {
+          const dx=plantPoint.x-person.x,dz=plantPoint.z-person.z, distance=Math.hypot(dx,dz);
+          if(distance>=item.radius) continue;
+          const force=(1-distance/item.radius)*(reduced ? .14 : .38), norm=Math.max(distance,.08);
+          bendX+=dz/norm*force; bendZ-=dx/norm*force;
+        }
+        const blend=1-Math.exp(-dt*(bendX||bendZ ? 14 : 5));
+        item.foliage.rotation.x=THREE.MathUtils.lerp(item.foliage.rotation.x,THREE.MathUtils.clamp(bendX,-.42,.42),blend);
+        item.foliage.rotation.z=THREE.MathUtils.lerp(item.foliage.rotation.z,THREE.MathUtils.clamp(bendZ,-.42,.42),blend);
+      }
+    },
   };
 }

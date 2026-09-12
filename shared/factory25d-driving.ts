@@ -2,13 +2,14 @@ import { GARAGE_CAR_BAYS, GARAGE_CAR_IDS, GARAGE_CAR_YAW, GARAGE_RAMP, garageRam
 import { planGarageParking } from './factory25d-parking.js';
 import { clearFactorySegment, FACTORY_OBSTACLES, GARAGE_WORLD_Z } from './factory25d-layout.js';
 
-export type GarageDriveInput = { throttle: number; steer: number; drift: boolean };
+export type GarageDriveInput = { throttle: number; steer: number; drift: boolean; celebrate?: boolean };
 export type GarageTimeJump = { id: number; startedAt: number; arriveAt: number; arrived: boolean; x: number; z: number; yaw: number };
 export type GarageDriveCar = {
   id: GarageCarId; x: number; z: number; yaw: number; vx: number; vz: number;
   steer: number; slip: number; throttle: number; damage: number;
   mode: 'parked' | 'driving' | 'returning' | 'donut';
   hoverHeight?: number;
+  celebration?: { startedAt: number; turn: number };
   timeJump?: GarageTimeJump;
   driverVisitorId?: string; driverSessionId?: string;
 };
@@ -56,7 +57,7 @@ export const GARAGE_DRIVE_OBSTACLES: readonly Box[] = FACTORY_OBSTACLES.filter(o
 export function validGarageDriveInput(value: unknown): value is GarageDriveInput {
   if (!value || typeof value !== 'object') return false;
   const v = value as GarageDriveInput;
-  return Number.isFinite(v.throttle) && Math.abs(v.throttle) <= 1 && Number.isFinite(v.steer) && Math.abs(v.steer) <= 1 && typeof v.drift === 'boolean';
+  return Number.isFinite(v.throttle) && Math.abs(v.throttle) <= 1 && Number.isFinite(v.steer) && Math.abs(v.steer) <= 1 && typeof v.drift === 'boolean' && (v.celebrate === undefined || typeof v.celebrate === 'boolean');
 }
 export function garageCarHull(car: Pick<GarageDriveCar, 'id' | 'x' | 'z' | 'yaw' | 'hoverHeight'>, margin = .14): Point[] {
   const p = GARAGE_DRIVE_PROFILES[car.id];
@@ -116,6 +117,7 @@ export function garageCarBlocksSegment(car: GarageDriveCar, from: Point, to: Poi
 export class GarageDrivingSimulation {
   readonly cars: GarageDriveCar[] = GARAGE_CAR_IDS.map(id => ({ id, ...GARAGE_CAR_BAYS[id], yaw: GARAGE_CAR_YAW, vx: 0, vz: 0, steer: 0, slip: 0, throttle: 0, damage: 0, mode: 'parked' }));
   readonly marks: GarageTireMark[] = [];
+  private celebrationLatch = new Set<GarageCarId>();
   private inputs = new Map<GarageCarId, GarageDriveInput>();
   private routes = new Map<GarageCarId, { points: Pose[]; index: number }>();
   private parkingSpeeds = new Map<GarageCarId, number>();
@@ -148,6 +150,7 @@ export class GarageDrivingSimulation {
   release(id: GarageCarId) {
     const car = this.car(id); if (!car || car.mode === 'parked') return;
     if (car.mode !== 'returning') { this.returnStalls.delete(id); this.routes.delete(id); this.parkingSpeeds.set(id, 0); }
+    delete car.celebration; this.celebrationLatch.delete(id);
     car.mode = 'returning'; car.vx = car.vz = car.throttle = car.steer = car.slip = 0;
     this.inputs.delete(id); this.tires.delete(id); this.donuts.delete(id);
   }
@@ -159,6 +162,7 @@ export class GarageDrivingSimulation {
     this.park(car); return true;
   }
   private park(car: GarageDriveCar) {
+    delete car.celebration; this.celebrationLatch.delete(car.id);
     Object.assign(car, GARAGE_CAR_BAYS[car.id], { yaw: GARAGE_CAR_YAW, vx: 0, vz: 0, steer: 0, slip: 0, throttle: 0, hoverHeight: 0, mode: 'parked' });
     delete car.driverVisitorId; delete car.driverSessionId;
     this.routes.delete(car.id); this.parkingSpeeds.delete(car.id); this.inputs.delete(car.id); this.tires.delete(car.id); this.donuts.delete(car.id);
@@ -227,6 +231,19 @@ export class GarageDrivingSimulation {
     while (this.marks.length > GARAGE_MAX_MARKS || this.marks[0] && now - this.marks[0].createdAt > GARAGE_MARK_LIFETIME_MS) this.marks.shift();
   }
   private driveStep(car: GarageDriveCar, input: GarageDriveInput, dt: number, now: number) {
+    if (!input.celebrate) this.celebrationLatch.delete(car.id);
+    if (input.celebrate && !this.celebrationLatch.has(car.id) && !car.celebration) {
+      this.celebrationLatch.add(car.id); car.celebration = {startedAt:now,turn:0};
+    }
+    if (car.celebration) {
+      if (now-car.celebration.startedAt < 5000) {
+        // MVP celebration stays anchored; throttle never leaks into driving physics.
+        car.vx=car.vz=car.slip=0; car.throttle=0; car.steer=input.steer;
+        if(now-car.celebration.startedAt < 4200) car.celebration = {...car.celebration,turn:car.celebration.turn+input.steer*dt*2.6};
+        return;
+      }
+      delete car.celebration;
+    }
     const p = GARAGE_DRIVE_PROFILES[car.id], before = { ...car }, fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
     let forward = car.vx * fx + car.vz * fz, sideways = car.vx * fz - car.vz * fx;
     const autonomous = car.mode === 'donut';
@@ -312,6 +329,7 @@ export class GarageDrivingSimulation {
       if (!hit) return true;
       if (hit === 'scene') return false;
       if (hit === 'pedestrian') { if (!this.pushPedestrians(car)) return false; continue; }
+      if (hit.celebration) return false;
       const separation = contact(garageCarHull(car), garageCarHull(hit));
       if (!separation || separation.depth > .4) return false;
       const { x, z, depth } = separation;

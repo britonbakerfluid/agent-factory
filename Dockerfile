@@ -19,6 +19,8 @@ COPY tsconfig.json tsconfig.server.json tsconfig.client.json vite.config.ts ./
 COPY server/ ./server/
 COPY client/ ./client/
 COPY shared/ ./shared/
+# Release artwork imported by the client bundle.
+COPY docs/evidence/changelog/ ./docs/evidence/changelog/
 
 RUN pnpm run build
 

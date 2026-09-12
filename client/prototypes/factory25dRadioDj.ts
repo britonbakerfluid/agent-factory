@@ -10,6 +10,7 @@ import './factory25dRoomStaff.css';
 
 const poses = ['idle', 'hold_left'];
 const SCALE = .86;
+const BOOTH_RISER = .24;
 
 /** A room-staff character, never an agent session or a source of activity credit. */
 export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, onClick: () => void) {
@@ -50,7 +51,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
     width: .22, depth: .12, spread: .065, opacity: .3, round: true });
   const label = createNameTag('lounge DJ', false, canvas.parentElement!);
   label.setAvatar(avatar);
-  label.element.classList.add('room-staff-label'); label.element.dataset.roomStaff = 'lounge DJ';
+  label.element.classList.add('room-staff-label'); label.element.dataset.roomStaff = 'lounge DJ'; label.element.dataset.cardPlacement = 'above-body';
   label.setDetails('lounge DJ', 'keeping the lounge music flowing', 'room staff');
   const button = label.element.querySelector('button')!;
   const pickup=createStaffPickup(mesh,button,canvas,avatar);
@@ -76,7 +77,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
       // A brief one-pixel head nod every few seconds; shoes never bob off the floor.
       const frame = !reduced && !choosing && entryId !== undefined && (now % 4400) > 3820 ? 3 : 0;
       setAvatarTextureFrame(texture, row, frame, avatarEyePose(now / 1000, 121, choosing ? 'attentive' : 'relaxed', reduced));
-      mesh.position.copy(point); mesh.position.y += (sheet.feet[row][frame] / 32 - .5) * SCALE + .004;
+      mesh.position.copy(point); mesh.position.y += BOOTH_RISER + (sheet.feet[row][frame] / 32 - .5) * SCALE + .004;
       feet.set(0, (.5 - sheet.feet[row][frame] / 32) * SCALE, 0);
       mesh.visible = shadow.visible = visible;
       parent.updateWorldMatrix(true, false); parent.localToWorld(worldPoint.copy(point));
@@ -86,7 +87,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
       if(pickup.busy&&!pickup.shadowAirborne){shadow.position.x=mesh.position.x;shadow.position.z=mesh.position.z;}
       label.update(mesh, worldPoint.y, camera, canvas, visible, undefined, feet);
       if (visible) {
-        corner.set(point.x - .25, point.y, point.z); top.set(point.x + .25, point.y + .71, point.z);
+        corner.set(point.x - .25, point.y + BOOTH_RISER, point.z); top.set(point.x + .25, point.y + BOOTH_RISER + .71, point.z);
         parent.localToWorld(corner); parent.localToWorld(top); corner.project(camera); top.project(camera);
         label.element.style.setProperty('--staff-hit-width', `${Math.max(16, Math.abs(top.x - corner.x) * canvas.clientWidth / 2)}px`);
         label.element.style.setProperty('--staff-hit-height', `${Math.max(20, Math.abs(top.y - corner.y) * canvas.clientHeight / 2)}px`);

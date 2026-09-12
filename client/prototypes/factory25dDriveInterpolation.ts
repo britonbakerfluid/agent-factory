@@ -24,7 +24,10 @@ export class GarageDriveInterpolation {
       if (previous?.timeJump?.id !== car.timeJump?.id || previous?.timeJump?.arrived !== car.timeJump?.arrived) return { ...car };
       if (!previous || Math.hypot(car.x - previous.x, car.z - previous.z) > 3) return { ...car };
       const yawDelta = Math.atan2(Math.sin(car.yaw - previous.yaw), Math.cos(car.yaw - previous.yaw));
-      return { ...car, x: previous.x + (car.x - previous.x) * t, z: previous.z + (car.z - previous.z) * t,
+      const celebration = car.celebration && previous.celebration?.startedAt === car.celebration.startedAt
+        ? { ...car.celebration, turn: previous.celebration.turn + (car.celebration.turn - previous.celebration.turn) * t }
+        : car.celebration;
+      return { ...car, celebration, x: previous.x + (car.x - previous.x) * t, z: previous.z + (car.z - previous.z) * t,
         yaw: previous.yaw + yawDelta * t, vx: previous.vx + (car.vx - previous.vx) * t, vz: previous.vz + (car.vz - previous.vz) * t,
         steer: previous.steer + (car.steer - previous.steer) * t,
         hoverHeight: (previous.hoverHeight ?? 0) + ((car.hoverHeight ?? 0) - (previous.hoverHeight ?? 0)) * t };

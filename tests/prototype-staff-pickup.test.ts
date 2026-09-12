@@ -168,3 +168,21 @@ it('reaches the frozen release destination without a backward landing snap',()=>
  }
  motion.dispose();f.pickup.dispose();
 });
+
+it('squeezes through the hoop on release and restores the avatar after landing',()=>{
+ const f=fixture();
+ const motion=createPickupMotion(f.mesh,DEFAULT_AVATAR);
+ const canvas={getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})} as HTMLCanvasElement;
+ const camera=new THREE.OrthographicCamera(-2,2,2,-2,.1,30);camera.position.z=10;camera.updateMatrixWorld();
+ let now=100;vi.spyOn(performance,'now').mockImplementation(()=>now);
+ motion.update(camera,canvas,{x:200,y:50});
+ f.mesh.userData.pickupDunkRim=new THREE.Vector3(0,1,0);
+ f.mesh.userData.pickupLanding=pickupReleaseLanding(f.mesh);
+ f.mesh.position.set(0,0,0);now=120;motion.update(camera,canvas);
+ expect(motion.stage).toBe('dunking');expect(f.mesh.userData.pickupActive).toBe(true);
+ now=520;f.mesh.position.set(0,0,0);motion.update(camera,canvas);
+ expect(f.mesh.scale.x).toBeLessThan(1);
+ for(now=540;now<=2400;now+=20){f.mesh.position.set(0,0,0);motion.update(camera,canvas);}
+ expect(motion.active).toBe(false);expect(f.mesh.scale.toArray()).toEqual([1,1,1]);expect(f.mesh.rotation.z).toBe(0);
+ motion.dispose();f.pickup.dispose();
+});

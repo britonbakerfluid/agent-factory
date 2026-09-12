@@ -115,7 +115,9 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
   contributions.append(total, progress, nextLevel, provenance);
   const tickets = document.createElement('small'); tickets.className = 'agent-ticket-total'; tickets.hidden = true;
   const thoughtBody = document.createElement('div'); thoughtBody.className = 'agent-thought-body';
-  thoughtBody.append(heading, activity, source, contributions, tickets); details.append(thoughtBody);
+  const cardBackdrop = document.createElement('canvas'); cardBackdrop.className = 'agent-card-backdrop'; cardBackdrop.setAttribute('aria-hidden','true');
+  const backdropInk = cardBackdrop.getContext('2d'); let sampledAt = -Infinity;
+  thoughtBody.append(cardBackdrop, heading, activity, source, contributions, tickets); details.append(thoughtBody);
   details.hidden = true;
   element.append(button, details);
   parent.append(element);
@@ -237,7 +239,7 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
         '--detail-shift',
         `${Math.max(0, 122 - labelX) - Math.max(0, labelX + 122 - canvas.clientWidth)}px`,
       );
-      details.dataset.above = String(y + (contributions.hidden ? 150 : 265) > canvas.clientHeight);
+      details.dataset.above = String(element.dataset.cardPlacement === 'above-body' || y + (contributions.hidden ? 150 : 265) > canvas.clientHeight);
       // Phone rooms can be shorter than a full contribution card. Keep the
       // existing popup inside the clipped scene, scrolling only if necessary.
       if (!details.hidden) {
@@ -246,6 +248,17 @@ export function createNameTag(name: string, working: boolean, parent: HTMLElemen
         const panel = details.getBoundingClientRect(), frame = canvas.getBoundingClientRect();
         const shift = Math.max(frame.top + 4 - panel.top, Math.min(0, frame.bottom - 4 - panel.bottom));
         details.style.setProperty('--detail-y', `${Math.round(shift)}px`);
+        // Sample only an open card, at coarse resolution. No full-scene blur pass.
+        if (backdropInk && performance.now() - sampledAt > 200) {
+          sampledAt = performance.now();
+          const rect = thoughtBody.getBoundingClientRect();
+          const width = Math.max(1,Math.ceil(rect.width/8)), height = Math.max(1,Math.ceil(rect.height/8));
+          if (cardBackdrop.width !== width || cardBackdrop.height !== height) { cardBackdrop.width=width; cardBackdrop.height=height; }
+          const sx=canvas.width/frame.width, sy=canvas.height/frame.height;
+          backdropInk.imageSmoothingEnabled=true;
+          backdropInk.drawImage(canvas,(rect.left-frame.left)*sx,(rect.top-frame.top)*sy,rect.width*sx,rect.height*sy,0,0,width,height);
+        }
+
       }
     },
   };

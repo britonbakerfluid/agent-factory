@@ -19,10 +19,19 @@ type Principal = { ownerId: string; username: string } | undefined;
 /** A chalk ring on the floor where the standing shot was made, with a hit target to match it from. */
 function createFloorMark(parent: THREE.Group, canvas: HTMLCanvasElement, onMatch: () => void) {
   const ring = createBasketballFloorMarker(parent); ring.name = 'horse-floor-mark';
+  const sweepMaterial = ring.material.clone(); sweepMaterial.color.set('#ffe3a0');
+  const sweep = new THREE.Mesh(new THREE.RingGeometry(.228, .252, 8, 1, 0, Math.PI / 3), sweepMaterial);
+  sweep.name = 'horse-ring-highlight'; sweep.position.z = .001; sweep.renderOrder = 2; ring.add(sweep);
+  // Share the ring material so the glyph has exactly the same color/opacity pulse.
+  const attention = new THREE.Group(); attention.name = 'horse-turn-exclamation'; attention.visible = false;
+  const stem = new THREE.Mesh(new THREE.PlaneGeometry(.045, .13), ring.material);
+  const dot = new THREE.Mesh(new THREE.PlaneGeometry(.045, .045), ring.material);
+  stem.position.y = .055; dot.position.y = -.06; attention.add(stem, dot); parent.add(attention);
+  const parentRotation = new THREE.Quaternion(), cameraRotation = new THREE.Quaternion();
   const ghost = miniBall(parent); ghost.visible = false;
   const reducedMarkerMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const markerWarm = new THREE.Color('#f3a644'), markerBright = new THREE.Color('#ffd16c'), markerNeutral = new THREE.Color('#f1efe4');
-  ghost.traverse(object => { if (object instanceof THREE.Mesh) { object.castShadow = false; for (const material of Array.isArray(object.material) ? object.material : [object.material]) { material.transparent = true; material.opacity = .35; material.depthWrite = false; } } });
+  ghost.traverse(object => { if (object instanceof THREE.Mesh) { object.castShadow = false; for (const material of Array.isArray(object.material) ? object.material : [object.material]) { material.transparent = false; material.opacity = 1; material.depthWrite = true; } } });
   const hotspot = document.createElement('button'); hotspot.type = 'button'; hotspot.className = 'horse-spot-hotspot'; hotspot.hidden = true;
   hotspot.innerHTML = '<span class="horse-accept-thought" aria-hidden="true"><span class="factory-thought-body">accept game</span><span class="factory-thought-dot dot-0"></span><span class="factory-thought-dot dot-1"></span></span>';
   hotspot.addEventListener('click', onMatch); canvas.parentElement!.append(hotspot);
@@ -49,14 +58,24 @@ function createFloorMark(parent: THREE.Group, canvas: HTMLCanvasElement, onMatch
       ring.material.color.copy(active ? markerWarm : markerNeutral);
       if (active) ring.material.color.lerp(markerBright, pulse);
       ring.material.opacity = active ? .5 + pulse * .22 : .55;
+      sweep.visible = active && visible && !reducedMarkerMotion.matches;
+      sweep.rotation.z = performance.now() / 4800 * Math.PI * 2;
+      sweepMaterial.opacity = .16 + pulse * .08;
       ghost.visible = invitation && ring.visible && visible;
+      attention.visible = active && ring.visible && visible;
+      if (attention.visible) {
+        attention.position.set(ring.position.x, .34, ring.position.z);
+        attention.scale.setScalar(.94 + pulse * .06);
+        parent.getWorldQuaternion(parentRotation); camera.getWorldQuaternion(cameraRotation);
+        attention.quaternion.copy(parentRotation.invert().multiply(cameraRotation));
+      }
       if (!ring.visible || !visible || hotspot.dataset.matchable !== 'true') { if (!hotspot.hidden) hotspot.hidden = true; return; }
       parent.localToWorld(point.copy(ring.position)).project(camera);
       const hidden = point.z < -1 || point.z > 1 || Math.abs(point.x) > 1.05 || Math.abs(point.y) > 1.05;
       if (hotspot.hidden !== hidden) hotspot.hidden = hidden;
       if (!hotspot.hidden) Object.assign(hotspot.style, { left: `${(point.x + 1) * canvasWidth / 2 - 22}px`, top: `${(1 - point.y) * canvasHeight / 2 - 22}px` });
     },
-    dispose() { canvasSize.disconnect(); ghost.removeFromParent(); ghost.traverse(object => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose(); } }); ring.removeFromParent(); ring.geometry.dispose(); ring.material.dispose(); hotspot.remove(); },
+    dispose() { canvasSize.disconnect(); sweep.geometry.dispose(); sweepMaterial.dispose(); attention.removeFromParent(); stem.geometry.dispose(); dot.geometry.dispose(); ghost.removeFromParent(); ghost.traverse(object => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose(); } }); ring.removeFromParent(); ring.geometry.dispose(); ring.material.dispose(); hotspot.remove(); },
   };
 }
 
@@ -326,6 +345,13 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
           turnButton.style.setProperty('--replay-progress', `${Math.min(100, (replay.elapsed + replay.accumulator) / replay.endAt * 100)}%`);
           if (replay.elapsed >= replay.endAt) finishReplay(true);
         }
+      }
+      // Entering basketball is already the player's intent to play. Arm a ready
+      // turn here, while leaving invitations and people elsewhere in the room alone.
+      if (visible && connected && basketball.shooting && !basketball.shotInFlight
+        && !basketball.armedShot && !basketball.placingChallenge && !replay && !playing && !startSpot) {
+        const game = focus(), mine = me();
+        if (game && mine && horseCanShoot(game, mine)) beginTurn(game);
       }
       updatePicker();
       if (acceptedSpot) {
