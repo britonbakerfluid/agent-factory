@@ -198,6 +198,8 @@ export class GrabManager {
     }
   }
 
+  owns(socket: WebSocket, sessionId: string): boolean { return this.bySocket.get(socket)?.sessionId === sessionId; }
+
   activeGrabs(): GrabState[] {
     return Array.from(this.byTarget.values()).map(lease => this.toState(lease));
   }

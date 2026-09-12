@@ -259,6 +259,7 @@ export interface ChatMessage {
 
 // === WebSocket Messages: Server -> Browser ===
 export type WSMessageToClient =
+  | import('./pickup-motion.js').PickupMessage
   | import('./room-props.js').RoomPropsState
   | import('./room-props.js').RoomPropResult
   | import('./lounge-radio.js').RadioState
@@ -291,6 +292,7 @@ export type GlobalEffectType = 'vortex';
 
 // === WebSocket Messages: Browser -> Server ===
 export type WSMessageToServer =
+  | import('./pickup-motion.js').PickupRequest
   | import('./room-props.js').RoomPropRequest
   | import('./lounge-radio.js').RadioRequest
   | import('./factory25d-driving.js').GarageDriveRequest

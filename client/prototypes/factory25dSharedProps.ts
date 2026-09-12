@@ -6,8 +6,9 @@ import { factoryHost, isControlPreview, onFactoryConnection, onFactoryMessage, s
 type PropAction = { action: 'light'; id: string; on: boolean } | { action: 'dispense' };
 export interface SharedPropsConnection {
   readonly state: RoomPropsState | undefined;
+  readonly bodiesRevision: number;
   now(): number;
-  send(action: PropAction, result?: (success: boolean) => void): boolean;
+  send(action: PropAction, result?: (success: boolean, error?: string) => void): boolean;
   sampleBodies(): readonly VendingCanBody[];
   cleanup(): RoomPropsState['cleanup'] | undefined;
   dispose(): void;
@@ -20,10 +21,27 @@ export class RoomPropsView {
   private receivedAt = 0;
   private bodies = new Map<number, VendingCanBody>();
   private quaternion = new THREE.Quaternion();
+  private position = new THREE.Vector3();
+  private bodyPrevious = new Map<number, RoomPropsState['bodies'][number]>();
+  private bodyCurrent: RoomPropsState['bodies'] = [];
+  private bodyReceivedAt = 0;
+  private bodySpan = 0;
+  private sampledBlend = -1;
+  private sampled: VendingCanBody[] = [];
+  bodiesRevision = 0;
   constructor(private clock = () => performance.now()) {}
   push(state: RoomPropsState) {
     if (this.state?.epoch === state.epoch && (state.revision < this.state.revision || state.serverTime < this.state.serverTime)) return;
-    this.previous = this.state?.epoch === state.epoch ? this.state : undefined;
+    const sameEpoch = this.state?.epoch === state.epoch;
+    // Lights and carried snacks keep publishing after the pile sleeps. Those
+    // snapshots must not restart its interpolation or upload identical matrices.
+    if (!sameEpoch || JSON.stringify(state.bodies) !== JSON.stringify(this.bodyCurrent)) {
+      this.bodyPrevious = new Map(sameEpoch ? this.bodyCurrent.map(body => [body.id, body]) : []);
+      this.bodyCurrent = state.bodies;
+      this.bodySpan = sameEpoch && this.state ? state.serverTime - this.state.serverTime : 0;
+      this.bodyReceivedAt = this.clock(); this.sampledBlend = -1;
+    }
+    this.previous = sameEpoch ? this.state : undefined;
     this.state = state; this.receivedAt = this.clock();
   }
   now() { return this.state ? this.state.serverTime + Math.min(500, Math.max(0, this.clock() - this.receivedAt)) : Date.now(); }
@@ -32,8 +50,12 @@ export class RoomPropsView {
     return span > 0 && span <= 250 ? Math.min(1, Math.max(0, this.clock() - this.receivedAt) / span) : 1;
   }
   sampleBodies() {
-    const current = this.state?.bodies ?? [], blend = this.blend();
-    const old = new Map(this.previous?.bodies.map(body => [body.id, body]));
+    const current = this.bodyCurrent;
+    const blend = this.bodySpan > 0 && this.bodySpan <= 250
+      ? Math.min(1, Math.max(0, this.clock() - this.bodyReceivedAt) / this.bodySpan) : 1;
+    if (blend === this.sampledBlend) return this.sampled;
+    this.sampledBlend = blend; this.bodiesRevision++;
+    const old = this.bodyPrevious;
     const seen = new Set<number>();
     for (const value of current) {
       seen.add(value.id);
@@ -46,13 +68,14 @@ export class RoomPropsView {
       const before = old.get(value.id);
       body.position.fromArray(value.position); body.quaternion.fromArray(value.quaternion).normalize();
       if (before && blend < 1) {
-        body.position.multiplyScalar(blend).addScaledVector(new THREE.Vector3().fromArray(before.position), 1 - blend);
+        body.position.multiplyScalar(blend).addScaledVector(this.position.fromArray(before.position), 1 - blend);
         body.quaternion.slerp(this.quaternion.fromArray(before.quaternion).normalize(), 1 - blend);
       }
       body.velocity.fromArray(value.velocity); body.sleeping = value.sleeping; body.supported = value.supported;
     }
     for (const id of this.bodies.keys()) if (!seen.has(id)) this.bodies.delete(id);
-    return [...this.bodies.values()];
+    this.sampled = [...this.bodies.values()];
+    return this.sampled;
   }
   cleanup() {
     const value = this.state?.cleanup; if (!value) return;
@@ -66,12 +89,12 @@ export function createSharedProps(): SharedPropsConnection | undefined {
   // The isolated playground still supports props without a server and never writes to the live feed.
   if (isControlPreview() || factoryHost() !== location.origin) return;
   const view = new RoomPropsView();
-  const pending = new Map<string, { callback?: (success: boolean) => void; timer: ReturnType<typeof setTimeout> }>();
+  const pending = new Map<string, { callback?: (success: boolean, error?: string) => void; timer: ReturnType<typeof setTimeout> }>();
   const stopMessages = onFactoryMessage(message => {
     if (message.type === 'room_props_state') view.push(message);
     if (message.type === 'room_prop_result') {
       const request = pending.get(message.requestId); if (!request) return;
-      clearTimeout(request.timer); pending.delete(message.requestId); request.callback?.(message.success);
+      clearTimeout(request.timer); pending.delete(message.requestId); request.callback?.(message.success, message.error);
     }
   });
   const clearPending = () => {
@@ -80,7 +103,7 @@ export function createSharedProps(): SharedPropsConnection | undefined {
   };
   const stopConnection = onFactoryConnection(connected => { if (!connected) clearPending(); });
   return {
-    get state() { return view.state; }, now: () => view.now(), sampleBodies: () => view.sampleBodies(), cleanup: () => view.cleanup(),
+    get state() { return view.state; }, get bodiesRevision() { return view.bodiesRevision; }, now: () => view.now(), sampleBodies: () => view.sampleBodies(), cleanup: () => view.cleanup(),
     send(action, callback) {
       if (!view.state || pending.size >= 32) return false;
       const requestId = crypto.randomUUID();

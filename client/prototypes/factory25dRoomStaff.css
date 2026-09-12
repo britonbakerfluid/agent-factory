@@ -24,3 +24,6 @@
 .room-staff-label .agent-detail-heading .factory-portrait { --ui-pixel:2px; --portrait-size:40px; width:40px; height:40px; flex:0 0 40px; background:#3a5849; overflow:hidden; }
 .room-staff-label .staff-identity { display:flex; flex-direction:column; justify-content:center; gap:2px; min-width:0; }
 .room-staff-label .staff-job { color:#aebbb5; font-size:11px; line-height:16px; }
+
+/* The DJ's body owns drag gestures; the deck button remains clickable below him. */
+.agent-label.room-staff-label[data-room-staff="lounge DJ"] { z-index:13; }

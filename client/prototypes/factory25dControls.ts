@@ -1,3 +1,5 @@
+import { sharedPickupFor } from './factory25dSharedPickup';
+import { createSharedPickupVisual } from './factory25dSharedPickupVisual';
 import { savedVolume, rememberVolume } from './factory25dVolumeMemory';
 import { pixelIcon } from './factory25dPixelIcons';
 import { createIslandTransitions } from './factory25dIslandTransitions';
@@ -220,6 +222,15 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   const stationPicker = panel.querySelector<HTMLSelectElement>('.factory-station')!;
   const placeButton = panel.querySelector<HTMLButtonElement>('.factory-place')!;
   for (const [index, station] of WORKSTATIONS.entries()) { const option = document.createElement('option'); option.value = String(index); option.textContent = `${station.room === 'factory' ? 'indoors' : station.room} · ${station.label}${station.id === MINI_WORKSTATION_ID ? '' : ` ${Number(station.id.split('-').at(-1)) + 1}`}`; stationPicker.add(option); }
+  const sharedPickup=sharedPickupFor(canvas);
+  const sharedVisuals=new Map<string,ReturnType<typeof createSharedPickupVisual>>();
+  function pickupVisual(id:string){
+    const entry=agents.entries.get(id);if(!entry||!sharedPickup)return;
+    let visual=sharedVisuals.get(id);
+    if(visual&&visual.mesh!==entry.mesh){visual.dispose();visual=undefined;}
+    if(!visual){visual=createSharedPickupVisual(entry.mesh,entry.session.avatar??DEFAULT_AVATAR,`agent:${id}`,sharedPickup);sharedVisuals.set(id,visual);}
+    return visual;
+  }
   const held = new Map<string, Position>();
   const pickupMotions=new Map<string,ReturnType<typeof createPickupMotion>>(),heldScreen=new Map<string,{x:number;y:number}>();
   const pickupFacing=new Map<string,THREE.Vector2>();
@@ -241,7 +252,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       get isVortexActive() { return data.world?.events.some(event => event.effect === 'vortex' && event.expiresAt > Date.now()) ?? false; },
       resolveGrabTarget(object) { const id = (object as THREE.Object3D).userData.sessionId; return id ? { sessionId: id } : null; },
       hasGrabTarget: target => agents.entries.has(target.sessionId),
-      beginGrab(target, pointer) { const entry=agents.entries.get(target.sessionId);if(entry)pickupFacing.set(target.sessionId,entry.texture.offset.clone());held.set(target.sessionId, pointer);heldScreen.set(target.sessionId,{...lastGrabScreen}); return true; },
+      beginGrab(target, pointer) { pickupVisual(target.sessionId)?.begin();const entry=agents.entries.get(target.sessionId);if(entry)pickupFacing.set(target.sessionId,entry.texture.offset.clone());held.set(target.sessionId, pointer);heldScreen.set(target.sessionId,{...lastGrabScreen}); return true; },
       applyRemoteGrab: (target, pointer) => { held.set(target.sessionId, pointer);heldScreen.delete(target.sessionId); },
       moveGrab: (target, pointer) => { held.set(target.sessionId, pointer);heldScreen.set(target.sessionId,{...lastGrabScreen}); },
       releaseGrab: target => { held.delete(target.sessionId);heldScreen.delete(target.sessionId); },
@@ -546,6 +557,7 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
   document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); }, options);
   const heartbeat = setInterval(() => { if (document.hidden || !movementAvailable()) stop(); else state.heartbeat(); }, 500);
   const stopMessages = onFactoryMessage(message => {
+    if(message.type==='pickup_state'||message.type==='pickup_result'||message.type==='room_props_state'||message.type==='room_prop_result')return;
     if (message.type === 'grab_result' && placement && message.sessionId === placement.sessionId) {
       if (message.success && message.action === 'start') sendFactoryCommand({ type: 'grab_end', ...placement });
       else { if (!message.success) state.error = message.error || 'That station is unavailable.'; else visit(WORKSTATIONS[placement.workstationSlot].room); placement = undefined; }
@@ -715,22 +727,37 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
       grab.update();
       for (const [id, pointer] of held) {
         const entry = agents.entries.get(id); if (!entry) continue;
+        if(sharedPickup&&!pickupVisual(id)?.owns())continue;
         if(!pickupMotions.has(id))pickupMotions.set(id,createPickupMotion(entry.mesh,entry.session.avatar??DEFAULT_AVATAR));
         if(!heldScreen.has(id)){
           const point=fromFactoryWorld(pointer),projected=new THREE.Vector3(point.x,.9,point.z).project(camera()),rect=canvas.getBoundingClientRect();
           heldScreen.set(id,{x:rect.left+(projected.x+1)*rect.width/2,y:rect.top+(1-projected.y)*rect.height/2});
         }
       }
+      // Shared poses are delivered even after the grab lease ends, through the
+      // throw/hoop animation and landing. Late joiners enter at the current pose.
+      if(sharedPickup)for(const id of new Set([...sharedVisuals.keys(),...Array.from(sharedPickup.targets()).filter(id=>id.startsWith('agent:')).map(id=>id.slice(6))])){
+        const entry=agents.entries.get(id);if(!entry)continue;
+        const visual=pickupVisual(id)!;visual.rememberHome();
+        if(visual.applyRemote()){
+          const motion=pickupMotions.get(id);if(motion){motion.dispose();pickupMotions.delete(id);visual.applyRemote();}
+          updatePickupShadow(entry.mesh,entry.shadow,camera(),entry.mesh.userData.pickupRemoteAirborne,entry.labelFeet);
+          entry.label.element.hidden=true;
+        }
+      }
       for(const [id,motion] of pickupMotions){
         if(!agents.entries.has(id)){motion.dispose();pickupMotions.delete(id);pickupFacing.delete(id);continue;}
+        if(sharedPickup&&!sharedVisuals.get(id)?.owns()){motion.dispose();pickupMotions.delete(id);held.delete(id);heldScreen.delete(id);if(grab.holding?.sessionId===id)grab.release();continue;}
         if(held.has(id)){const texture=agents.entries.get(id)!.texture;if(motion.stage==='lifted')setAvatarTextureFrame(texture,0,0);else {const facing=pickupFacing.get(id);if(facing)texture.offset.copy(facing);}}
         motion.update(camera(),canvas,held.has(id)?heldScreen.get(id):undefined);
         const entry=agents.entries.get(id)!;
         updatePickupShadow(entry.mesh,entry.shadow,camera(),motion.shadowAirborne,entry.labelFeet);
         if(motion.active)entry.label.element.hidden=true;
-        if(!held.has(id)&&!motion.active){motion.dispose();pickupMotions.delete(id);pickupFacing.delete(id);}
+        const visual=sharedVisuals.get(id);if(visual?.owns()&&motion.stage!=='idle')visual.publish(motion.stage);
+        if(!held.has(id)&&!motion.active){visual?.finish();motion.dispose();pickupMotions.delete(id);pickupFacing.delete(id);}
       }
+      for(const [id,visual] of sharedVisuals)if(!agents.entries.has(id)){visual.dispose();sharedVisuals.delete(id);}
     },
-    dispose() { islandTransitions.dispose(); menuSize.disconnect(); soundObserver.disconnect(); clearInterval(soundMeter); if(soundPanel) soundAnchor.replaceWith(soundPanel); soundDock.remove(); quickMute.remove(); for(const motion of pickupMotions.values())motion.dispose();profileMenu.dispose(); roomMenu.dispose(); toolbarTooltip.dispose(); toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
+    dispose() { for(const visual of sharedVisuals.values())visual.dispose();islandTransitions.dispose(); menuSize.disconnect(); soundObserver.disconnect(); clearInterval(soundMeter); if(soundPanel) soundAnchor.replaceWith(soundPanel); soundDock.remove(); quickMute.remove(); for(const motion of pickupMotions.values())motion.dispose();profileMenu.dispose(); roomMenu.dispose(); toolbarTooltip.dispose(); toolbarFocus.dispose(); avatarEditor.dispose(); emoteBar.dispose(); stop(); state.release(); grab.destroy(); clearInterval(heartbeat); stopMessages(); stopConnection(); stopPreview(); abort.abort(); sizeToolbar.disconnect(); for (const { element, anchor } of docked) { if (element.isConnected) anchor.replaceWith(element); else anchor.remove(); } toolbar.remove(); document.body.classList.remove('factory-toolbar-ready'); document.body.style.removeProperty('--factory-toolbar-height'); panel.remove(); attentionAnnouncer.remove(); },
   };
 }

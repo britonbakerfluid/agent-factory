@@ -33,7 +33,7 @@ export function createRoomStaff(scene: THREE.Scene, board: THREE.Group, canvas: 
     label.setStaffIdentity(name === 'board manager' ? 'Milo' : 'June', name === 'board manager' ? 'Board manager' : 'Front desk');
     label.element.classList.add('room-staff-label');
     label.element.dataset.roomStaff = name;
-    const pickup=createStaffPickup(mesh,label.element.querySelector('button')!,canvas,avatar);
+    const pickup=createStaffPickup(mesh,label.element.querySelector('button')!,canvas,avatar,name==='board manager'?'staff:milo':'staff:june');
     const click = (event: MouseEvent) => { event.stopPropagation(); action(); };
     label.element.querySelector('button')!.addEventListener('click', click);
     const feet = new THREE.Vector3(), walk = new AvatarWalkCycle(), corner = new THREE.Vector3(), top = new THREE.Vector3();

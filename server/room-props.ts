@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { WebSocket } from '@fastify/websocket';
 import { FRONT_COUNTER, factoryRoomAt, fromFactoryWorld } from '../shared/factory25d-layout.js';
 import { StaffCleanup } from '../shared/factory25d-staff-cleanup.js';
-import { VendingPilePhysics, VENDING_PILE_LIMIT } from '../shared/factory25d-vending-physics.js';
+import { VendingPilePhysics, VENDING_PILE_LIMIT, VENDING_DISPENSE_INTERVAL_MS, VENDING_QUEUE_LIMIT } from '../shared/factory25d-vending-physics.js';
 import { FALLING_ROOM_LIGHTS, FIXTURE_FALL_MS, FIXTURE_RECOVER_MS, ROOM_LIGHT_IDS, SNACK_CARRY_MS,
   inFrontOfVending, snackWorldPoint, validRoomPropRequest, type RoomPropsState, type SharedHeldSnack,
   type SharedRoomLight, type PropVector, type RoomPropResult } from '../shared/room-props.js';
@@ -22,12 +22,13 @@ export class RoomPropsManager {
   private epoch = randomUUID();
   private revision = 0;
   private dispenses = 0;
+  private nextDispenseAt = 0;
   private timer?: ReturnType<typeof setInterval>;
   private previous: number;
   private broadcastAt = -Infinity;
   private dirty = true;
   private enabled: boolean;
-  constructor(private state: StateManager, private broadcast: BroadcastManager, private now = Date.now) {
+  constructor(private state: StateManager, private broadcast: BroadcastManager, private now = Date.now, private clerkBusy = () => false) {
     this.enabled = state.getSnapshot().environment === 'factory25d';
     this.previous = now();
   }
@@ -43,16 +44,16 @@ export class RoomPropsManager {
       if (this.peers.size >= 256) return;
       peer = { tokens: 8, at: now, results: new Map() }; this.peers.set(socket, peer);
     }
-    const prior = peer.results.get(value.requestId);
-    if (prior) { this.broadcast.sendTo(socket, prior); return; }
     peer.tokens = Math.min(8, peer.tokens + Math.max(0, now - peer.at) * .008); peer.at = now;
     // Discard floods before sending replies or snapshots. A normal flurry of four taps still tips a lamp.
     if (peer.tokens < 1) return;
     peer.tokens--;
+    const prior = peer.results.get(value.requestId);
+    if (prior) { this.broadcast.sendTo(socket, prior); return; }
     let success = true;
     if (value.action === 'dispense') {
-      success = this.pile.bodies.length + this.pile.queued + this.held.size < VENDING_PILE_LIMIT && this.pile.dispense();
-      if (success) this.dispenses++;
+      success = now >= this.nextDispenseAt && this.pile.queued < VENDING_QUEUE_LIMIT && this.pile.bodies.length + this.pile.queued + this.held.size < VENDING_PILE_LIMIT && this.pile.dispense();
+      if (success) { this.dispenses++; this.nextDispenseAt = now + VENDING_DISPENSE_INTERVAL_MS; }
     } else {
       const light = this.lights.get(value.id)!;
       light.on = value.on; light.presses++; light.changedAt = now;
@@ -63,7 +64,7 @@ export class RoomPropsManager {
       }
     }
     const result: RoomPropResult = { type: 'room_prop_result', requestId: value.requestId, success,
-      ...(!success ? { error: 'The pickup area is full.' } : {}) };
+      ...(!success ? { error: this.pile.bodies.length + this.pile.queued + this.held.size >= VENDING_PILE_LIMIT ? 'The pickup area is full.' : 'One snack at a time. Give the tray a moment.' } : {}) };
     peer.results.set(value.requestId, result);
     if (peer.results.size > 64) peer.results.delete(peer.results.keys().next().value!);
     this.broadcast.sendTo(socket, result);
@@ -86,7 +87,7 @@ export class RoomPropsManager {
       }
     }
     const cleaning = this.cleanup.phase !== 'idle';
-    this.cleanup.update(dt, true);
+    this.cleanup.update(dt, !this.clerkBusy());
     this.updateCarriers(now);
     this.dirty ||= moving || cleaning || this.cleanup.phase !== 'idle' || this.held.size > 0;
     this.flush(now);

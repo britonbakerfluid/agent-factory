@@ -1,3 +1,4 @@
+import { PickupMotionManager } from './pickup-motion.js';
 import { RoomPropsManager } from './room-props.js';
 import { registerRadioSearch } from './radio-search.js';
 import { BasketballChallenges } from './basketball-challenges.js';
@@ -162,7 +163,9 @@ async function main() {
   const challenges = new BasketballChallenges(repository, broadcast, ownerId => { const member = team.member(ownerId); return member && { ownerId: member.id, name: member.name }; });
   await challenges.initialize();
   const garageDriving = new GarageDrivingManager(state, broadcast);
-  const roomProps = new RoomPropsManager(state, broadcast);
+  const pickupsEnabled = state.getSnapshot().environment === 'factory25d';
+  const pickups = new PickupMotionManager(broadcast, (socket, id) => grabs.owns(socket, id));
+  const roomProps = new RoomPropsManager(state, broadcast, Date.now, () => pickups.busy('staff:june'));
 
   // HTTP routes
   const remoteRegistry = new RemoteSessionRegistry();
@@ -193,6 +196,7 @@ async function main() {
     loungeRadio.sendActive(socket);
     garageDriving.sendActive(socket);
     roomProps.sendActive(socket);
+    pickups.sendActive(socket);
     challenges.sendActive(socket);
     if (principal) {
       broadcast.sendTo(socket, {
@@ -210,6 +214,7 @@ async function main() {
       visitorBalls.disconnect(socket);
       garageDriving.disconnect(socket);
       roomProps.disconnect(socket);
+      pickups.disconnect(socket);
     };
     socket.on('close', () => dropSocket('Browser disconnected'));
     socket.on('error', () => dropSocket('Browser disconnected'));
@@ -220,6 +225,9 @@ async function main() {
         switch (msg.type) {
           case 'radio_queue':
             if (!request.headers.origin || isSameHostOrigin(request.headers.origin, request.headers.host)) loungeRadio.receive(socket, msg);
+            break;
+          case 'pickup_motion':
+            if (pickupsEnabled && (!request.headers.origin || isSameHostOrigin(request.headers.origin, request.headers.host))) pickups.receive(socket, msg);
             break;
           case 'room_prop':
             if (!request.headers.origin || isSameHostOrigin(request.headers.origin, request.headers.host)) roomProps.receive(socket, msg);
@@ -237,6 +245,7 @@ async function main() {
             broadcast.sendWorldSnapshot(socket, state.getSnapshot());
             garageDriving.sendActive(socket);
             roomProps.sendActive(socket);
+            pickups.sendActive(socket);
             loungeRadio.sendActive(socket);
             challenges.sendActive(socket);
             break;
@@ -408,6 +417,7 @@ async function main() {
   grabs.start();
   garageDriving.start();
   roomProps.start();
+  pickups.start();
 
   let shuttingDown = false;
   const shutdown = async () => {
@@ -428,6 +438,7 @@ async function main() {
     grabs.stop();
     garageDriving.stop();
     roomProps.stop();
+    pickups.stop();
     await team.flush();
     await challenges.flush();
     await persistence.close();

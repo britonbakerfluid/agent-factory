@@ -152,6 +152,11 @@ export function sendVisitorBall(message: import('@shared/visitor-basketball').Vi
   chatSocket.send(JSON.stringify(message)); return true;
 }
 
+export function sendPickupMotion(message: import('@shared/pickup-motion').PickupRequest) {
+  if (isControlPreview() || factoryHost() !== location.origin || chatSocket?.readyState !== WebSocket.OPEN) return false;
+  chatSocket.send(JSON.stringify(message)); return true;
+}
+
 /** Car leases are public; a localhost preview must never control production cars. */
 export function sendRoomProp(message: import('@shared/room-props').RoomPropRequest) {
   if (isControlPreview() || factoryHost() !== location.origin || chatSocket?.readyState !== WebSocket.OPEN) return false;
@@ -263,6 +268,7 @@ export function watchBoardData(onChange: (data: BoardData) => void) {
         messageListeners.forEach(listener => listener(message));
         // Ephemeral car poses do not change the roster or rebuild the room UI.
         if (message.type === 'garage_drive_state' || message.type === 'garage_drive_result'
+          || message.type === 'pickup_state' || message.type === 'pickup_result'
           || message.type === 'room_props_state' || message.type === 'room_prop_result') return;
         publish();
       } catch { /* An incomplete frame does not replace the last valid snapshot. */ }

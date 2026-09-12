@@ -101,6 +101,8 @@ export class BroadcastManager {
     for (const client of this.clients.keys()) if (client !== sender) this.sendTo(client, message);
   }
 
+  broadcastPickup(message: import('../../shared/pickup-motion.js').PickupMessage) { this.broadcast(message); }
+
   broadcastRoomProps(message: import('../../shared/room-props.js').RoomPropsState) { this.broadcast(message); }
 
   broadcastGarageDriving(message: import('../../shared/factory25d-driving.js').GarageDriveState) { this.broadcast(message); }

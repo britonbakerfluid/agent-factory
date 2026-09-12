@@ -53,12 +53,30 @@ describe('shared room props', () => {
   it('keeps one rigid-body pile for concurrent dispenses, duplicate delivery and late joins', () => {
     const f = setup(), request = { type: 'room_prop', requestId: 'retry', action: 'dispense' };
     f.manager.receive(f.a.socket, request); f.manager.receive(f.a.socket, request);
-    f.send({ action: 'dispense' }, f.b); f.step(8000);
+    f.send({ action: 'dispense' }, f.b); expect(f.manager.snapshot().dispenses).toBe(1);
+    f.step(300); f.send({ action: 'dispense' }, f.b); f.step(8000);
     expect(f.manager.pile.bodies).toHaveLength(2); expect(f.manager.snapshot().dispenses).toBe(2);
     expect(f.latest(f.a).bodies).toEqual(f.latest(f.b).bodies);
     const late = socket(); f.manager.sendActive(late.socket);
     expect(late.messages[0].bodies).toEqual(f.manager.snapshot().bodies);
     expect(f.manager.pile.bodies.every(body => body.sleeping)).toBe(true);
+  });
+  it('pauses June cleanup while held, then resumes the same job', () => {
+    const state = new StateManager('factory25d'), broadcast = new BroadcastManager();
+    let now = 1000, busy = true, recovered = false;
+    const manager = new RoomPropsManager(state, broadcast, () => now, () => busy);
+    manager.cleanup.enqueue({id:'test',...FALLING_ROOM_LIGHTS['front-desk-lamp'],isPending:()=>!recovered,recover:()=>{recovered=true;}});
+    const home={...manager.cleanup.position};
+    for(let i=0;i<100;i++){now+=50;manager.tick();}
+    expect(manager.cleanup.position).toEqual(home);expect(recovered).toBe(false);
+    busy=false;for(let i=0;i<400;i++){now+=50;manager.tick();}
+    expect(recovered).toBe(true);
+  });
+  it('bounds a burst spread across many visitors with one room-wide cooldown', () => {
+    const f=setup();
+    for(let visitor=0;visitor<80;visitor++){const p=socket();for(let click=0;click<20;click++)f.send({action:'dispense'},p);}
+    expect(f.manager.snapshot().dispenses).toBe(1);
+    f.step(300);f.send({action:'dispense'},f.b);expect(f.manager.snapshot().dispenses).toBe(2);
   });
   it('queues multiple fallen fixtures and restores all of them', () => {
     const f = setup();
@@ -79,9 +97,9 @@ describe('shared room props', () => {
     expect(f.a.messages).toHaveLength(0); expect(f.manager.snapshot().dispenses).toBe(0);
     expect(validRoomPropRequest({ type: 'room_prop', requestId: 'x'.repeat(65), action: 'dispense' })).toBe(false);
     for (let i = 0; i < 1000; i++) f.send({ action: 'dispense' });
-    expect(f.manager.snapshot().dispenses).toBe(8); expect(f.a.messages.length).toBeLessThan(12);
+    expect(f.manager.snapshot().dispenses).toBe(1); expect(f.a.messages.length).toBeLessThan(12);
     for (let i = 0; i < 100; i++) { f.step(150); f.send({ action: 'dispense' }); }
-    const snapshot = f.manager.snapshot(); expect(snapshot.bodies.length + snapshot.queued + snapshot.held.length).toBeLessThanOrEqual(48);
+    const snapshot = f.manager.snapshot(); expect(snapshot.bodies.length + snapshot.queued + snapshot.held.length).toBeLessThanOrEqual(24);
   });
   it('does not count request retries as extra lamp taps', () => {
     const f = setup(), request = { type: 'room_prop', requestId: 'retry', action: 'light', id: 'front-desk-lamp', on: false };

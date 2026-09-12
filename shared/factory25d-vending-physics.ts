@@ -2,7 +2,9 @@ import * as THREE from 'three';
 
 export const VENDING_CAN_RADIUS = .035;
 export const VENDING_CAN_HALF_SEGMENT = .035;
-export const VENDING_PILE_LIMIT = 48;
+export const VENDING_PILE_LIMIT = 24;
+export const VENDING_DISPENSE_INTERVAL_MS = 300;
+export const VENDING_QUEUE_LIMIT = 3;
 export const VENDING_PHYSICS_STEP = 1 / 120;
 const REACH = VENDING_CAN_RADIUS + VENDING_CAN_HALF_SEGMENT;
 const INVERSE_INERTIA = 1 / ((3 * VENDING_CAN_RADIUS ** 2 + (REACH * 2) ** 2) / 12);
@@ -52,7 +54,7 @@ export function canSeparation(a: VendingCanBody, b: VendingCanBody) {
   return measureP.distanceTo(measureQ) - VENDING_CAN_RADIUS * 2;
 }
 
-/** Small fixed-step rigid-body solver. Sleeping pairs do no work; 48 bodies cap
+/** Small fixed-step rigid-body solver. Sleeping pairs do no work; 24 bodies cap
  * the worst case. No per-frame geometry, broad-phase allocations, or dependency. */
 export class VendingPilePhysics {
   readonly bodies: VendingCanBody[] = [];
