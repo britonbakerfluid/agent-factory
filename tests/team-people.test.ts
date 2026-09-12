@@ -23,3 +23,18 @@ describe('person totals', () => {
     ], visits: [] })[0].tickets).toBe(43);
   });
 });
+
+it('combines the confirmed team identities without doubling a shared legacy wallet', () => {
+  const rows = PERSON_IDENTITIES.slice(1).flatMap(ids => ids.map(id => member(id,
+    id.startsWith('legacy:') ? id.slice(7) : ids[ids.length - 1].slice(7))));
+  const balances = [2160, 0, 84, 9897, 364, 141, 71, 1397];
+  const keys = [...new Set(rows.map(row => row.id.startsWith('legacy:')
+    ? `user:${row.name.toLowerCase()}` : `owner:${row.id}`))];
+  const result = teamPeople(rows, { wallets: keys.map((key, i) => ({ key,
+    username: 'test', balance: balances[i], remainderMs: 0 })), visits: [] });
+  expect(result).toHaveLength(4);
+  expect(result.find(row => row.id === PERSON_IDENTITIES[1][0])?.tickets).toBe(2244);
+  expect(result.find(row => row.id === PERSON_IDENTITIES[2][0])?.tickets).toBe(10261);
+  expect(result.find(row => row.id === PERSON_IDENTITIES[3][0])?.tickets).toBe(212);
+  expect(result.find(row => row.id === PERSON_IDENTITIES[4][0])?.tickets).toBe(1397);
+});
