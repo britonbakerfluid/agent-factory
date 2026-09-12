@@ -8,7 +8,7 @@ it('cues without autoplay, switches the displayed video, pauses hidden/offscreen
   const instance = {
     cueVideoById: vi.fn((v: any) => { videoId = v.videoId; }), loadVideoById: vi.fn((v: any) => { videoId = v.videoId; }),
     playVideo: vi.fn(), pauseVideo: vi.fn(), setVolume: vi.fn(), getCurrentTime: () => 12, seekTo: vi.fn(), getDuration: () => 123,
-    getVideoData: () => ({video_id:videoId}), destroy: vi.fn(),
+    getVideoData: vi.fn(() => ({video_id:videoId}) as {video_id?: string} | undefined), destroy: vi.fn(),
   };
   vi.stubGlobal('window', { YT: { Player: class { constructor(_element: any, options: any) { events = options.events; return instance; } } } });
   const document = Object.assign(new EventTarget(), { hidden:false, createElement: () => ({}) });
@@ -19,7 +19,7 @@ it('cues without autoplay, switches the displayed video, pauses hidden/offscreen
   const player=createYoutubePlayer(host,{preferences:()=>({enabled,volume}),enable:()=>{enabled=true;},duration,playback,feedback:vi.fn()});
   const queue=new LoungeRadioQueue(); const first=queue.snapshot(Date.now());
   player.update(first); expect(host.append).not.toHaveBeenCalled();
-  await player.open(); events.onReady();
+  await player.open(); instance.getVideoData.mockReturnValueOnce(undefined); expect(() => events.onReady()).not.toThrow();
   expect(instance.cueVideoById).toHaveBeenCalledOnce(); expect(instance.loadVideoById).not.toHaveBeenCalled();
   player.play(); expect(enabled).toBe(true); expect(instance.playVideo).toHaveBeenCalledOnce();
   expect(playback).not.toHaveBeenCalled();

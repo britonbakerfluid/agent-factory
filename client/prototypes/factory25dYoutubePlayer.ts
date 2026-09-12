@@ -3,7 +3,7 @@ interface Player {
   cueVideoById(options: { videoId: string; startSeconds: number }): void;
   loadVideoById(options: { videoId: string; startSeconds: number }): void;
   playVideo(): void; pauseVideo(): void; setVolume(volume: number): void;
-  getCurrentTime(): number; seekTo(seconds: number, allowSeekAhead: boolean): void; getDuration(): number; getVideoData(): { video_id?: string }; destroy(): void;
+  getCurrentTime(): number; seekTo(seconds: number, allowSeekAhead: boolean): void; getDuration(): number; getVideoData(): { video_id?: string } | undefined; destroy(): void;
 }
 interface Youtube { Player: new (element: HTMLElement, options: object) => Player }
 declare global { interface Window { YT?: Youtube; onYouTubeIframeAPIReady?: () => void } }
@@ -40,7 +40,7 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
   observer.observe(host);
   function reportDuration() {
     const current = state?.current;
-    if (!ready || !current || current.durationKnown || (reported === current.id && Date.now() - reportedAt < 15000) || player?.getVideoData().video_id !== current.videoId) return;
+    if (!ready || !current || current.durationKnown || (reported === current.id && Date.now() - reportedAt < 15000) || player?.getVideoData()?.video_id !== current.videoId) return;
     const seconds = player.getDuration();
     if (Number.isFinite(seconds) && seconds >= 5 && seconds <= 10800) { reported = current.id; reportedAt = Date.now(); callbacks.duration(current.id, seconds); }
   }
