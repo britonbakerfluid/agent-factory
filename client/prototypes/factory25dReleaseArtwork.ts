@@ -1,41 +1,30 @@
-import * as THREE from 'three';
-import { createBasketballVisual } from './factory25dBasketballVisual';
+import gameplayClip from '../../docs/evidence/changelog/2026-09-12-basketball.webm';
+import gameplay from '../../docs/evidence/changelog/2026-09-12-basketball.png';
 import personalSpace from '../../docs/evidence/changelog/2026-09-10.png';
 import island from '../../docs/evidence/changelog/2026-09-08.png';
 import roomLife from '../../docs/evidence/changelog/2026-09-07.png';
 import garage from '../../docs/evidence/changelog/2026-09-06.png';
 import patio from '../../docs/evidence/changelog/2026-09-05.png';
+import original from '../../docs/evidence/changelog/2026-03-25.png';
 
-/** Recreated from each release commit; capture provenance lives beside the PNGs. */
-const captures: Record<string, {src:string; alt:string; position:string}> = {
-  '2026-09-11-games': {src:'',alt:'The current factory basketballs rendered with pixel edges and room lighting',position:'50% 50%'},
-  '2026-09-10-personal-space': {src:personalSpace,alt:'The September 10 factory release, with sample agents at their workstations',position:'50% 50%'},
-  '2026-09-08-island': {src:island,alt:'The September 8 factory release with the original bottom navigation island',position:'50% 50%'},
-  '2026-09-07-room-life': {src:roomLife,alt:'The September 7 factory release with room staff, lighting, and the lounge',position:'50% 50%'},
-  '2026-09-06-garage': {src:garage,alt:'The September 6 garage release with four cars and downstairs workstations',position:'50% 50%'},
-  '2026-09-05-factory': {src:patio,alt:'The September 5 patio release with its garden terraces and outdoor workstations',position:'50% 50%'},
+/** Original captures stay intact; feature frames use source-pixel bounds without stretching. */
+const captures: Record<string, {src:string; alt:string; width:number; height:number; frame?: {x:number; y:number; width:number; height:number}}> = {
+  '2026-09-11-games': {src:gameplay,alt:'A basketball shot at the window hoop, with agents and arcade cabinets in the factory',width:800,height:564},
+  '2026-09-10-personal-space': {src:personalSpace,alt:'Close-up of two agents and the space between their workstations',width:1398,height:985,frame:{x:300,y:290,width:580,height:280}},
+  '2026-09-08-island': {src:island,alt:'Close-up of the original navigation island and avatar control',width:1398,height:985,frame:{x:520,y:805,width:390,height:180}},
+  '2026-09-07-room-life': {src:roomLife,alt:'Close-up of the whiteboard and its room attendant',width:1398,height:985,frame:{x:10,y:330,width:270,height:210}},
+  '2026-09-06-garage': {src:garage,alt:'Close-up of the new garage cars and downstairs workstations',width:1398,height:985,frame:{x:290,y:125,width:960,height:360}},
+  '2026-09-05-factory': {src:patio,alt:'Close-up of the outdoor garden terrace, workstations, and illuminated stairs',width:1398,height:985,frame:{x:145,y:240,width:980,height:450}},
+  '2026-03-25-original': {src:original,alt:'The original March 25 factory: a neon arcade floor, front counter, and purple lounge',width:1600,height:960},
 };
-let basketballImage: string | undefined;
-function renderBasketballs() {
-  if (basketballImage) return basketballImage;
-  const renderer = new THREE.WebGLRenderer({antialias:false,alpha:false});
-  renderer.setSize(240,120,false); renderer.setPixelRatio(1);
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#202634');
-  scene.add(new THREE.HemisphereLight('#9bb6df','#363453',4.1));
-  const light = new THREE.DirectionalLight('#dcecff',.95); light.position.set(-2,4,5); scene.add(light);
-  const camera = new THREE.OrthographicCamera(-2,2,1,-1,.1,10); camera.position.set(0,0,5);
-  for (const [i,x] of [-1.25,0,1.25].entries()) {
-    const ball = createBasketballVisual(scene,.48); ball.position.x=x; ball.rotation.set(.12,i*.65,.08);
-  }
-  try { renderer.render(scene,camera); basketballImage=renderer.domElement.toDataURL('image/png'); }
-  finally {
-    scene.traverse(object => { if(object instanceof THREE.Mesh) { object.geometry.dispose(); for(const material of Array.isArray(object.material)?object.material:[object.material]) material.dispose(); } });
-    renderer.dispose(); renderer.forceContextLoss();
-  }
-  return basketballImage!;
-}
-export function releaseArtwork(id: string) {
+
+export function releaseArtwork(id: string, variant: 'full' | 'thumbnail' = 'full') {
   const capture = captures[id];
   if (!capture) return '';
-  return `<div class="factory-update-art factory-release-capture${id === '2026-09-11-games' ? ' factory-release-pixel-render' : ' factory-release-historical'}"><img src="${id === '2026-09-11-games' ? renderBasketballs() : capture.src}" alt="${capture.alt}" style="object-position:${capture.position}" loading="lazy" decoding="async" width="${id === '2026-09-11-games' ? 240 : 1398}" height="${id === '2026-09-11-games' ? 120 : 985}"></div>`;
+  const thumbnail = variant === 'thumbnail';
+  if (id === '2026-09-11-games' && !thumbnail) return `<span class="factory-update-art factory-release-video"><video data-src="${gameplayClip}" poster="${capture.src}" muted loop playsinline preload="none" aria-label="Recorded local HORSE basketball shot" width="${capture.width}" height="${capture.height}"></video><button type="button" class="factory-release-playback" aria-label="Pause basketball replay">Pause</button></span>`;
+  const frame = capture.frame;
+  const framing = frame ? ` style="position:relative;aspect-ratio:${frame.width}/${frame.height}"` : '';
+  const imageFraming = frame ? ` style="position:absolute;max-width:none;width:${capture.width / frame.width * 100}%;left:${-frame.x / frame.width * 100}%;top:${-frame.y / frame.height * 100}%;height:auto"` : '';
+  return `<span${framing} class="${thumbnail ? 'factory-release-thumbnail' : 'factory-update-art factory-release-capture'}"${thumbnail ? ' aria-hidden="true"' : ''}><img${imageFraming} src="${capture.src}" alt="${thumbnail ? '' : capture.alt}" loading="lazy" decoding="async" width="${capture.width}" height="${capture.height}"></span>`;
 }

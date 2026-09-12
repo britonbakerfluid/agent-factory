@@ -21,6 +21,8 @@ export function factoryWorldPoint(point: { x: number; z: number }, room: Factory
 export const INDOOR_COLUMNS = [-5.5, -3.3, -1.1, 1.1, 3.3, 5.5];
 export const INDOOR_ROWS = [-3.8, 0.33];
 export const INTERIOR_Z = 1.95;
+// Room-facing edge of the window mullions (center -4.37, depth .22).
+export const FACTORY_WINDOW_FRONT_Z = -4.26;
 export const FRONT_COUNTER = { x: -2.42, z: 6.65, width: 3.36, depth: .42, topY: .53 } as const;
 export const DJ_BOOTH = { x: 3.5, z: 7.84, width: 1.48, depth: 1.1 } as const;
 export const BRAND_SHELF = { x: -4.84, z: 6.61, width: 1.48, depth: .5, height: 1.18, rotationY: 0 } as const;

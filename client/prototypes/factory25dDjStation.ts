@@ -45,17 +45,7 @@ export function createDjStation(group:THREE.Group,canvas:HTMLCanvasElement,panel
       closeCamera.quaternion.slerp(base.quaternion,1-t);closeCamera.position.lerp(base.position,1-t);
       const aspect=(base.right-base.left)/(base.top-base.bottom);
       let height=THREE.MathUtils.lerp((base.top-base.bottom)/base.zoom,1.72,t);
-      const viewport=canvas.getBoundingClientRect();
-      const besidePlayer=active&&panel.classList.contains('radio-minimized')&&window.innerHeight<=600;
-      // In short windows the visible video occupies the left edge. Frame the
-      // records in the remaining space, including two separate 44px hit targets.
-      const recordSpace=Math.max(92,viewport.width-228);
-      if(besidePlayer)height*=Math.max(1,viewport.width*.28/(recordSpace-44));
       closeCamera.zoom=1;closeCamera.left=-height*aspect/2;closeCamera.right=height*aspect/2;closeCamera.top=height/2;closeCamera.bottom=-height/2;
-      if(besidePlayer){
-        const shift=(226+recordSpace/2-viewport.width/2)*height*aspect/viewport.width;
-        closeCamera.left-=shift;closeCamera.right-=shift;
-      }
       closeCamera.updateProjectionMatrix();closeCamera.updateMatrixWorld();return closeCamera;
     },
     update(camera:THREE.Camera){

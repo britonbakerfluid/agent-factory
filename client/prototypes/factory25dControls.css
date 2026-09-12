@@ -619,7 +619,7 @@ body.factory-toolbar-ready .factory-toolbar .factory-emote-bar.pixel-island {
   }
 }
 
-.factory-audio-wave i { transition:height 100ms linear; }
+.factory-audio-wave i { transition:height 65ms ease-out; }
 @media(prefers-reduced-motion:reduce) { .factory-audio-wave i { transition:none; } }
 
 .factory-toolbar .factory-volume-control :is(.scene-music-level,#scene-sound-level) { align-items:center; }

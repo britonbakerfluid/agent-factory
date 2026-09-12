@@ -57,7 +57,7 @@ it('cues without autoplay, switches the displayed video, pauses hidden/offscreen
   player.dispose();expect(instance.destroy).toHaveBeenCalledTimes(created);
 });
 
-async function recoveryPlayer() {
+async function recoveryPlayer(background = false) {
   vi.useFakeTimers(); vi.setSystemTime(100000);
   const instances: any[] = [];
   let intersection: (entries: { intersectionRatio: number }[]) => void;
@@ -81,7 +81,7 @@ async function recoveryPlayer() {
   const queue = new LoungeRadioQueue(); queue.snapshot(60000);
   const state = queue.snapshot(100000), feedback = vi.fn();
   const player = createYoutubePlayer({ append() {}, replaceChildren() {} } as unknown as HTMLElement, {
-    preferences: () => preferences, enable: () => { preferences.enabled = true; }, duration() {}, feedback,
+    preferences: () => preferences, enable: () => { preferences.enabled = true; }, duration() {}, feedback, background,
   });
   player.update(state); await player.join(); instances[0].events.onReady();
   return { player, instances, preferences, document, state, queue, feedback,
@@ -89,6 +89,29 @@ async function recoveryPlayer() {
     async advance(ms: number) { await vi.advanceTimersByTimeAsync(ms); player.update(state); await Promise.resolve(); },
   };
 }
+
+it('keeps the shared music playing while room controls are tucked away, but still respects mute and tab visibility', async () => {
+  const h = await recoveryPlayer(true), first = h.instances[0];
+  try {
+    first.events.onStateChange({data: 1}); first.pauseVideo.mockClear();
+    h.intersect(0); await h.advance(1000);
+    expect(first.pauseVideo).not.toHaveBeenCalled(); expect(h.player.progress().playing).toBe(true);
+    h.preferences.volume = 24; h.player.update(h.state); expect(first.setVolume).toHaveBeenLastCalledWith(24);
+    h.preferences.volume = 0; h.player.update(h.state); expect(first.setVolume).toHaveBeenLastCalledWith(0);
+    h.document.hidden = true; h.document.dispatchEvent(new Event('visibilitychange'));
+    expect(first.pauseVideo).toHaveBeenCalledOnce();
+  } finally { h.player.dispose(); }
+});
+
+it('can hide or pause before YouTube has installed its player methods', async () => {
+  const h = await recoveryPlayer(true);
+  try {
+    h.player.reset(); await h.player.open();
+    delete h.instances.at(-1).pauseVideo;
+    expect(() => h.player.pause()).not.toThrow(); expect(() => h.player.hide()).not.toThrow();
+    h.document.hidden = true; expect(() => h.document.dispatchEvent(new Event('visibilitychange'))).not.toThrow();
+  } finally { h.player.dispose(); }
+});
 
 it('retries transient failures at the live shared position and ignores the destroyed player', async () => {
   const h = await recoveryPlayer(), old = h.instances[0];

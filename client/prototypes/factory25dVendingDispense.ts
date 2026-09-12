@@ -1,3 +1,4 @@
+import { createInteractionGlow } from './factory25dInteractionGlow';
 import * as THREE from 'three';
 import { VendingPilePhysics, VENDING_PILE_LIMIT, VENDING_DISPENSE_INTERVAL_MS, type VendingCanBody } from './factory25dVendingPhysics';
 import { createSnackGeometry, snackKind, VENDING_SNACK_KINDS, type VendingSnackKind } from './factory25dVendingSnacks';
@@ -169,6 +170,7 @@ function attachVendingInteraction(root: THREE.Group, options: VendingInteraction
   status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
   Object.assign(status.style, { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clipPath: 'inset(50%)' });
   canvas.parentElement!.append(button, status);
+  const glow = createInteractionGlow(root, button);
   const project = new THREE.Vector3();
   return {
     visible: options.visible,
@@ -205,6 +207,6 @@ function attachVendingInteraction(root: THREE.Group, options: VendingInteraction
         ? 'Vending machine pickup area is full'
         : `Dispense a snack from the vending machine${selected ? `. ${selected} snack${selected === 1 ? '' : 's'} selected` : ''}`);
     },
-    dispose() { button.remove(); status.remove(); },
+    dispose() { glow.dispose(); button.remove(); status.remove(); },
   };
 }

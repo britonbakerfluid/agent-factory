@@ -36,3 +36,5 @@
 .lounge-phone[data-compact=true] .phone-composer { padding:8px; }
 .lounge-phone[data-compact=true] .phone-composer input { padding-inline:8px; }
 .chat-open :is(.agent-label,.team-desk-hotspot,#keyboard-walk,.room-doorway,.factory-preview-tools) { display:none !important; }
+
+.lounge-chat-sheet.lounge-phone[data-mobile="true"] { border:1px solid #55617b; border-radius:16px; box-shadow:0 12px 40px #0008; }

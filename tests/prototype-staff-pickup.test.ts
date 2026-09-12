@@ -2,6 +2,11 @@ import {afterEach,describe,expect,it,vi} from 'vitest';
 import * as THREE from 'three';
 import {DEFAULT_AVATAR} from '../shared/constants';
 import {createStaffPickup,createPickupMotion,updatePickupShadow,createPickupFold,pickupReleaseLanding,pickupLanding} from '../client/prototypes/factory25dPickup';
+import { updatePickupHoopTarget } from '../client/prototypes/factory25dPickupHoop';
+import { FACTORY_WINDOW_FRONT_Z, FACTORY_BODY_RADIUS, fromFactoryWorld, clearFactorySegment } from '../shared/factory25d-layout';
+import { createSharedPickupVisual } from '../client/prototypes/factory25dSharedPickupVisual';
+import type { SharedPickupView } from '../client/prototypes/factory25dSharedPickup';
+import type { PickupPose } from '../shared/pickup-motion';
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 function fixture(){
  let now=100;vi.spyOn(performance,'now').mockImplementation(()=>now);
@@ -69,7 +74,7 @@ it('follows the dangling feet independently of the mouse, then freezes the drop 
  const landing=shadow.position.clone();mesh.userData.pickupFalling=true;mesh.position.y=1;updatePickupShadow(mesh,shadow,camera,true);
  expect(shadow.position.toArray()).toEqual(landing.toArray());expect(shadow.scale.toArray()).toEqual([.4,.3,1]);
  mesh.userData.pickupFalling=false;mesh.position.set(0,5,0);updatePickupShadow(mesh,shadow,camera,true);
- expect(shadow.position.z).toBeCloseTo(-4.3);
+ expect(shadow.position.z).toBeCloseTo(FACTORY_WINDOW_FRONT_Z+FACTORY_BODY_RADIUS+.04);
 });
 
 it('draws the stretched shirt behind the lifted body and the grip in front',()=>{
@@ -169,8 +174,9 @@ it('reaches the frozen release destination without a backward landing snap',()=>
  motion.dispose();f.pickup.dispose();
 });
 
-it('squeezes through the hoop on release and restores the avatar after landing',()=>{
+it.each([false,true])('slips through the hoop with a rigid pixel grid and superhero landing (reduced motion: %s)',reduced=>{
  const f=fixture();
+ vi.stubGlobal('matchMedia',()=>({matches:reduced}));
  const motion=createPickupMotion(f.mesh,DEFAULT_AVATAR);
  const canvas={getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})} as HTMLCanvasElement;
  const camera=new THREE.OrthographicCamera(-2,2,2,-2,.1,30);camera.position.z=10;camera.updateMatrixWorld();
@@ -180,9 +186,70 @@ it('squeezes through the hoop on release and restores the avatar after landing',
  f.mesh.userData.pickupLanding=pickupReleaseLanding(f.mesh);
  f.mesh.position.set(0,0,0);now=120;motion.update(camera,canvas);
  expect(motion.stage).toBe('dunking');expect(f.mesh.userData.pickupActive).toBe(true);
- now=520;f.mesh.position.set(0,0,0);motion.update(camera,canvas);
- expect(f.mesh.scale.x).toBeLessThan(1);
- for(now=540;now<=2400;now+=20){f.mesh.position.set(0,0,0);motion.update(camera,canvas);}
+ const startY=f.mesh.position.y;let previousY=startY,sawLanding=false;
+ for(now=140;now<=2400;now+=20){
+  f.mesh.position.set(0,0,0);motion.update(camera,canvas);
+  expect(f.mesh.scale.toArray()).toEqual([1,1,1]);expect(f.mesh.rotation.z).toBe(0);
+  if(motion.stage==='dunking'){
+   expect(f.mesh.position.y).toBeLessThanOrEqual(previousY+1e-8);
+   const pixels=(startY-f.mesh.position.y)/(.86/32);expect(pixels).toBeCloseTo(Math.round(pixels),8);
+   previousY=f.mesh.position.y;
+  }
+  if(motion.stage==='landing'){sawLanding=true;expect(f.mesh.userData.pickupAtlas).toBe('landing');}
+ }
+ expect(sawLanding).toBe(true);
  expect(motion.active).toBe(false);expect(f.mesh.scale.toArray()).toEqual([1,1,1]);expect(f.mesh.rotation.z).toBe(0);
  motion.dispose();f.pickup.dispose();
+});
+
+it('catches the hanging body over the hoop even when the stretched grip is far above it',()=>{
+ const f=fixture(),rim=new THREE.Object3D();rim.name='agent-dunk-rim';rim.position.set(0,1,0);f.mesh.parent!.add(rim);
+ const camera=new THREE.OrthographicCamera(-2,2,2,-2,.1,30);camera.position.z=10;camera.updateMatrixWorld();
+ const canvas={getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})} as HTMLCanvasElement;
+ f.mesh.position.set(0,1.3,0);
+ updatePickupHoopTarget(f.mesh,camera,canvas,{x:200,y:-80});
+ expect(f.mesh.userData.pickupDunkRim?.toArray()).toEqual([0,1,0]);
+ f.mesh.position.x=1.3;updatePickupHoopTarget(f.mesh,camera,canvas,{x:330,y:-80});
+ expect(f.mesh.userData.pickupDunkRim).toBeUndefined();
+ f.mesh.position.set(0,0,0);updatePickupHoopTarget(f.mesh,camera,canvas,{x:200,y:-80});
+ expect(f.mesh.userData.pickupDunkRim).toBeUndefined();
+ f.pickup.dispose();
+});
+
+it('keeps drops along every window pillar on clear floor in front of the frame',()=>{
+ for(let x=-7.8;x<=7.8;x+=.13)for(const z of [-100,-4.3,-4.1]){
+  const landing=fromFactoryWorld(pickupLanding({x,z},'factory'));
+  expect(landing.z).toBeGreaterThanOrEqual(FACTORY_WINDOW_FRONT_Z+FACTORY_BODY_RADIUS+.04);
+  expect(clearFactorySegment(landing,landing)).toBe(true);
+ }
+});
+
+it('starts the hoop approach from the held pose and reacts once as the agent drops through',()=>{
+ const f=fixture(),motion=createPickupMotion(f.mesh,DEFAULT_AVATAR),rim=new THREE.Object3D(),react=vi.fn();
+ rim.name='agent-dunk-rim';rim.position.set(0,1,-3);rim.userData.onAgentDunk=react;f.mesh.parent!.add(rim);
+ const canvas={getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})} as HTMLCanvasElement;
+ const camera=new THREE.OrthographicCamera(-2,2,2,-2,.1,30);camera.position.set(0,5,10);camera.lookAt(0,0,0);camera.updateMatrixWorld();
+ let now=100;vi.spyOn(performance,'now').mockImplementation(()=>now);
+ motion.update(camera,canvas,{x:200,y:40});const held=f.mesh.position.clone();
+ f.mesh.userData.pickupDunkRim=rim.position.clone();f.mesh.userData.pickupLanding=pickupReleaseLanding(f.mesh);
+ f.mesh.position.set(0,0,0);now=120;motion.update(camera,canvas);
+ expect(motion.stage).toBe('dunking');
+ const before=held.clone().project(camera),after=f.mesh.position.clone().project(camera);
+ expect(after.x).toBeCloseTo(before.x,8);expect(after.y).toBeCloseTo(before.y,8);
+ for(now=140;now<=2400;now+=20){f.mesh.position.set(0,0,0);motion.update(camera,canvas);}
+ expect(react).toHaveBeenCalledOnce();expect(motion.active).toBe(false);
+ expect(f.mesh.scale.toArray()).toEqual([1,1,1]);expect(f.mesh.rotation.z).toBe(0);
+ motion.dispose();f.pickup.dispose();
+});
+
+it('reacts once for an observer when a shared dunk passes through the rim',()=>{
+ const f=fixture(),rim=new THREE.Object3D(),react=vi.fn();
+ rim.name='agent-dunk-rim';rim.position.set(0,1,0);rim.userData.onAgentDunk=react;f.mesh.parent!.add(rim);
+ const pose:PickupPose={position:[0,1.5,0],home:[0,0,0],scale:[1,1,1],rotation:0,pin:null,landing:[0,.55],height:1,stage:'dunking',atlas:'normal',uv:[0,0,1,1]};
+ const channel={sample:()=>pose,finish:vi.fn()} as unknown as SharedPickupView;
+ const visual=createSharedPickupVisual(f.mesh,DEFAULT_AVATAR,'staff:milo',channel);
+ visual.applyRemote();expect(react).not.toHaveBeenCalled();
+ pose.position[1]=1.2;visual.applyRemote();visual.applyRemote();expect(react).toHaveBeenCalledOnce();
+ pose.stage='landing';visual.applyRemote();expect(react).toHaveBeenCalledOnce();
+ visual.dispose();f.pickup.dispose();
 });

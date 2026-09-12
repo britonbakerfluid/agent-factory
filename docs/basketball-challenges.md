@@ -24,3 +24,16 @@ State is addressed to durable owner IDs, persisted through the world repository 
 - Playground `?controlsPreview=ready&factoryServer=local`: fresh invitation with zero letters, scripted teammate that can miss sets and matches. It is isolated from live multiplayer and cannot prove real offline delivery.
 
 Real two-account/restart browser verification still requires a running authenticated backend.
+
+
+## One-time welcome shot
+
+`AF_WELCOME_HORSE_OWNER_ID` optionally names the exact, operator-authorized sender identity. With it unset, behavior is unchanged. The Fluid Render blueprint sets Briton’s current identity, verified against the live team roster on September 12. Do not resolve a sender by display name or accept this setting from a client.
+
+Each authenticated teammate receives their own pending HORSE game on their next connection, including future teammates. The opening shot is simulated from the center aisle at interior `(0, 1.05, -1.5)`, using the normal shot physics and validation. It must score before the invitation can be created. The recipient accepts, sees the sender’s avatar replay the shot, then matches from the same position. The preview shows the same flow as “Briton challenged you · your turn.”
+
+Initial invitations are persisted before delivery. Existing active games are left alone, the sender never challenges themselves, and legacy identities without browser ownership are skipped. Welcome games do not consume the normal three outgoing invitations. Declined, expired, and completed welcome rows remain as one-time delivery receipts; after their result window they disappear from the client list but are not pruned from storage. Reconnecting or restarting therefore does not recreate them. Turning off the setting stops new invitations without altering existing games.
+
+Deployment: set the environment variable on the actual Fluid service if its Render blueprint has not been synced. This source change does not send challenges to production until deployed and configured. The independent security/login migration in this checkout still requires its own rollout steps.
+
+The Fluid Render deployment enables the authorized opening shot by its exact `RENDER_EXTERNAL_HOSTNAME`. Other deployments remain opt-in. `AF_WELCOME_HORSE_OWNER_ID` overrides the sender; setting it to an empty string disables the feature, including on Fluid.

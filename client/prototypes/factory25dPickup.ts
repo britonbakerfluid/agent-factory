@@ -6,21 +6,26 @@ import {avatarTexture,setAvatarTextureFrame} from './factory25dAvatarTexture';
 import {stepSpring,limitFabricStretch,GRAB_GRAVITY,GRAB_REST_LENGTH} from '../grab/legacyPickupPhysics';
 import type { AvatarConfig } from '@shared/types';
 import { createPickupFold } from './factory25dPickupFold';
+import { updatePickupHoopTarget, reactToPickupDunk } from './factory25dPickupHoop';
 export { createPickupFold } from './factory25dPickupFold';
-import {ELEVATOR_BODY,FACTORY_BODY_RADIUS,FACTORY_ELEVATOR,GARAGE_ELEVATOR,GARAGE_WORLD_Z,factoryWorldPoint,factoryScenePoint,recoverFactoryPosition,toFactoryWorld,fromFactoryWorld,type FactoryRoom} from '@shared/factory25d-layout';
+import {ELEVATOR_BODY,FACTORY_BODY_RADIUS,FACTORY_WINDOW_FRONT_Z,FACTORY_ELEVATOR,GARAGE_ELEVATOR,GARAGE_WORLD_Z,factoryWorldPoint,factoryScenePoint,recoverFactoryPosition,toFactoryWorld,fromFactoryWorld,type FactoryRoom} from '@shared/factory25d-layout';
 
 /** A screen point outside the room lands on the nearest clear spot on this floor. */
 export function pickupLanding(point:{x:number;z:number},room:FactoryRoom){
   const bounded=factoryWorldPoint(point,room);
   bounded.x=THREE.MathUtils.clamp(bounded.x,room==='garage'?-11.8:room==='patio'?8.2:-7.8,room==='garage'?11.8:room==='patio'?23.8:7.8);
-  bounded.z=THREE.MathUtils.clamp(bounded.z,room==='garage'?19.7:-4.3,room==='garage'?40:13.7);
+  const near=room==='garage'?19.7:room==='factory'?FACTORY_WINDOW_FRONT_Z+FACTORY_BODY_RADIUS+.04:-4.3;
+  bounded.z=THREE.MathUtils.clamp(bounded.z,near,room==='garage'?40:13.7);
   if(room!=='patio'){
     const lift=room==='garage'?GARAGE_ELEVATOR:FACTORY_ELEVATOR;
     const front=ELEVATOR_BODY.far+FACTORY_BODY_RADIUS+.04+(room==='garage'?GARAGE_WORLD_Z:0);
     // A drop over the shaft belongs on the floor in front of its doors.
     if(Math.abs(bounded.x-lift.x)<ELEVATOR_BODY.width/2+FACTORY_BODY_RADIUS&&bounded.z<front)bounded.z=front;
   }
-  return recoverFactoryPosition(toFactoryWorld(bounded));
+  const clear=fromFactoryWorld(recoverFactoryPosition(toFactoryWorld(bounded)));
+  // Recovering around furniture must not put the body back behind the glass.
+  clear.z=Math.max(near,clear.z);
+  return toFactoryWorld(clear);
 }
 
 /** Preserve the spring velocity on release and resolve the resulting landing safely. */
@@ -40,7 +45,7 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
   const material=mesh.material as THREE.Material,depthTest=material.depthTest,depthWrite=material.depthWrite,transparent=material.transparent,renderOrder=mesh.renderOrder;
   const fold=createPickupFold(mesh,avatar),body={x:0,y:0,vx:0,vy:0};
   let phase:'idle'|'held'|'falling'|'landing'|'dunking'='idle',last=performance.now(),lifted=false,liftedAt=0;
-  const dunkStart=new THREE.Vector3(),dunkRim=new THREE.Vector3(),baseScale=mesh.scale.clone(); let dunkAt=0;
+  const dunkStart=new THREE.Vector3(),dunkRim=new THREE.Vector3(),baseScale=mesh.scale.clone(); let dunkAt=0,dunkDuration=0,dunkReacted=false;
   let landedAt=0,highFall=false,landingSlide=0;const impactPoint=new THREE.Vector3(),fallHome=new THREE.Vector3();
   const spriteMaterial=material as THREE.MeshStandardMaterial,normalMap=spriteMaterial.map;let heroMap:THREE.CanvasTexture|undefined;
   const planted={x:0,y:0};let heldZ=0;
@@ -53,16 +58,7 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
       if(pointer){
         if(phase!=='held'){mesh.getWorldPosition(world);plane.constant=-world.z;heldZ=mesh.position.z;body.x=mesh.position.x/UNIT;body.y=-mesh.position.y/UNIT;body.vx=body.vy=0;planted.x=body.x;planted.y=body.y;lifted=false;liftedAt=0;mesh.userData.pickupHeight=.18;phase='held';}
         delete mesh.userData.pickupDunkRim;
-        let root:THREE.Object3D=mesh;while(root.parent)root=root.parent;
-        const rimMarker=root.getObjectByName('agent-dunk-rim');
         const rect=canvas.getBoundingClientRect();
-        if(lifted && (mesh.userData.room??'factory')==='factory' && rimMarker){
-          const rimWorld=rimMarker.getWorldPosition(new THREE.Vector3()),screen=rimWorld.clone().project(camera);
-          const edge=rimWorld.clone().add(new THREE.Vector3(.48,0,0)).project(camera);
-          const radius=Math.max(18,Math.abs(edge.x-screen.x)*rect.width/2);
-          const dx=pointer.x-(rect.left+(screen.x+1)*rect.width/2),dy=pointer.y-(rect.top+(1-screen.y)*rect.height/2);
-          if(Math.abs(dx)<radius && dy>-radius*2 && dy<radius*.7) mesh.userData.pickupDunkRim=mesh.parent!.worldToLocal(rimWorld);
-        }
         ray.setFromCamera(new THREE.Vector2((pointer.x-rect.left)/rect.width*2-1,1-(pointer.y-rect.top)/rect.height*2),camera);
         if(ray.ray.intersectPlane(plane,target)){
           local.copy(target);mesh.parent!.worldToLocal(local);const pin={x:local.x/UNIT,y:-local.y/UNIT},offset=-fold.base/UNIT;
@@ -83,10 +79,14 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
           mesh.position.set(body.x*UNIT,-body.y*UNIT,heldZ);
           fold.set(true,now,lifted?-body.vx*.06*Math.PI/180:0,target);
           mesh.userData.pickupPin=mesh.worldToLocal(target.clone()).toArray();
+          if(lifted)updatePickupHoopTarget(mesh,camera,canvas,pointer);
         }
       }else{
         delete mesh.userData.pickupPin;
         if(phase==='held'){
+          // Keep the actual held pose before rebasing the ordinary fall onto
+          // its landing depth; the hoop approach must not jump at release.
+          dunkStart.set(body.x*UNIT,-body.y*UNIT,heldZ);
           // Freeze the same safe landing used by the release command and shadow.
           fallHome.copy(home);
           const landing=mesh.userData.pickupLanding;
@@ -114,8 +114,15 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
           phase='falling';
           if(mesh.userData.pickupDunkRim){
             dunkRim.copy(mesh.userData.pickupDunkRim);
-            dunkStart.set(body.x*UNIT,-body.y*UNIT,heldZ);
-            dunkAt=now;phase='dunking';highFall=true;landingSlide=0;
+            // Move the held sprite onto the rim's depth without moving it on
+            // screen. It can then fall straight through, with no upward perch.
+            mesh.parent!.localToWorld(local.copy(dunkStart));local.project(camera);
+            ray.setFromCamera(new THREE.Vector2(local.x,local.y),camera);
+            mesh.parent!.localToWorld(world.copy(dunkRim));plane.constant=-world.z;
+            if(ray.ray.intersectPlane(plane,target)){mesh.parent!.worldToLocal(target);dunkStart.copy(target);}
+            if(landing)fallHome.x=landing.x;
+            dunkDuration=Math.max(.3,Math.sqrt(2*Math.max(0,dunkStart.y-fallHome.y)/7));
+            dunkAt=now;dunkReacted=false;phase='dunking';highFall=true;landingSlide=0;
             delete mesh.userData.pickupDunkRim;
           }
         }
@@ -128,20 +135,22 @@ export function createPickupMotion(mesh:THREE.Mesh,avatar:AvatarConfig){
         }
       }
       if(phase==='dunking'){
-        const age=(now-dunkAt)/1000,reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const perch=dunkRim.clone().add(new THREE.Vector3(0,.32,0));
-        if(age<.25){const t=1-Math.pow(1-age/.25,3);mesh.position.lerpVectors(dunkStart,perch,t);}
-        else if(age<.6){
-          mesh.position.copy(perch);const t=(age-.25)/.35;
-          mesh.scale.set(baseScale.x*(1-.35*Math.sin(t*Math.PI)),baseScale.y*(1+.15*Math.sin(t*Math.PI)),baseScale.z);
-          mesh.rotation.z=reduced?0:Math.sin(t*Math.PI*4)*.16;
-        }else{
-          const t=Math.min(1,(age-.6)/.65);
-          mesh.position.lerpVectors(perch,fallHome,t*t);
-          mesh.rotation.z=reduced?0:Math.PI*2*t;
-          mesh.scale.copy(baseScale);mesh.scale.x*=1-.35*Math.sin(t*Math.PI);
-          if(t===1){phase='landing';mesh.scale.copy(baseScale);mesh.rotation.z=0;impactPoint.copy(fallHome);landedAt=now;}
-        }
+        const age=(now-dunkAt)/1000,t=Math.min(1,age/dunkDuration);
+        const align=Math.min(1,age/.14),ease=align*align*(3-2*align);
+        // Translate whole sprite pixels. Never squash, stretch, or rotate the
+        // avatar's grid; the existing drawn frames provide the landing pose.
+        const pixel=UNIT*baseScale.y,drop=Math.max(0,dunkStart.y-fallHome.y)*t*t;
+        const y=dunkStart.y-Math.floor(drop/pixel)*pixel;
+        const x=THREE.MathUtils.lerp(dunkStart.x,dunkRim.x,ease);
+        const alignedX=dunkStart.x+Math.round((x-dunkStart.x)/(UNIT*baseScale.x))*UNIT*baseScale.x;
+        // Stay inside the rim until the head clears the net, then settle onto
+        // the safe floor in front of the window frame.
+        const cleared=t===0?0:THREE.MathUtils.clamp((dunkRim.y-.36*baseScale.y-y)/.45,0,1);
+        const forward=cleared*cleared*(3-2*cleared);
+        mesh.position.set(THREE.MathUtils.lerp(alignedX,fallHome.x,forward),y,THREE.MathUtils.lerp(dunkRim.z,fallHome.z,forward));
+        mesh.scale.copy(baseScale);mesh.rotation.z=0;
+        if(!dunkReacted&&y<=dunkRim.y+.3){reactToPickupDunk(mesh);dunkReacted=true;}
+        if(t===1){phase='landing';mesh.position.copy(fallHome);impactPoint.copy(fallHome);landedAt=now;}
       }
       if(phase==='landing'){
         mesh.position.copy(impactPoint);

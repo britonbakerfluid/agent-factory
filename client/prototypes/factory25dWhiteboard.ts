@@ -1,3 +1,4 @@
+import { createInteractionGlow } from './factory25dInteractionGlow';
 import * as THREE from 'three';
 import { requireElement } from './dom';
 import { gameResult, nextMark, playSquare } from './factory25dTicTacToe';
@@ -518,6 +519,8 @@ export function createWhiteboardInteraction({
   resize.observe(canvas);
   resize.observe(navigation);
 
+  const boardGlow = createInteractionGlow(board, openBoard);
+  if (import.meta.hot) import.meta.hot.dispose(() => boardGlow.dispose());
   const boardDragging = installBoardDragging(board, openBoard, canvas, camera,
     () => view === 'room' && !transition && !document.body.matches('.weather-open, .secondary-room, .inspect-open, .team-open'),
     () => { layoutDirty = true; },

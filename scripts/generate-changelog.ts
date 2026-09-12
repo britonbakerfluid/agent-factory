@@ -1,9 +1,16 @@
 import { writeFileSync } from 'node:fs';
 import { factoryChangelog } from '../client/prototypes/factory25dChangelog';
 
-const notes = factoryChangelog.map(release => [
-  `## ${release.date} — ${release.title}`, '', release.summary, '',
-  ...release.changes.map(change => `- ${change}`), '',
-  `Sources: ${release.prs.map(pr => `[#${pr}](https://github.com/wolzey/agent-factory/pull/${pr})`).join(', ')}`,
-].join('\n')).join('\n\n');
-writeFileSync('CHANGELOG.md', `# Fluid Factory changelog\n\nHighlights reconstructed from merged Git history. Dates reflect merges; exact deployment times were not tracked.\n\n${notes}\n`);
+const repository = 'https://github.com/wolzey/agent-factory';
+const notes = factoryChangelog.map(release => {
+  const sources = [
+    ...release.prs.map(pr => `[#${pr}](${repository}/pull/${pr})`),
+    ...('commits' in release ? release.commits.map(commit => `[${commit}](${repository}/commit/${commit})`) : []),
+  ];
+  return [
+    `## ${release.date} — ${release.title}`, '', release.summary, '',
+    ...release.changes.map(change => `- **${change.label}** ${change.text}`), '',
+    `Sources: ${sources.join(', ')}`,
+  ].join('\n');
+}).join('\n\n');
+writeFileSync('CHANGELOG.md', `# Fluid Factory changelog\n\nHighlights reconstructed from Git history. Dates reflect merges, or source commits for the original factory; exact deployment times were not tracked.\n\n${notes}\n`);

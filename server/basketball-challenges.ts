@@ -18,12 +18,13 @@ export class BasketballChallenges {
   private book = new BasketballChallengeBook();
   private dirty = new Map<string, BasketballChallenge>();
   private removed = new Set<string>();
+  private undeliveredWelcome = new Set<string>();
   private pending: Promise<void> = Promise.resolve();
   private lastShot = new Map<string, number>();
   private lastRequest = new Map<string, number>();
   private healthy = true;
   constructor(private repository: ChallengeRepository, private broadcast: BroadcastManager,
-    private person: (ownerId: string) => ChallengePerson | undefined, private now = Date.now) {}
+    private person: (ownerId: string) => ChallengePerson | undefined, private now = Date.now, private welcomeOwnerId?: string) {}
 
   async initialize() {
     let stored: unknown[] = [];
@@ -40,11 +41,23 @@ export class BasketballChallenges {
   get persistenceHealthy() { return this.healthy; }
   private mark(id: string) { const game = this.book.get(id); if (game) this.dirty.set(id, game); }
   private state(ownerId: string) {
-    return { type: 'challenge_state' as const, serverTime: this.now(), challenges: this.book.forOwner(ownerId) };
+    return { type: 'challenge_state' as const, serverTime: this.now(), challenges: this.book.forOwner(ownerId).filter(game => !(game.welcome && ((!['pending', 'playing'].includes(game.status) && game.expiresAt <= this.now()) || this.undeliveredWelcome.has(game.id)))) };
   }
   sendActive(socket: WebSocket) {
     const principal = this.broadcast.getSocketPrincipal(socket);
-    if (principal) this.broadcast.sendTo(socket, this.state(principal.ownerId));
+    if (!principal) return;
+    const sender = this.welcomeOwnerId && this.person(this.welcomeOwnerId);
+    const recipient = this.person(principal.ownerId);
+    const id = sender && recipient ? this.book.welcome(sender, recipient, this.now()) : undefined;
+    if (id) { this.undeliveredWelcome.add(id); this.mark(id); }
+    if (id || this.undeliveredWelcome.has(`welcome_horse_v1_${principal.ownerId}`)) {
+      void this.flush().then(() => {
+        // The socket may have logged out while storage was pending.
+        if (this.broadcast.getSocketPrincipal(socket)?.ownerId !== principal.ownerId) return;
+        if (id && this.healthy) this.publish(id);
+        else this.broadcast.sendTo(socket, this.state(principal.ownerId));
+      });
+    } else this.broadcast.sendTo(socket, this.state(principal.ownerId));
   }
   private publish(id: string) {
     const game = this.book.get(id);
@@ -75,7 +88,7 @@ export class BasketballChallenges {
       if (result.success) this.lastShot.set(id, now);
     } else { reply({ type: 'challenge_result', success: false, action, error: 'That challenge action is unavailable.' }); return; }
     reply(result);
-    if (result.success && result.id) { this.mark(result.id); this.publish(result.id); void this.flush(); }
+    if (result.success && result.id) { const id = result.id; this.mark(id); if (this.book.get(id)?.welcome) void this.flush().then(() => { if (this.healthy) this.publish(id); }); else { this.publish(id); void this.flush(); } }
   }
   /** Runs on the shared one-second world timer. */
   tick() {
@@ -96,6 +109,7 @@ export class BasketballChallenges {
         await this.repository.saveChallenges(batch);
         await this.repository.deleteChallenges(gone);
         this.healthy = true;
+        for (const game of batch) if (game.welcome) { this.undeliveredWelcome.delete(game.id); this.publish(game.id); }
       } catch {
         this.healthy = false;
         for (const game of batch) if (!this.dirty.has(game.id) && this.book.get(game.id)) this.dirty.set(game.id, game);

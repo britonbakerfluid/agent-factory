@@ -1,5 +1,5 @@
 import { FACTORY_OBSTACLES, INTERIOR_Z } from './factory25d-layout.js';
-import { stepVisitorBall, validBallVector, VISITOR_BALL_RADIUS, type BallVector } from './visitor-basketball.js';
+import { stepVisitorBall, visitorShotVelocity, validBallVector, VISITOR_BALL_RADIUS, type BallVector } from './visitor-basketball.js';
 
 /**
  * Asynchronous two-player HORSE between durable owner identities.
@@ -18,6 +18,8 @@ export const HORSE_MAX_OUTGOING = 3;
 export const HORSE_SHOT_GAP_MS = 400;
 /** Release height of the hovering ready ball; every recorded shot leaves from here. */
 export const HORSE_RELEASE_Y = 1.05;
+/** Operator-authorized opening shot, centered in the clear middle aisle. */
+export const HORSE_WELCOME_SPOT = { x: 0, y: HORSE_RELEASE_Y, z: -1.5 } as const;
 export const HORSE_SPOT_TOLERANCE = .08;
 /** Playable floor in factory-interior coordinates: inside the walls, clear of furniture. */
 const HORSE_FLOOR = { left: -7.6, right: 7.6, near: -6.0, far: 11.5 };
@@ -28,6 +30,7 @@ export interface HorseSpot { x: number; z: number }
 export interface HorseTurn { shooter: string; role: 'set' | 'match'; spot?: HorseSpot; setBy?: string }
 export interface HorseShot { shooter: string; role: 'set' | 'match'; made: boolean; spot: HorseSpot; at: number; release?: { position: BallVector; velocity: BallVector } }
 export interface HorseGame {
+  welcome?: true;
   kind: 'horse'; id: string; revision: number; status: HorseStatus;
   createdAt: number; updatedAt: number; expiresAt: number;
   challenger: HorseSide; challengee: HorseSide;
@@ -111,7 +114,7 @@ export class BasketballChallengeBook {
     const active = [...this.games.values()].filter(horseActive);
     if (active.some(g => [g.challenger.ownerId, g.challengee.ownerId].sort().join() === [challenger.ownerId, challengee.ownerId].sort().join()))
       return fail('create', `You and ${challengee.name} already have a game going.`);
-    if (active.filter(g => g.challenger.ownerId === challenger.ownerId).length >= HORSE_MAX_OUTGOING)
+    if (active.filter(g => !g.welcome && g.challenger.ownerId === challenger.ownerId).length >= HORSE_MAX_OUTGOING)
       return fail('create', `You already have ${HORSE_MAX_OUTGOING} challenges waiting. Cancel one first.`);
     const id = `horse_${hash(`${now}:${++this.sequence}:${challenger.ownerId}`).toString(36)}${this.sequence.toString(36)}`;
     const game: HorseGame = {
@@ -122,6 +125,23 @@ export class BasketballChallengeBook {
     };
     this.games.set(id, game);
     return ok('create', id);
+  }
+  /** One durable invitation per recipient; terminal rows double as delivery receipts. */
+  welcome(challenger: ChallengePerson, recipient: ChallengePerson, now: number): string | undefined {
+    const id = `welcome_horse_v1_${recipient.ownerId}`;
+    if (id.length >= 64 || !recipient.ownerId || !challenger.ownerId || recipient.ownerId === challenger.ownerId || recipient.ownerId.startsWith('legacy:')) return;
+    if (this.games.has(id)) return;
+    if (this.list().some(g => horseActive(g) && [g.challenger.ownerId, g.challengee.ownerId].includes(challenger.ownerId) && [g.challenger.ownerId, g.challengee.ownerId].includes(recipient.ownerId))) return;
+    // Use the normal shot validation and physics; never invent a made-shot result.
+    const opening = new BasketballChallengeBook();
+    const created = opening.create(challenger, recipient, now);
+    if (!created.id || !validHorseSpot(HORSE_WELCOME_SPOT)) return;
+    const shot = opening.shot(created.id, challenger.ownerId, 1, HORSE_WELCOME_SPOT, visitorShotVelocity(HORSE_WELCOME_SPOT), now);
+    if (!shot.success || !shot.made) return;
+    const game = opening.get(created.id)!;
+    game.id = id; game.welcome = true;
+    this.games.set(id, game);
+    return id;
   }
   cancel(id: string, ownerId: string, now: number): ChallengeResult {
     const game = this.games.get(id);
@@ -191,7 +211,7 @@ export class BasketballChallengeBook {
   /** Finished games leave the book after their result window. */
   prune(now: number): string[] {
     const removed: string[] = [];
-    for (const [id, game] of this.games) if (!horseActive(game) && now >= game.expiresAt) { this.games.delete(id); removed.push(id); }
+    for (const [id, game] of this.games) if (!game.welcome && !horseActive(game) && now >= game.expiresAt) { this.games.delete(id); removed.push(id); }
     return removed;
   }
 }
@@ -203,7 +223,7 @@ export function readChallenge(value: unknown): value is HorseGame {
   const side = (s: unknown): s is HorseSide => !!s && typeof s === 'object' && typeof (s as HorseSide).ownerId === 'string'
     && typeof (s as HorseSide).name === 'string' && Number.isInteger((s as HorseSide).letters) && (s as HorseSide).letters >= 0 && (s as HorseSide).letters <= HORSE_LETTERS.length;
   const spot = (p: unknown): p is HorseSpot => !!p && typeof p === 'object' && Number.isFinite((p as HorseSpot).x) && Number.isFinite((p as HorseSpot).z);
-  return g.kind === 'horse' && typeof g.id === 'string' && g.id.length < 64 && Number.isSafeInteger(g.revision)
+  return (g.welcome === undefined || g.welcome === true) && g.kind === 'horse' && typeof g.id === 'string' && g.id.length < 64 && Number.isSafeInteger(g.revision)
     && ['pending', 'playing', 'complete', 'declined', 'cancelled', 'expired'].includes(g.status)
     && [g.createdAt, g.updatedAt, g.expiresAt].every(n => Number.isFinite(n)) && side(g.challenger) && side(g.challengee)
     && !!g.turn && typeof g.turn === 'object' && typeof g.turn.shooter === 'string' && (g.turn.role === 'set' || (g.turn.role === 'match' && spot(g.turn.spot)))
@@ -218,7 +238,7 @@ export function describeChallenge(game: HorseGame, viewerId: string): string {
   const myTurn = game.turn.shooter === viewerId;
   switch (game.status) {
     case 'pending':
-      if (!mine) return game.turn.role === 'match' ? `${other.name} challenged you to HORSE and set a shot` : `${other.name} challenged you to HORSE`;
+      if (!mine) return game.turn.role === 'match' ? `${other.name} challenged you to HORSE${game.welcome ? ' · your turn' : ' and set a shot'}` : `${other.name} challenged you to HORSE`;
       if (myTurn) return `set the first shot for ${other.name}`;
       return game.turn.role === 'match' ? `waiting for ${other.name} to match your shot` : `waiting for ${other.name} to accept`;
     case 'playing':
