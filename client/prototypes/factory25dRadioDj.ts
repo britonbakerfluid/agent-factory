@@ -55,7 +55,7 @@ export function createRadioDj(parent: THREE.Group, canvas: HTMLCanvasElement, on
   label.setStaffIdentity('Remy', 'Lounge DJ');
   label.setDetails('Remy', 'keeping the lounge music flowing', '');
   const button = label.element.querySelector('button')!;
-  const pickup=createStaffPickup(mesh,button,canvas,avatar);
+  const pickup=createStaffPickup(mesh,button,canvas,avatar,'staff:remy');
   button.setAttribute('aria-label', 'Lounge DJ · open radio');
   let visible = false, disposed = false, lastEntry: number | undefined, choosingUntil = 0, lastActivity = '';
   const click = (event: MouseEvent) => { event.stopPropagation(); if (visible && !disposed) onClick(); };

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { VendingPilePhysics, VENDING_PILE_LIMIT, type VendingCanBody } from './factory25dVendingPhysics';
+import { VendingPilePhysics, VENDING_PILE_LIMIT, VENDING_DISPENSE_INTERVAL_MS, type VendingCanBody } from './factory25dVendingPhysics';
 import { createSnackGeometry, snackKind, VENDING_SNACK_KINDS, type VendingSnackKind } from './factory25dVendingSnacks';
 import { VendingSoundEvents, type VendingSounds } from './factory25dVendingSoundEvents';
 import './factory25dVendingDispense.css';
@@ -30,7 +30,7 @@ export function createVendingDispenser(root: THREE.Group, events: VendingDispens
     mesh.position.y = .019;
     mesh.count = 0; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.castShadow = mesh.receiveShadow = true;
-    // The compact local pile changes bounds as it grows, and 48 tiny instances
+    // The compact local pile changes bounds as it grows, and a bounded set of tiny instances
     // are cheaper to keep in the room pass than recomputing bounds every frame.
     mesh.frustumCulled = false; root.add(mesh); batches.set(kind, mesh);
   }
@@ -52,13 +52,16 @@ export function createVendingDispenser(root: THREE.Group, events: VendingDispens
   const soundEvents = new VendingSoundEvents();
   let attach: ReturnType<typeof attachVendingInteraction> | undefined;
   let shared: SharedPropsConnection | undefined, sharedEpoch = '', dispenses: number | undefined;
-  let sharedWasVisible = false;
+  let sharedWasVisible = false, lastBodiesRevision = -1, nextDispenseAt = 0;
   let bodies: readonly VendingCanBody[] = pile.bodies;
   const queued = () => shared ? shared.state?.queued ?? 0 : pile.queued;
   const visible = () => (attach?.visible() ?? true) && !document.hidden;
   const dispense = () => {
+    const now = performance.now();
+    if (now < nextDispenseAt) return false;
+    nextDispenseAt = now + VENDING_DISPENSE_INTERVAL_MS;
     if (shared) {
-      const sent = shared.send({ action: 'dispense' }, accepted => { attach?.announce(accepted); soundEvents.select(accepted, visible()); });
+      const sent = shared.send({ action: 'dispense' }, (accepted, error) => { attach?.announce(accepted, error); soundEvents.select(accepted, visible()); });
       if (!sent) attach?.unavailable();
       return sent;
     }
@@ -111,6 +114,9 @@ export function createVendingDispenser(root: THREE.Group, events: VendingDispens
         const state = shared.state;
         if (state && sharedEpoch !== state.epoch) { sharedEpoch = state.epoch; dispenses = undefined; lastReleasedId = -1; soundEvents.dispose(); }
         if (state && dispenses !== undefined && state.dispenses > dispenses && isVisible) events.accepted?.();
+        // Catch up once on re-entry; hidden rooms need neither interpolation
+        // nor per-instance GPU uploads, and should not replay old snack sounds.
+        if (!isVisible) { sharedWasVisible = false; if (state) dispenses = state.dispenses; attach?.update(); return; }
         bodies = shared.sampleBodies();
         if (dispenses === undefined || !isVisible || !sharedWasVisible) soundEvents.prime(bodies);
         sharedWasVisible = isVisible;
@@ -119,7 +125,7 @@ export function createVendingDispenser(root: THREE.Group, events: VendingDispens
           lastReleasedId = body.id;
         }
         if (state) dispenses = state.dispenses;
-        syncMeshes();
+        if (lastBodiesRevision !== shared.bodiesRevision) { syncMeshes(); lastBodiesRevision = shared.bodiesRevision; }
       } else if (isVisible) {
         const before = pile.bodies.length;
         pile.update(dt);
@@ -167,8 +173,8 @@ function attachVendingInteraction(root: THREE.Group, options: VendingInteraction
   return {
     visible: options.visible,
     unavailable() { status.textContent = 'Reconnect to the factory to dispense a snack.'; },
-    announce(accepted: boolean) {
-      status.textContent = accepted ? `Snack ${count()} selected. Watch the pickup tray.` : 'The pickup area is full.';
+    announce(accepted: boolean, error?: string) {
+      status.textContent = accepted ? `Snack ${count()} selected. Watch the pickup tray.` : error ?? 'The pickup area is full.';
     },
     update() {
       button.dataset.rockAngle = rockAngle().toFixed(4);

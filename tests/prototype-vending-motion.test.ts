@@ -85,7 +85,7 @@ it('drives motion from accepted selections and actual releases, with no duplicat
   const root = new THREE.Group(), accepted = vi.fn(), released = vi.fn();
   const dispenser = createVendingDispenser(root, { accepted, released });
   for (let click = 0; click < 50; click++) dispenser.dispense();
-  expect(accepted).toHaveBeenCalledTimes(48); expect(released).not.toHaveBeenCalled();
+  expect(accepted).toHaveBeenCalledTimes(1); expect(released).not.toHaveBeenCalled();
   dispenser.update(1 / 120); expect(released).toHaveBeenCalledTimes(1);
   dispenser.update(1 / 120); expect(released).toHaveBeenCalledTimes(1);
   for (let frame = 0; frame < 120; frame++) dispenser.update(1 / 120);

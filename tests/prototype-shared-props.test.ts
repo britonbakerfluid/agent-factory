@@ -13,6 +13,16 @@ const snapshot = (time: number, x = 0): RoomPropsState => ({
 });
 
 describe('shared prop rendering', () => {
+  it('does no resampling or matrix invalidation for settled piles, including unrelated snapshots', () => {
+    let now = 0; const view = new RoomPropsView(() => now);
+    const state = snapshot(1000); state.bodies[0].sleeping = true;
+    view.push(state); const bodies = view.sampleBodies(), revision = view.bodiesRevision;
+    for(let i=0;i<300;i++){now+=16;expect(view.sampleBodies()).toBe(bodies);}
+    view.push({...state, revision:1001, serverTime:1100, dispenses:2});
+    expect(view.sampleBodies()).toBe(bodies); expect(view.bodiesRevision).toBe(revision);
+    view.push({...state, revision:1002, serverTime:1200, bodies:[]});
+    expect(view.sampleBodies()).toHaveLength(0);expect(view.bodiesRevision).toBeGreaterThan(revision);
+  });
   it('interpolates the pile and clerk, applies removals immediately, and ignores stale packets', () => {
     let now = 0; const view = new RoomPropsView(() => now);
     view.push(snapshot(1000, 0)); now = 100; view.push(snapshot(1100, 1)); now = 150;

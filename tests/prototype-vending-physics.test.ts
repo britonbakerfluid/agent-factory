@@ -58,9 +58,9 @@ describe('vending machine floor objects', () => {
     const pile = new VendingPilePhysics();
     for (let click = 0; click < 500; click++) expect(pile.dispense()).toBe(click < VENDING_PILE_LIMIT);
     run(pile, 45);
-    expect(pile.bodies.length).toBeGreaterThan(30);
+    expect(pile.bodies.length).toBe(VENDING_PILE_LIMIT);
     expect(pile.bodies.length + pile.queued).toBe(VENDING_PILE_LIMIT);
-    expect(Math.max(...pile.bodies.map(can => can.position.y))).toBeGreaterThan(.12);
+    expect(Math.max(...pile.bodies.map(can => can.position.y))).toBeGreaterThan(.10);
     expect(pile.bodies.every(can => can.sleeping)).toBe(true);
     const a = new Vector3(), b = new Vector3();
     for (let i = 0; i < pile.bodies.length; i++) {

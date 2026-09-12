@@ -1,3 +1,4 @@
+import { installSharedPickups } from './factory25dSharedPickup';
 import { createSharedProps } from './factory25dSharedProps';
 import { createWindowReflections } from './factory25dWindowReflections';
 import { createWhatsNew } from './factory25dWhatsNew';
@@ -645,6 +646,7 @@ function cornerCouch(x: number, z: number): void {
 cornerCouch(0.65, 5.8);
 // The plant shelf moved into the garage, keeping the lift and side aisle clear.
 const natureTv = createNatureTv(interior);
+const sharedPickups = installSharedPickups(canvas);
 const sharedProps = createSharedProps();
 const roomStaff = createRoomStaff(scene, whiteboard, canvas, whiteboardInteraction.openBoard, whiteboardInteraction.boardMotion, sharedProps);
 const loungeDetails = createLoungeDetails(interior, canvas, camera, renderer, teamDesk.members);
@@ -1069,4 +1071,4 @@ function animate(): void {
 const whatsNew = createWhatsNew(() => roomNavigation.request('patio'));
 const stopSceneLoop = startSceneLoop(animate);
 
-if (import.meta.hot) import.meta.hot.dispose(() => { stopSceneLoop(); sharedProps?.dispose(); windowReflections.dispose(); whatsNew.dispose(); duckHunt.dispose(); sceneEvents.abort(); titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); basketballChallenges.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); weatherStatus.remove(); renderer.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { stopSceneLoop(); sharedPickups?.dispose(); sharedProps?.dispose(); windowReflections.dispose(); whatsNew.dispose(); duckHunt.dispose(); sceneEvents.abort(); titleDisposed = true; ambientBackdrop.dispose(); loungeRadio.dispose(); roomStaff.dispose(); stationTickets.dispose(); mountainView.dispose(); garageDriving.dispose();brandLibrary.dispose();brandFlag.dispose();mistFlag.dispose();thunderstorm.dispose();lightInteractions.dispose();snackCarry.dispose();vendingMachine.dispose();garage.dispose(); windowWeather.dispose(); stopTitle(); patio.dispose(); sceneAudio.dispose(); stopWeather(); visitorBasketball.dispose(); basketballChallenges.dispose(); factoryControls.dispose(); avatarStage.dispose(); activityFeedback.dispose(); liveAgents.dispose(); loungeDetails.dispose(); teamDesk.dispose(); weatherStatus.remove(); renderer.dispose(); });
