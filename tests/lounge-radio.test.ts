@@ -82,3 +82,29 @@ describe('YouTube queue', () => {
     await manager.receive(socket,{type:'radio_queue',action:'add',videoId:b});expect(sendTo.mock.lastCall?.[1].success).toBe(false);
   });
 });
+
+describe('curated variety', () => {
+  it('has distinct playable IDs and a full rotation for every time of day', () => {
+    expect(DJ_VIDEOS.length).toBeGreaterThanOrEqual(40);
+    expect(new Set(DJ_VIDEOS.map(v => v.videoId)).size).toBe(DJ_VIDEOS.length);
+    for (const mood of ['day', 'evening', 'night']) {
+      const choices = DJ_VIDEOS.filter(v => v.mood === mood);
+      expect(choices.length).toBeGreaterThanOrEqual(12);
+      for (let i = 0; i < choices.length; i++) {
+        expect(youtubeVideoId(choices[i].videoId)).toBe(choices[i].videoId);
+        expect(choices[i].artist).not.toBe(choices[(i + 1) % choices.length].artist);
+      }
+    }
+  });
+  it('avoids the same DJ artist when the mood changes, including manual skips', () => {
+    const q = new LoungeRadioQueue();
+    const day = Date.parse('2026-09-08T22:59:00Z');
+    const evening = Date.parse('2026-09-08T23:01:00Z');
+    const first = q.snapshot(day).current!;
+    const artist = DJ_VIDEOS.find(v => v.videoId === first.videoId)!.artist;
+    q.skip(first.id, evening);
+    const next = q.snapshot(evening).current!;
+    expect(DJ_VIDEOS.find(v => v.videoId === next.videoId)!.artist).not.toBe(artist);
+    expect(next.dj).toBe(true);
+  });
+});
