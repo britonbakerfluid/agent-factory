@@ -4,6 +4,7 @@ import type { PickupPose, PickupStage, PickupTarget, PickupVector } from '@share
 import type { SharedPickupView } from './factory25dSharedPickup';
 import { avatarTexture } from './factory25dAvatarTexture';
 import { createPickupFold } from './factory25dPickupFold';
+import { pickupHoop, reactToPickupDunk } from './factory25dPickupHoop';
 
 /** Observers interpolate actual rendered poses; their camera never invents a lift height. */
 export function createSharedPickupVisual(mesh: THREE.Mesh, avatar: AvatarConfig, target: PickupTarget, channel: SharedPickupView) {
@@ -12,11 +13,11 @@ export function createSharedPickupVisual(mesh: THREE.Mesh, avatar: AvatarConfig,
   const baseScale = mesh.scale.clone(), depthTest = material.depthTest, depthWrite = material.depthWrite,
     transparent = material.transparent, order = mesh.renderOrder;
   const home = mesh.position.clone(), pin = new THREE.Vector3();
-  let fold: ReturnType<typeof createPickupFold> | undefined, remote = false;
+  let fold: ReturnType<typeof createPickupFold> | undefined, remote = false, dunkReacted = false;
   const vector = (v: THREE.Vector3) => v.toArray().map(n => Math.round(n * 10000) / 10000) as PickupVector;
   function reset() {
     if (!remote) return;
-    remote = false; fold?.set(false); material.map = original; material.depthTest = depthTest; material.depthWrite = depthWrite;
+    remote = false; dunkReacted = false; fold?.set(false); material.map = original; material.depthTest = depthTest; material.depthWrite = depthWrite;
     material.transparent = transparent; mesh.renderOrder = order; mesh.rotation.z = 0; mesh.scale.copy(baseScale);
     delete mesh.userData.pickupRemote; delete mesh.userData.pickupActive; delete mesh.userData.pickupLanding;
   }
@@ -30,6 +31,11 @@ export function createSharedPickupVisual(mesh: THREE.Mesh, avatar: AvatarConfig,
       const p = channel.sample(target); if (!p) { reset(); return false; }
       remote = true;
       mesh.position.fromArray(p.position); mesh.scale.fromArray(p.scale); mesh.rotation.z = p.rotation;
+      if(p.stage!=='dunking')dunkReacted=false;
+      else if(!dunkReacted){
+        const hoop=pickupHoop(mesh);
+        if(hoop&&mesh.getWorldPosition(new THREE.Vector3()).y<hoop.getWorldPosition(new THREE.Vector3()).y+.3){reactToPickupDunk(mesh);dunkReacted=true;}
+      }
       const airborne = p.stage === 'lifted' || p.stage === 'falling' || p.stage === 'dunking';
       mesh.userData.pickupRemote = true; mesh.userData.pickupActive = true;
       mesh.userData.pickupRemoteStage = p.stage; mesh.userData.pickupRemoteAirborne = airborne;

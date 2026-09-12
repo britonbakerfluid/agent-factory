@@ -99,7 +99,7 @@ export function createPatioGarden(parent: THREE.Group) {
     propPart(parent, [width, height, depth], [x, y + height / 2, z], concrete);
     propPart(parent, [width + .06, .07, depth + .06], [x, y + height, z], lip);
     propPart(parent, [width - .15, .024, depth - .15], [x, y + height + .04, z], soil);
-    contactShadow(parent, { x, z, floorY: y, width, depth, spread: .19, opacity: .3 });
+    contactShadow(parent, { x, z, floorY: y, width, depth, spread: .1, opacity: .24 });
     return y + height + .065;
   }
   function groundPothos(x: number, z: number, y: number, width: number, depth: number) {

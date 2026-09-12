@@ -1,3 +1,4 @@
+import { createInteractionGlow } from './factory25dInteractionGlow';
 import * as THREE from 'three';
 import { createBasketballFloorMarker } from './factory25dFloorMarker';
 import { BasketballChallengeBook, HORSE_RELEASE_Y, describeChallenge, horseActive, horseCanShoot, horseLetters, horseOpponent, horseSide, readChallenge, simulateChallengeShot, validHorseSpot,
@@ -19,14 +20,24 @@ type Principal = { ownerId: string; username: string } | undefined;
 /** A chalk ring on the floor where the standing shot was made, with a hit target to match it from. */
 function createFloorMark(parent: THREE.Group, canvas: HTMLCanvasElement, onMatch: () => void) {
   const ring = createBasketballFloorMarker(parent); ring.name = 'horse-floor-mark';
+  ring.geometry.dispose(); ring.geometry = new THREE.RingGeometry(.215, .25, 32);
   const sweepMaterial = ring.material.clone(); sweepMaterial.color.set('#ffe3a0');
   const sweep = new THREE.Mesh(new THREE.RingGeometry(.228, .252, 8, 1, 0, Math.PI / 3), sweepMaterial);
   sweep.name = 'horse-ring-highlight'; sweep.position.z = .001; sweep.renderOrder = 2; ring.add(sweep);
   // Share the ring material so the glyph has exactly the same color/opacity pulse.
   const attention = new THREE.Group(); attention.name = 'horse-turn-exclamation'; attention.visible = false;
-  const stem = new THREE.Mesh(new THREE.PlaneGeometry(.045, .13), ring.material);
-  const dot = new THREE.Mesh(new THREE.PlaneGeometry(.045, .045), ring.material);
-  stem.position.y = .055; dot.position.y = -.06; attention.add(stem, dot); parent.add(attention);
+  const glyph = new THREE.Shape();
+  glyph.moveTo(-.065, .16); glyph.lineTo(.065, .16); glyph.lineTo(.065, .105);
+  glyph.lineTo(.043, .105); glyph.lineTo(.043, .025); glyph.lineTo(.027, -.005);
+  glyph.lineTo(-.027, -.005); glyph.lineTo(-.043, .025); glyph.lineTo(-.043, .105);
+  glyph.lineTo(-.065, .105); glyph.closePath();
+  const stem = new THREE.Mesh(new THREE.ShapeGeometry(glyph), ring.material);
+  const dot = new THREE.Mesh(new THREE.PlaneGeometry(.055, .055), ring.material);
+  dot.position.y = -.065; attention.add(stem, dot); parent.add(attention);
+  const haloMaterial = new THREE.MeshBasicMaterial({color:'#ffca62',transparent:true,opacity:.1,depthWrite:false,side:THREE.DoubleSide});
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(.29, 32), haloMaterial); halo.position.z = -.001; ring.add(halo);
+  const outerMaterial = sweepMaterial.clone();
+  const outer = new THREE.Mesh(new THREE.RingGeometry(.29,.305,8), outerMaterial); ring.add(outer);
   const parentRotation = new THREE.Quaternion(), cameraRotation = new THREE.Quaternion();
   const ghost = miniBall(parent); ghost.visible = false;
   const reducedMarkerMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -35,6 +46,7 @@ function createFloorMark(parent: THREE.Group, canvas: HTMLCanvasElement, onMatch
   const hotspot = document.createElement('button'); hotspot.type = 'button'; hotspot.className = 'horse-spot-hotspot'; hotspot.hidden = true;
   hotspot.innerHTML = '<span class="horse-accept-thought" aria-hidden="true"><span class="factory-thought-body">accept game</span><span class="factory-thought-dot dot-0"></span><span class="factory-thought-dot dot-1"></span></span>';
   hotspot.addEventListener('click', onMatch); canvas.parentElement!.append(hotspot);
+  const glow = createInteractionGlow(ghost, hotspot);
   let canvasWidth = canvas.clientWidth, canvasHeight = canvas.clientHeight;
   const canvasSize = new ResizeObserver(() => {
     canvasWidth = canvas.clientWidth; canvasHeight = canvas.clientHeight;
@@ -42,30 +54,35 @@ function createFloorMark(parent: THREE.Group, canvas: HTMLCanvasElement, onMatch
   canvasSize.observe(canvas);
   const point = new THREE.Vector3();
   return {
-    set(spot: { x: number; z: number } | undefined, matchable: boolean, label: string, accepting = false) {
+    set(spot: { x: number; z: number } | undefined, matchable: boolean, label: string, accepting = false, invitationLabel = 'accept game') {
       ghost.visible = !!spot && (accepting || matchable);
       if (spot) ghost.position.set(spot.x, .073, spot.z);
       ring.visible = !!spot; hotspot.dataset.matchable = String(matchable || accepting);
       hotspot.dataset.accepting = String(accepting);
-      if (spot) { ring.position.x = spot.x; ring.position.z = spot.z; hotspot.setAttribute('aria-label', accepting ? 'Accept game' : label); }
+      hotspot.querySelector('.factory-thought-body')!.textContent = accepting ? invitationLabel : 'your turn';
+      if (spot) { ring.position.x = spot.x; ring.position.z = spot.z; hotspot.setAttribute('aria-label', accepting ? invitationLabel : label); }
       if (!spot) hotspot.hidden = true;
     },
     place(camera: THREE.Camera, visible: boolean) {
       const invitation = hotspot.dataset.accepting === 'true';
       const active = invitation || hotspot.dataset.matchable === 'true';
       const pulse = reducedMarkerMotion.matches ? .5 : (Math.sin(performance.now() / 650) + 1) / 2;
-      ring.scale.setScalar(active ? .66 + pulse * .06 : 1);
+      const hover = hotspot.matches(':hover, :focus-visible');
+      ring.scale.setScalar(active ? (hover ? 1.05 : .9) + pulse * .035 : 1);
+      halo.visible = outer.visible = active;
+      haloMaterial.opacity = hover ? .22 : .09 + pulse * .045;
+      outerMaterial.opacity = hover ? .8 : .25 + pulse * .15;
       ring.material.color.copy(active ? markerWarm : markerNeutral);
       if (active) ring.material.color.lerp(markerBright, pulse);
-      ring.material.opacity = active ? .5 + pulse * .22 : .55;
+      ring.material.opacity = active ? .75 + pulse * .2 : .55;
       sweep.visible = active && visible && !reducedMarkerMotion.matches;
       sweep.rotation.z = performance.now() / 4800 * Math.PI * 2;
       sweepMaterial.opacity = .16 + pulse * .08;
       ghost.visible = active && ring.visible && visible;
       attention.visible = active && ring.visible && visible;
       if (attention.visible) {
-        attention.position.set(ring.position.x, .34, ring.position.z);
-        attention.scale.setScalar(.94 + pulse * .06);
+        attention.position.set(ring.position.x, .4 + (reducedMarkerMotion.matches ? 0 : pulse * .025), ring.position.z);
+        attention.scale.setScalar(1.3 + pulse * .05);
         parent.getWorldQuaternion(parentRotation); camera.getWorldQuaternion(cameraRotation);
         attention.quaternion.copy(parentRotation.invert().multiply(cameraRotation));
       }
@@ -75,7 +92,7 @@ function createFloorMark(parent: THREE.Group, canvas: HTMLCanvasElement, onMatch
       if (hotspot.hidden !== hidden) hotspot.hidden = hidden;
       if (!hotspot.hidden) Object.assign(hotspot.style, { left: `${(point.x + 1) * canvasWidth / 2 - 22}px`, top: `${(1 - point.y) * canvasHeight / 2 - 22}px` });
     },
-    dispose() { canvasSize.disconnect(); sweep.geometry.dispose(); sweepMaterial.dispose(); attention.removeFromParent(); stem.geometry.dispose(); dot.geometry.dispose(); ghost.removeFromParent(); ghost.traverse(object => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose(); } }); ring.removeFromParent(); ring.geometry.dispose(); ring.material.dispose(); hotspot.remove(); },
+    dispose() { glow.dispose(); halo.geometry.dispose(); haloMaterial.dispose(); outer.geometry.dispose(); outerMaterial.dispose(); canvasSize.disconnect(); sweep.geometry.dispose(); sweepMaterial.dispose(); attention.removeFromParent(); stem.geometry.dispose(); dot.geometry.dispose(); ghost.removeFromParent(); ghost.traverse(object => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose(); } }); ring.removeFromParent(); ring.geometry.dispose(); ring.material.dispose(); hotspot.remove(); },
   };
 }
 
@@ -118,7 +135,7 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
     replay = { ball: { position: { ...release.position }, velocity: { ...release.velocity }, room: 'factory', scored: false }, resultShown: false, endAt: 4, elapsed: 0, delay: .65, accumulator: 0, at: performance.now(), gameId: game.id, revision: game.revision, next };
     replayBall.position.copy(new THREE.Vector3(release.position.x, release.position.y, release.position.z)); replayBall.visible = true;
     const member = options.members().find(member => member.id === game.lastShot!.shooter);
-    const avatar = member?.avatar ?? (preview ? { ...DEFAULT_AVATAR, color: '#cf945f', shirtColor: '#cf945f', hairStyle: 2 } : undefined);
+    const avatar = preview && game.welcome ? { ...DEFAULT_AVATAR, spriteIndex: 0, color: '#4a90d9' } : member?.avatar ?? (preview ? { ...DEFAULT_AVATAR, color: '#cf945f', shirtColor: '#cf945f', hairStyle: 2 } : undefined);
     actorSheet = avatar ? avatarSheet(avatar, ['basketball_throw', 'idle'], [undefined], true, true) : undefined; actorFrame = '';
     replayActor.visible = !!actorSheet; replayActor.position.set(release.position.x, .425, release.position.z + .22); paintActor(true, 0);
     basketball.showReplayView(release.position);
@@ -248,18 +265,18 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
     const mine = me(), game = focus();
     const standing = game && horseActive(game) && game.turn.role === 'match' ? game.turn.spot : undefined;
     const other = game && mine ? horseOpponent(game, mine) : undefined;
-    mark.set(standing, !!(game && mine && horseCanShoot(game, mine) && game.turn.role === 'match'), other ? `Match ${other.name}'s shot from this spot` : 'Match the shot from this spot', !!(game && game.status === 'pending' && game.challengee.ownerId === mine));
+    mark.set(standing, !!(game && mine && horseCanShoot(game, mine) && game.turn.role === 'match'), other ? `Match ${other.name}'s shot from this spot` : 'Match the shot from this spot', !!(game && game.status === 'pending' && game.challengee.ownerId === mine), game?.welcome && other ? `${other.name} challenged you · your turn` : 'accept game');
     const showFeedback = feedback && performance.now() < feedbackUntil;
     if (game && mine) {
       const text = showFeedback ? feedback : horseCanShoot(game, mine) ? (game.turn.role === 'match' ? `Match ${other!.name}'s shot` : `Set a shot for ${other!.name}`)
-        : game.status === 'pending' && game.challengee.ownerId === mine ? `Accept HORSE from ${other!.name}` : describeChallenge(game, mine);
+        : game.status === 'pending' && game.challengee.ownerId === mine ? game.welcome ? `${other!.name} challenged you · your turn` : `Accept HORSE from ${other!.name}` : describeChallenge(game, mine);
       const playable = horseCanShoot(game, mine) || (game.status === 'pending' && game.challengee.ownerId === mine);
       turnButton.classList.toggle('horse-play', playable && !showFeedback);
       if (playable && !showFeedback) turnButton.innerHTML = '<span class="horse-play-ball" aria-hidden="true"><svg viewBox="0 0 24 24" shape-rendering="crispEdges"><path fill="#f78a24" d="M7 1h10v2h4v4h2v10h-2v4h-4v2H7v-2H3v-4H1V7h2V3h4z"/><path fill="#ffb44c" d="M7 1h10v2H7zM3 3h4v4H3zM1 7h2v4H1z"/><path fill="#c75417" d="M21 12h2v5h-2v4h-4v2H7v-2h10v-2h2v-4h2z"/><path fill="#663016" d="M11 1h2v10h10v2H13v10h-2V13H1v-2h10zM5 3h2v4H5zM7 7h2v10H7zM5 17h2v4H5zM17 3h2v4h-2zM15 7h2v10h-2zM17 17h2v4h-2z"/></svg></span><span class="horse-action-label"></span>';
       else turnButton.textContent = showFeedback ? feedback : game.status === 'pending' ? 'invite sent' : horseActive(game) ? `Waiting for ${other!.name}` : text;
       const actionLabel = turnButton.querySelector('.horse-action-label');
-      if (actionLabel) actionLabel.textContent = basketball.placingChallenge ? 'confirm challenge' : game.status === 'pending' ? 'accept game' : 'your turn';
-      turnButton.setAttribute('aria-label', text);
+      if (actionLabel) actionLabel.textContent = basketball.placingChallenge ? 'confirm challenge' : game.status === 'pending' ? game.welcome ? `${other!.name} challenged you` : 'accept game' : 'your turn';
+      turnButton.setAttribute('aria-label', text); turnButton.title = text;
       const resultUnseen = !horseActive(game) && !game.seenBy.includes(mine) && !game.seenBy.includes(`${mine}:result`);
       turnButton.disabled = basketball.placingChallenge || (!(horseCanShoot(game, mine) || (game.status === 'pending' && game.challengee.ownerId === mine) || resultUnseen)) || (!!playing && !showFeedback);
       turnButton.hidden = !toolbarVisible || !(horseActive(game) || showFeedback || resultUnseen);
@@ -269,8 +286,8 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
     turnButton.classList.toggle('horse-replay-progress', !!replay);
     if (replay) {
       turnButton.style.setProperty('--replay-progress', `${Math.min(100, replay.elapsed / replay.endAt * 100)}%`);
-      turnButton.hidden = false; turnButton.disabled = false; turnButton.textContent = 'watching shot · skip';
-      turnButton.setAttribute('aria-label', 'Watching opponent shot. Skip replay');
+      turnButton.hidden = false; turnButton.disabled = false; turnButton.textContent = other ? `${other.name}’s shot · skip` : 'watching shot · skip';
+      turnButton.setAttribute('aria-label', other ? `Watching ${other.name}’s shot. Skip replay` : 'Watching opponent shot. Skip replay');
     }
   }
   basketball.onExit(() => { if (playing && !basketball.armedShot) { playing = undefined; armedFor = undefined; } paint(); });
@@ -308,13 +325,7 @@ export function createBasketballChallenges(parent: THREE.Group, canvas: HTMLCanv
     }, 2600);
   }
   if (preview) {
-    const teammate = { ownerId: 'preview-teammate', name: 'teammate · preview' };
-    const created = preview.create(teammate, { ownerId: 'preview-owner', name: 'you · preview' }, now() - 3600_000);
-    if (created.id) {
-      const spot = { x: 2.4, y: HORSE_RELEASE_Y, z: -3.0 };
-      preview.shot(created.id, teammate.ownerId, preview.get(created.id)!.revision, spot, visitorShotVelocity(spot), now() - 3500_000);
-      // Preview starts a fresh game; one missed match earns H, not an instant loss.
-    }
+    preview.welcome({ ownerId: 'preview-teammate', name: 'Briton' }, { ownerId: 'preview-owner', name: 'you · preview' }, now());
     setTimeout(() => receiveState({ type: 'challenge_state', serverTime: now(), challenges: preview.forOwner('preview-owner') }), 1500);
   }
 

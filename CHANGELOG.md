@@ -1,53 +1,53 @@
 # Fluid Factory changelog
 
-Highlights reconstructed from merged Git history. Dates reflect merges; exact deployment times were not tracked.
+Highlights reconstructed from Git history. Dates reflect merges, or source commits for the original factory; exact deployment times were not tracked.
 
 ## 2026-09-11 — A little friendly competition
 
-Challenge a teammate to HORSE, or head to the patio for a round of Duck Hunt.
+Challenge a teammate to HORSE, or head outside for Duck Hunt.
 
-- Play asynchronous HORSE, including challenges to people who are offline.
-- Duck Hunt now has five waves, three shots per wave, and harder rounds as you progress.
-- Switch destinations mid-trip, with clearer island controls and quieter character throws.
+- **Your shot.** Play asynchronous HORSE, even when your opponent is offline.
+- **Out on the patio.** Five waves of Duck Hunt, three shots per wave, and tougher rounds as you go.
+- **Keep moving.** Switch destinations mid-trip with clearer controls and quieter character throws.
 
 Sources: [#46](https://github.com/wolzey/agent-factory/pull/46), [#47](https://github.com/wolzey/agent-factory/pull/47), [#48](https://github.com/wolzey/agent-factory/pull/48)
 
 ## 2026-09-10 — Give your people some space
 
-More expressive characters and easier agent controls.
+More expressive characters. A little more elbow room.
 
-- Characters leave more space around one another, keeping crowded parts of the room easier to read.
-- Pick up and throw characters with expressive airborne movement and a landing animation.
-- Open your profile menu to find an agent, take control, and move around the factory.
+- **Room to breathe.** Agents give one another more space in crowded parts of the factory.
+- **Pick them up.** Grab and throw characters, complete with airborne poses and a landing animation.
+- **Take the controls.** Find your agent from your profile, then move around the factory.
 
 Sources: [#45](https://github.com/wolzey/agent-factory/pull/45)
 
 ## 2026-09-08 — One island. Your whole factory.
 
-Room navigation, your profile, and audio come together.
+Rooms, your agents, and sound come together.
 
-- Room navigation, avatar access, sound, and contextual actions now share one bottom island that changes with your activity.
-- Open the lounge DJ to search YouTube, add a song to the shared queue, and see what is playing.
-- Keyboard access and accessible control labels were improved, while each agent session keeps its own project label.
+- **One place for everything.** The bottom island brings navigation, your avatar, sound, and game controls together.
+- **Meet the DJ.** Search for a song and add it to the shared lounge queue.
+- **Easier to get around.** Better keyboard access, clearer control labels, and project names for each agent session.
 
 Sources: [#41](https://github.com/wolzey/agent-factory/pull/41), [#42](https://github.com/wolzey/agent-factory/pull/42), [#44](https://github.com/wolzey/agent-factory/pull/44)
 
 ## 2026-09-07 — The factory comes to life
 
-Room staff, shared driving, and recognition for your work.
+Room staff, shared driving, and credit for your work.
 
-- Get behind the wheel in the garage, with driving shared across the room so other visitors can see you moving.
-- Active work earns tickets, and GitHub contribution counts give your profile a level alongside your room presence.
-- Daylight changes the mood of the factory, while rain, room staff, and interactive details make the space feel occupied.
+- **Take a drive.** Hop into a garage car. Everyone in the room can see you moving.
+- **Make it count.** Active work earns tickets; GitHub contributions give your profile a level.
+- **Settle in.** Changing daylight, rain, and room staff make the factory feel occupied.
 
 Sources: [#33](https://github.com/wolzey/agent-factory/pull/33), [#34](https://github.com/wolzey/agent-factory/pull/34), [#35](https://github.com/wolzey/agent-factory/pull/35), [#36](https://github.com/wolzey/agent-factory/pull/36), [#37](https://github.com/wolzey/agent-factory/pull/37)
 
 ## 2026-09-06 — Going down: the garage
 
-A new floor to explore.
+A whole new floor to explore.
 
-- The factory gained a connected lower floor. Take the elevator down to explore the garage and return to the workspace.
-- New workstations and interactive room details extend the factory beyond the original main room.
+- **Going down.** Take the elevator from the main room into the new garage.
+- **Stay a while.** Discover downstairs workstations, cars, and new room details.
 
 Sources: [#32](https://github.com/wolzey/agent-factory/pull/32)
 
@@ -55,8 +55,17 @@ Sources: [#32](https://github.com/wolzey/agent-factory/pull/32)
 
 Your avatar, your people, and a little fresh air.
 
-- Edit your avatar inside the factory, with your appearance saved to your owner profile.
-- The front desk shows the people connected to the factory and their presence in the shared room.
-- Guest basketball adds a quick break from work. Outside, the patio gained garden terraces, stairs, and rain details.
+- **Look like you.** Edit your avatar in the factory and save it to your profile.
+- **See who’s here.** The front desk shows the people connected to the shared room.
+- **Take a break.** Shoot some hoops, or explore the patio’s garden terraces and stairs.
 
 Sources: [#26](https://github.com/wolzey/agent-factory/pull/26), [#27](https://github.com/wolzey/agent-factory/pull/27), [#28](https://github.com/wolzey/agent-factory/pull/28), [#29](https://github.com/wolzey/agent-factory/pull/29), [#30](https://github.com/wolzey/agent-factory/pull/30), [#31](https://github.com/wolzey/agent-factory/pull/31)
+
+## 2026-03-25 — Where it started
+
+A neon arcade, a front counter, and a place for your agents.
+
+- **The original factory.** Pixel arcade cabinets turned agent sessions into a room you could watch.
+- **Already feeling at home.** A front counter and purple lounge sat beside the arcade floor.
+
+Sources: [71d910f](https://github.com/wolzey/agent-factory/commit/71d910f), [501df9f](https://github.com/wolzey/agent-factory/commit/501df9f)

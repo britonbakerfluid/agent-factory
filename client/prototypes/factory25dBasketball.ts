@@ -133,6 +133,13 @@ export function createBasketball(
   rimSpring.add(ring, net);
   let rimAngle = 0, rimVelocity = 0;
   function hitRim(energy: number) { rimVelocity = Math.min(1.2, rimVelocity + Math.max(0, Math.min(1, energy)) * .9); }
+  let lastAgentDunk = -Infinity;
+  pickupRim.userData.onAgentDunk = () => {
+    const now = performance.now();
+    if (now - lastAgentDunk < 900) return;
+    lastAgentDunk = now;
+    hitRim(.25); swishNet(); sounds.swish?.();
+  };
 
   const ball = miniBall(parent),
     spare = miniBall(parent);

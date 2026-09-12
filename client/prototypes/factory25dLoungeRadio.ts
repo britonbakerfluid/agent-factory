@@ -1,3 +1,4 @@
+import { createInteractionGlow } from './factory25dInteractionGlow';
 import * as THREE from 'three';
 import { DJ_BOOTH, INTERIOR_Z } from '@shared/factory25d-layout';
 import {createDjStation} from './factory25dDjStation';
@@ -8,6 +9,7 @@ import './factory25dLoungeRadio.css';
 import { createYoutubePlayer } from './factory25dYoutubePlayer';
 import { createRecordScratch } from './factory25dRecordScratch';
 import { createRadioDj } from './factory25dRadioDj';
+import { RoomMusicGain } from './factory25dMusicMeter';
 
 /** Lounge DJ decks, with a nonmodal queue above the existing shared dock. */
 export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement, initialCamera: THREE.Camera,
@@ -28,6 +30,7 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   const queue = panel.querySelector('ol')!;
   const feedback = panel.querySelector('.radio-feedback')!;
   document.body.append(trigger, panel);
+  const interactionGlow = createInteractionGlow(receiver, trigger);
   let state: RadioState | undefined, pending = false, timeout = 0, visible = false, camera = initialCamera;
   const preview = isControlPreview() ? new LoungeRadioQueue() : undefined;
   let nextPreviewTick = 0, nextPaint = 0;
@@ -37,12 +40,20 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   let searchRequest:AbortController|undefined;
   const videoHost = panel.querySelector<HTMLElement>('.radio-video')!;
   const videoHome = document.createComment('radio video home'); videoHost.before(videoHome);
+  const roomGain = new RoomMusicGain();
+  let lastRoomTime = performance.now(), paintedGain = 1;
   const player = createYoutubePlayer(videoHost, {
-    ...callbacks, playback: active => { if(soundHost) soundHost.dataset.playing = String(active); }, feedback: message => { feedback.textContent = message; },
+    ...callbacks, background: true,
+    preferences: () => { const prefs = callbacks.preferences(); return {...prefs, volume: prefs.volume * roomGain.value}; },
+    playback: active => { if(soundHost) soundHost.dataset.playing = String(active); }, feedback: message => { feedback.textContent = message; },
     duration: (entryId, seconds) => command({ type: 'radio_queue', action: 'duration', entryId, seconds }),
   });
   const soundHost = document.querySelector<HTMLElement>('.scene-sound');
   const nowPlaying = document.createElement('p'); nowPlaying.className = 'factory-audio-now-playing';
+  const dockDetails = document.createElement('div'); dockDetails.className = 'radio-dock-details';
+  const joinMusic = document.createElement('button'); joinMusic.type = 'button'; joinMusic.textContent = 'join music'; joinMusic.hidden = true;
+  joinMusic.addEventListener('click', () => player.play());
+  dockDetails.append(nowPlaying, joinMusic); soundHost?.append(dockDetails);
   const transport = document.createElement('section'); transport.className='island-music-player';
   transport.innerHTML='<progress max="1" value="0" aria-label="Song progress"></progress><div class="island-track-times"><span>0:00</span><span>0:00</span></div><p class="island-stream-status">Shared DJ stream</p><div class="island-transport"><button type="button" class="radio-play-toggle" aria-label="Play music">▶</button><button type="button" class="radio-next" aria-label="Next track for everyone">next ↦</button></div><p class="island-player-feedback" role="status"></p><button type="button" class="island-player-retry" hidden>retry playback</button>';
   videoHost.after(transport);
@@ -58,6 +69,10 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   function paintTransport(){
     retry.hidden = !feedback.textContent?.includes('Press play to retry.');
     const progress=player.progress(); const length=Number.isFinite(progress.duration)?progress.duration:0;
+    if (soundHost) { soundHost.dataset.musicTime = String(progress.time); soundHost.dataset.musicSampleAt = String(performance.now()); }
+    joinMusic.hidden = !state?.current || progress.playing;
+    joinMusic.textContent = feedback.textContent?.includes('reconnect') ? 'retry music' : 'join music';
+    joinMusic.title = feedback.textContent ?? '';
     timeline.max=Math.max(1,length); timeline.value=progress.time;
     timeLabels[0].textContent=timestamp(progress.time);
     timeLabels[1].textContent=timestamp(length);
@@ -68,7 +83,8 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   }
   function paint() {
     playing.textContent = state?.current ? `${state.current.title} · ${state.current.queuedBy}` : 'Connecting to the shared radio…';
-    nowPlaying.textContent = state?.current ? `On the radio · ${state.current.title}` : '';
+    nowPlaying.textContent = state?.current?.title ?? '';
+    nowPlaying.title = nowPlaying.textContent;
     if (soundHost) soundHost.dataset.track = state?.current?.title ?? '';
 
     if (paintRevision !== state?.revision) {
@@ -143,8 +159,9 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   panel.querySelector('.radio-skip')!.addEventListener('click', () => { if (state?.current) command({ type: 'radio_queue', action: 'skip', entryId: state.current.id }); });
   const station=createDjStation(group,canvas,panel,{listen:()=>player.play(),skip:()=>{if(state?.current)command({type:'radio_queue',action:'skip',entryId:state.current.id});}});
   let minimized = false, joinedRadio = false, deckOnly = false;
+  function minimize(value: boolean) { minimized = value; panel.classList.toggle('radio-minimized', value); panel.inert = value; }
   panel.querySelector<HTMLButtonElement>('.radio-decks')!.onclick = () => {
-    deckOnly = true; minimized = true; panel.classList.add('radio-minimized');
+    deckOnly = true; minimize(true);
     close.setAttribute('aria-label', 'Close radio');
   };
   function applyScratch(deck: number, offset: number, entryId: number) {
@@ -159,8 +176,7 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   });
   function hide(restore = false, stop = false) {
     station.setActive(false); deckOnly = false;
-    minimized = !stop && (minimized || player.progress().playing);
-    panel.classList.toggle('radio-minimized', minimized);
+    minimize(!stop && (joinedRadio || minimized || player.progress().playing));
     panel.hidden = !minimized;
     close.setAttribute('aria-label', minimized ? 'Stop music and close player' : 'Close radio');
     if (!minimized) player.hide();
@@ -170,7 +186,7 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
   trigger.addEventListener('click', () => {
     if (!visible) return;
     if (!panel.hidden && !minimized) { hide(true); return; }
-    deckOnly = false; minimized = false; panel.classList.remove('radio-minimized'); panel.hidden = false;
+    deckOnly = false; minimize(false); panel.hidden = false;
     close.setAttribute('aria-label', 'Close radio');
     station.setActive(true); trigger.setAttribute('aria-expanded', 'true');
     const agents = document.querySelector<HTMLDetailsElement>('.factory-controls'); if (agents) agents.open = false;
@@ -200,11 +216,12 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
     group,
     cameraFor:station.cameraFor,
     isActive:station.isActive,
-    update(nextCamera: THREE.Camera, isVisible: boolean) {
+    update(nextCamera: THREE.Camera, isVisible: boolean, outside = false) {
       camera = nextCamera; visible = isVisible;
-      if (visible && state?.current && !joinedRadio) {
-        joinedRadio = true; minimized = true;
-        panel.classList.add('radio-minimized'); panel.hidden = false;
+      const roomTime = performance.now(); roomGain.update(outside, (roomTime - lastRoomTime) / 1000); lastRoomTime = roomTime;
+      if (Math.abs(roomGain.value - paintedGain) > .01) { paintedGain = roomGain.value; player.update(state); }
+      if ((visible || outside) && state?.current && !joinedRadio) {
+        joinedRadio = true; minimize(true); panel.hidden = false;
         close.setAttribute('aria-label', 'Stop music and close player');
         void player.join();
       }
@@ -235,8 +252,8 @@ export function createLoungeRadio(parent: THREE.Group, canvas: HTMLCanvasElement
       dj.update(camera, visible, state?.current?.id, state?.current?.dj ?? false);
     },
     dispose() {
-      records.dispose();searchRequest?.abort();clearTimeout(timeout); clearInterval(playbackTimer); unsubscribe(); stopConnection(); document.removeEventListener('keydown', onKey, true);
-      videoHome.after(videoHost); transport.remove(); videoHome.remove(); nowPlaying.remove(); if(soundHost) { delete soundHost.dataset.track; delete soundHost.dataset.playing; } station.dispose(); player.dispose(); dj.dispose(); decks.dispose(); panel.remove(); trigger.remove(); group.removeFromParent();
+      interactionGlow.dispose(); records.dispose();searchRequest?.abort();clearTimeout(timeout); clearInterval(playbackTimer); unsubscribe(); stopConnection(); document.removeEventListener('keydown', onKey, true);
+      videoHome.after(videoHost); transport.remove(); videoHome.remove(); dockDetails.remove(); if(soundHost) { delete soundHost.dataset.track; delete soundHost.dataset.playing; delete soundHost.dataset.musicTime; delete soundHost.dataset.musicSampleAt; } station.dispose(); player.dispose(); dj.dispose(); decks.dispose(); panel.remove(); trigger.remove(); group.removeFromParent();
       const materials = new Set<THREE.Material>(); group.traverse(node => { if (node instanceof THREE.Mesh) { node.geometry.dispose(); for (const material of Array.isArray(node.material) ? node.material : [node.material]) materials.add(material); } });
       materials.forEach(material => material.dispose());
     },

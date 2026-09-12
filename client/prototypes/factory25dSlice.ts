@@ -974,7 +974,8 @@ function animate(): void {
   const zoomedCamera = avatarStage.isActive() ? baseCamera : pointerZoom.cameraFor(baseCamera, now);
   const viewCamera = duckHunt.cameraFor(loungeRadio.cameraFor(visitorBasketball.cameraFor(zoomedCamera,dt),dt),dt);
   loungeRadio.update(viewCamera, factoryRoomVisible && !avatarStage.isActive() && whiteboardInteraction.isRoomView() && !windowInteraction.isOpen()
-    && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive() && !document.body.classList.contains('inspect-open'));
+    && !loungeDetails.chat.isActive() && !teamDesk.isActive() && !brandLibrary.isActive() && !document.body.classList.contains('inspect-open'),
+    sideRoom.isActive() && !sideRoom.showsFactory() && !garage.isActive());
   viewCamera.updateMatrixWorld(); currentViewCamera = viewCamera;
   currentPoseCamera = viewCamera instanceof THREE.OrthographicCamera ? viewCamera : zoomedCamera;
   if (sideRoom.isActive() && !document.hidden) brandFlag.update(elapsed, weather.wind01, reducedSceneMotion.matches);

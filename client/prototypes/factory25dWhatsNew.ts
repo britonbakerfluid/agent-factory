@@ -23,9 +23,14 @@ export function createWhatsNew(visitPatio: () => void) {
   const preview = root.querySelector<HTMLElement>('.factory-update-preview')!;
   root.querySelector('h2')!.textContent = latest.title; root.querySelector('p')!.textContent = latest.summary;
   try { root.dataset.unread = String(localStorage.getItem(storageKey) !== latest.id); } catch { root.dataset.unread = 'true'; }
+  // Restart the occasional unread-gift cue after returning to the page,
+  // rather than letting an animation advance unseen in a background tab.
+  const updateAttention = () => { root.dataset.attention = String(!document.hidden); };
+  document.addEventListener('visibilitychange', updateAttention, events); updateAttention();
   const dialog = document.createElement('dialog'); dialog.className = 'factory-changelog'; dialog.setAttribute('aria-labelledby', 'factory-changelog-title');
   dialog.innerHTML = '<header><div><span class="factory-update-eyebrow">FLUID FACTORY</span><h2 id="factory-changelog-title">What’s new</h2></div><button type="button" aria-label="Close changelog">×</button></header><div class="factory-changelog-entries" tabindex="0" aria-label="Release history"></div>';
   const entries = dialog.querySelector('.factory-changelog-entries')!;
+  const archiveMotions = new Set<Animation>();
   for (const [index, release] of factoryChangelog.entries()) {
     const article = document.createElement('article');
     const date = document.createElement('time'); date.dateTime = release.date;
@@ -33,21 +38,45 @@ export function createWhatsNew(visitPatio: () => void) {
     const heading = document.createElement('h3'); heading.textContent = release.title;
     const description = document.createElement('p'); description.textContent = release.summary;
     const list = document.createElement('ul');
-    for (const change of release.changes) { const li = document.createElement('li'); li.textContent = change; list.append(li); }
+    for (const change of release.changes) {
+      const li = document.createElement('li'), label = document.createElement('strong');
+      label.textContent = change.label; li.append(label, ` ${change.text}`); list.append(li);
+    }
+    const row = document.createElement('section'); row.className = 'factory-release-row';
+    row.append(date); entries.append(row);
     if (index === 0) {
       article.className = 'factory-changelog-featured';
       article.innerHTML = gamesArtwork;
-      article.append(date, heading, description);
+      article.append(heading, description);
       const action = document.createElement('button'); action.type = 'button'; action.className = 'factory-changelog-try'; action.textContent = 'find Duck Hunt on the patio ↗';
       action.addEventListener('click', () => { dialog.close(); visitPatio(); }, events);
-      const details = document.createElement('details'); details.className = 'factory-release-details';
-      const label = document.createElement('summary'); label.textContent = 'More in this update';
-      details.append(label, list); article.append(action, details); entries.append(article);
+      article.append(list, action); row.append(article);
       const archiveHeading = document.createElement('h3'); archiveHeading.className = 'factory-archive-heading'; archiveHeading.textContent = 'Earlier updates'; entries.append(archiveHeading);
     } else {
       const details = document.createElement('details'); details.className = 'factory-release-archive';
-      const label = document.createElement('summary'); label.append(date, heading);
-      article.innerHTML = releaseArtwork(release.id); article.append(description, list); details.append(label, article); entries.append(details);
+      const label = document.createElement('summary');
+      label.innerHTML = releaseArtwork(release.id);
+      const artwork = label.firstElementChild as HTMLElement;
+      const copy = document.createElement('span'); copy.className = 'factory-release-summary';
+      const teaser = document.createElement('span'); teaser.className = 'factory-release-teaser'; teaser.textContent = release.summary;
+      copy.append(heading, teaser); label.prepend(copy);
+      article.append(list); details.append(label, article); row.append(details);
+      let imageMotion: Animation | undefined;
+      label.addEventListener('click', event => {
+        event.preventDefault();
+        const from = artwork.getBoundingClientRect();
+        imageMotion?.cancel();
+        details.open = !details.open;
+        if (event.detail === 0 || reducedMotion.matches) return;
+        const to = artwork.getBoundingClientRect();
+        imageMotion = artwork.animate([
+          { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})` },
+          { transform: 'none' },
+        ], { duration: 260, easing: 'cubic-bezier(.22,1,.36,1)' });
+        archiveMotions.add(imageMotion);
+        const motion = imageMotion;
+        motion.onfinish = motion.oncancel = () => archiveMotions.delete(motion);
+      }, events);
     }
   }
   document.body.append(root, dialog);
@@ -75,7 +104,7 @@ export function createWhatsNew(visitPatio: () => void) {
   function expand(next: boolean) {
     open = next; root.dataset.open = String(next); trigger.setAttribute('aria-expanded', String(next)); preview.inert = !next;
     if (next) { root.dataset.unread = 'false'; try { localStorage.setItem(storageKey, latest.id); } catch { /* Available without browser storage. */ } }
-    position();
+    position(); syncVideos();
   }
   root.addEventListener('keydown', event => event.stopPropagation(), events);
   trigger.addEventListener('click', event => { root.dataset.instant = String(event.detail === 0); expand(!open); }, events);
@@ -84,6 +113,39 @@ export function createWhatsNew(visitPatio: () => void) {
   let contentMotions: Animation[] = [];
   const clearContentMotion = () => { contentMotions.forEach(motion => motion.cancel()); contentMotions = []; };
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const videos = [...root.querySelectorAll<HTMLVideoElement>('video'), ...dialog.querySelectorAll<HTMLVideoElement>('video')];
+  const inView = new Set<HTMLVideoElement>();
+  const userPaused = new Set<HTMLVideoElement>();
+  function syncVideos() {
+    for (const video of videos) {
+      const visible = inView.has(video) && !document.hidden && (dialog.contains(video) ? dialog.open : open && !dialog.open);
+      const button = video.parentElement!.querySelector<HTMLButtonElement>('button')!;
+      button.hidden = reducedMotion.matches;
+      if (reducedMotion.matches) {
+        video.pause();
+        if (video.hasAttribute('src')) { video.removeAttribute('src'); video.load(); }
+      } else if (visible && !userPaused.has(video)) {
+        if (!video.hasAttribute('src')) video.src = video.dataset.src!;
+        video.muted = true; void video.play().catch(() => { userPaused.add(video); button.textContent = 'Play'; button.setAttribute('aria-label', 'Play basketball replay'); });
+      } else video.pause();
+    }
+  }
+  const videoObserver = new IntersectionObserver(records => {
+    for (const record of records) { const video = record.target as HTMLVideoElement; if (record.isIntersecting) inView.add(video); else inView.delete(video); }
+    syncVideos();
+  }, { threshold: 0.1 });
+  for (const video of videos) {
+    videoObserver.observe(video);
+    const button = video.parentElement!.querySelector<HTMLButtonElement>('button')!;
+    button.addEventListener('click', () => {
+      if (userPaused.has(video)) userPaused.delete(video); else userPaused.add(video);
+      button.textContent = userPaused.has(video) ? 'Play' : 'Pause';
+      button.setAttribute('aria-label', `${userPaused.has(video) ? 'Play' : 'Pause'} basketball replay`);
+      syncVideos();
+    }, events);
+  }
+  reducedMotion.addEventListener('change', syncVideos, events);
+  document.addEventListener('visibilitychange', syncVideos, events);
   function morph(from: DOMRect, to: DOMRect, closing = false) {
     modalMotion?.cancel(); clearContentMotion();
     const frame = (rect: DOMRect) => ({ left:`${rect.left}px`, top:`${rect.top}px`, width:`${rect.width}px`, height:`${rect.height}px`, margin:'0', maxHeight:'none' });
@@ -98,12 +160,12 @@ export function createWhatsNew(visitPatio: () => void) {
   root.querySelector('[data-update="history"]')!.addEventListener('click', event => {
     const from = root.getBoundingClientRect();
     const instant = (event as MouseEvent).detail === 0 || reducedMotion.matches;
-    dialog.dataset.instant = 'true'; expand(false); dialog.showModal();
+    dialog.dataset.instant = 'true'; expand(false); dialog.showModal(); syncVideos();
     dialog.querySelector('button')!.focus({preventScroll:true});
     if (!instant) morph(from, dialog.getBoundingClientRect());
   }, events);
   dialog.querySelector('button')!.addEventListener('click', event => closeHistory(event.detail === 0), events);
-  dialog.addEventListener('close', () => { modalMotion?.cancel(); modalMotion = undefined; clearContentMotion(); trigger.focus({preventScroll:true}); }, events);
+  dialog.addEventListener('close', () => { modalMotion?.cancel(); modalMotion = undefined; clearContentMotion(); syncVideos(); trigger.focus({preventScroll:true}); }, events);
   dialog.addEventListener('click', event => { if (event.target === dialog) { const r = dialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) closeHistory(); } }, events);
   document.addEventListener('pointerdown', event => { if (open && !root.contains(event.target as Node)) expand(false); }, events);
   document.addEventListener('keydown', event => {
@@ -122,5 +184,5 @@ export function createWhatsNew(visitPatio: () => void) {
   }, { ...events, capture:true });
   const observer = new ResizeObserver(position); const toolbar = document.querySelector<HTMLElement>('.factory-toolbar'); if (toolbar) observer.observe(toolbar);
   window.addEventListener('resize', position, events); position();
-  return { dispose() { abort.abort(); modalMotion?.cancel(); clearContentMotion(); observer.disconnect(); dialog.remove(); root.remove(); toolbar?.style.removeProperty('left'); toolbar?.style.removeProperty('max-width'); toolbar?.style.removeProperty('--factory-toolbar-max-width'); } };
+  return { dispose() { abort.abort(); videoObserver.disconnect(); videos.forEach(video => video.pause()); archiveMotions.forEach(motion => motion.cancel()); modalMotion?.cancel(); clearContentMotion(); observer.disconnect(); dialog.remove(); root.remove(); toolbar?.style.removeProperty('left'); toolbar?.style.removeProperty('max-width'); toolbar?.style.removeProperty('--factory-toolbar-max-width'); } };
 }

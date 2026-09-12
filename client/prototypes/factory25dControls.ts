@@ -1,6 +1,7 @@
 import { sharedPickupFor } from './factory25dSharedPickup';
 import { createSharedPickupVisual } from './factory25dSharedPickupVisual';
 import { savedVolume, rememberVolume } from './factory25dVolumeMemory';
+import { musicMeterHeights } from './factory25dMusicMeter';
 import { pixelIcon } from './factory25dPixelIcons';
 import { createIslandTransitions } from './factory25dIslandTransitions';
 import { setAvatarTextureFrame } from './factory25dAvatarTexture';
@@ -141,18 +142,13 @@ export function createFactoryControls(canvas: HTMLCanvasElement, agents: ReturnT
     const music = enabled && Number(channels[0]?.slider.value) > 0 && soundPanel?.dataset.playing === 'true';
     const energy = enabled && Number(channels[1]?.slider.value) > 0 ? Number(soundPanel?.dataset.sfxLevel || 0) : 0;
     quickMute.classList.toggle('is-silent', !audible);
-    quickMute.querySelectorAll<HTMLElement>('i').forEach((bar, i) => {
-      const time = performance.now();
-      const pulse = audioReducedMotion.matches || document.hidden ? 0 : music
-        ? (Math.sin(time/180 + i*1.8)+1)*.32+.2
-        : (Math.sin(time/420 + i*1.3)+Math.sin(time/730-i*.8)+2)*.075;
-      const restingHeight = (audible ? [3, 5, 8, 11, 8, 5, 3] : [2, 3, 5, 7, 5, 3, 2])[i];
-      bar.style.height = `${Math.round(restingHeight + Math.min(1, pulse + (audioReducedMotion.matches ? 0 : energy) * (1 - Math.abs(i-3)/5))*(audible ? 10 : 4))}px`;
-    });
+    const playbackTime = Number(soundPanel?.dataset.musicTime || 0) + (performance.now() - Number(soundPanel?.dataset.musicSampleAt || performance.now())) / 1000;
+    const heights = musicMeterHeights(playbackTime, music, energy, audible, audioReducedMotion.matches || document.hidden);
+    quickMute.querySelectorAll<HTMLElement>('i').forEach((bar, i) => { bar.style.height = `${heights[i]}px`; });
   };
   const soundObserver = new MutationObserver(syncSound);
   if (soundPanel) soundObserver.observe(soundPanel, { attributes:true, subtree:true, attributeFilter:['data-playing','data-sfx-level'] });
-  const soundMeter = window.setInterval(syncSound, 100);
+  const soundMeter = window.setInterval(syncSound, 50);
   syncSound();
   const roomPicker = toolbar.querySelector<HTMLButtonElement>('.factory-room-picker')!;
   const viewTools = toolbar.querySelector<HTMLElement>('.factory-view-tools')!;

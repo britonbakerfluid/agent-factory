@@ -153,7 +153,7 @@ export function createSideRoom(scene: THREE.Scene) {
   const water = createPatioWater(room, timber);
   const sun = new THREE.DirectionalLight("#fff0d5", 0.9);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(512, 512);
+  sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, {
     left: -11,
     right: 11,
@@ -162,9 +162,11 @@ export function createSideRoom(scene: THREE.Scene) {
     near: 0.1,
     far: 70,
   });
-  sun.shadow.bias = -0.001;
-  sun.shadow.radius = 0;
-  sun.shadow.normalBias = 0.03;
+  // Keep cast shadows attached to the planter bases. The old depth offset
+  // detached them, while the low-resolution map exaggerated stepped edges.
+  sun.shadow.bias = -0.0001;
+  sun.shadow.radius = 1;
+  sun.shadow.normalBias = 0.012;
   scene.add(sun, sun.target);
   const seeds = Float32Array.from({ length: 180 * 3 }, (_, i) => {
     const n = Math.sin(i * 127.1 + 311.7) * 43758.5453;
@@ -266,9 +268,12 @@ export function createSideRoomNavigation(
   outline.lineTo(.25,-.07); outline.lineTo(.34,-.07); outline.lineTo(.34,.07);
   outline.lineTo(.25,.07); outline.lineTo(.25,.14); outline.lineTo(.16,.14);
   outline.lineTo(.16,.23); outline.lineTo(.02,.23); outline.lineTo(.02,.1); outline.lineTo(-.32,.1); outline.closePath();
-  const arrowFace = standard('#f5dc87', .42, '#67501c');
-  const arrowMesh = new THREE.Mesh(new THREE.ExtrudeGeometry(outline, {depth:.09,bevelEnabled:false,steps:1}), [arrowFace,standard('#97713c',.65)]);
-  arrowMesh.rotation.x = -Math.PI / 2; arrowMesh.castShadow = true; arrow.add(arrowMesh);
+  // Match the warm, translucent basketball markers while keeping a shallow
+  // extruded edge. Unlit faces stay consistent indoors, outdoors and at night.
+  const arrowFace = new THREE.MeshBasicMaterial({ color:'#f6bc58', transparent:true, opacity:.64, depthWrite:false, toneMapped:false });
+  const arrowEdge = new THREE.MeshBasicMaterial({ color:'#bc8136', transparent:true, opacity:.42, depthWrite:false, toneMapped:false });
+  const arrowMesh = new THREE.Mesh(new THREE.ExtrudeGeometry(outline, {depth:.065,bevelEnabled:false,steps:1}), [arrowFace,arrowEdge]);
+  arrowMesh.rotation.x = -Math.PI / 2; arrow.add(arrowMesh);
   arrow.position.set(SIDE_DOOR.x - .85,.16,-1.55);
   door.classList.add('scene-arrow-target');
   let arrowHovered = false, arrowScale = 1, lastArrowTime = performance.now();
@@ -345,6 +350,9 @@ export function createSideRoomNavigation(
       arrow.visible = !hidden && !document.body.matches('.garage-open,.garage-travelling,.inspect-open,.chat-open,.team-open,.brand-open,.dj-station-open,.avatar-stage-open,.duck-hunt-open,.basketball-mode');
       const elapsed = Math.min(.1, Math.max(0, (now - lastArrowTime) / 1000)); lastArrowTime = now;
       arrowScale = reduced.matches ? (arrowHovered ? 1.2 : 1) : THREE.MathUtils.damp(arrowScale, arrowHovered ? 1.2 : 1, 18, elapsed);
+      const emphasis = THREE.MathUtils.clamp((arrowScale - 1) / .2, 0, 1);
+      arrowFace.opacity = .64 + emphasis * .18;
+      arrowEdge.opacity = .42 + emphasis * .18;
       arrow.scale.setScalar(arrowScale); arrow.rotation.y = open ? Math.PI : 0;
       arrow.position.x = SIDE_DOOR.x + (open ? .65 : -.85);
       // Settled room views render only their own scene. Keep the actual mesh

@@ -1,3 +1,4 @@
+import { welcomeChallengeOwner } from './welcome-challenge-config.js';
 import { PickupMotionManager } from './pickup-motion.js';
 import { RoomPropsManager } from './room-props.js';
 import { registerRadioSearch } from './radio-search.js';
@@ -160,7 +161,7 @@ async function main() {
   registerRadioSearch(app, request => readBrowserPrincipal(request, auth)?.ownerId);
   const visitorBalls = new VisitorBasketball(broadcast);
   // Challenges address durable people from the roster, never sessions; the challenger is the signed-in principal.
-  const challenges = new BasketballChallenges(repository, broadcast, ownerId => { const member = team.member(ownerId); return member && { ownerId: member.id, name: member.name }; });
+  const challenges = new BasketballChallenges(repository, broadcast, ownerId => { const member = team.member(ownerId); return member && { ownerId: member.id, name: member.name }; }, Date.now, welcomeChallengeOwner(process.env));
   await challenges.initialize();
   const garageDriving = new GarageDrivingManager(state, broadcast);
   const pickupsEnabled = state.getSnapshot().environment === 'factory25d';

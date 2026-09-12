@@ -23,7 +23,9 @@ export function contactShadow(parent: THREE.Object3D, {
     canvas.height = Math.min(128, Math.max(32, Math.ceil(extentZ * 80)));
     const ctx = canvas.getContext('2d')!;
     const pixels = ctx.createImageData(canvas.width, canvas.height);
-    const corner = Math.min(width, depth) * 0.2;
+    // A box footprint needs contact at its corners too; rounding by 20% of a
+    // large planter's width made the base look lifted above the deck.
+    const corner = Math.min(spread * 0.5, Math.min(width, depth) * 0.2);
     for (let py = 0; py < canvas.height; py += 1) for (let px = 0; px < canvas.width; px += 1) {
       const u = ((px + 0.5) / canvas.width - 0.5) * extentX;
       const v = ((py + 0.5) / canvas.height - 0.5) * extentZ;

@@ -172,7 +172,7 @@ export function createLoungeChat(
   let lastMembers: readonly TeamMember[] | undefined;
   let renderedMessages: ChatMessage[] = [];
   let lastData: BoardData | null = null;
-  let layoutWidth = 360;
+  let layoutWidth = 360, panelProgress = 0, panelFrom = 0;
   const focus = new THREE.Vector3();
   const arrivals = new PhoneMessageArrivals();
   const reminders = new PhoneUnreadReminders();
@@ -220,6 +220,7 @@ export function createLoungeChat(
     reminders.read(); cancelNotification();
     room = cameraPose(roomCamera); from = cameraPose(roomCamera);
     const previousHeight = canvas.clientHeight;
+    panelFrom = panelProgress;
     open = active = moving = true; started = performance.now();
     document.body.classList.add('chat-open');
     view.removeAttribute('aria-hidden'); view.setAttribute('role', 'dialog'); view.setAttribute('aria-modal', 'true');
@@ -236,6 +237,7 @@ export function createLoungeChat(
   function exit() {
     if (!open) return;
     queuedEntry = false; focusInputOnArrival = false; hideSuggestions(); saveDraft();
+    panelFrom = panelProgress;
     from = cameraPose(camera); open = false; moving = true; started = performance.now();
     sheet.inert = true;
   }
@@ -354,6 +356,7 @@ export function createLoungeChat(
           fit(); positionSuggestions();
         }
         const t = reduced.matches || !moving ? 1 : THREE.MathUtils.clamp((now - started) / 720, 0, 1);
+        panelProgress = THREE.MathUtils.lerp(panelFrom, open ? 1 : 0, t * t * (3 - 2 * t));
         const viewport = canvas.closest('.slice-viewport')!.getBoundingClientRect();
         const restoredHeight = Math.min(viewport.height, viewport.width * 141 / 200) - 2;
         const to = open ? closePose() : { ...room, height: room.height * canvas.clientHeight / Math.max(1, restoredHeight) };
@@ -374,7 +377,24 @@ export function createLoungeChat(
       if (!sheet.hidden) {
         const viewCamera = active ? camera : roomCamera;
         const tl = project(-PHONE.screenWidth / 2, PHONE.screenHeight / 2, viewCamera), tr = project(PHONE.screenWidth / 2, PHONE.screenHeight / 2, viewCamera), bl = project(-PHONE.screenWidth / 2, -PHONE.screenHeight / 2, viewCamera);
-        const width = layoutWidth, height = width * PHONE.screenHeight / PHONE.screenWidth;
+        // On phones, grow the projected glass into a readable panel instead of
+        // constraining the conversation to the physical handset aspect ratio.
+        const mobile = canvas.clientWidth <= 600;
+        sheet.dataset.mobile = String(mobile);
+        let width = layoutWidth, height = width * PHONE.screenHeight / PHONE.screenWidth;
+        if (mobile) {
+          const player = minimizedPlayerBounds();
+          const visual = window.visualViewport;
+          const top = Math.max(12, player ? player.bottom + 12 : 12, visual?.offsetTop ?? 0);
+          const bottom = Math.min(canvas.clientHeight, (visual?.offsetTop ?? 0) + (visual?.height ?? canvas.clientHeight)) - 76;
+          width = canvas.clientWidth - 24;
+          height = Math.max(1, bottom - top);
+          sheet.dataset.compact = String(height < 440);
+          for (const [point, x, y] of [[tl, 12, top], [tr, 12 + width, top], [bl, 12, top + height]] as const) {
+            point.x = THREE.MathUtils.lerp(point.x, x, panelProgress);
+            point.y = THREE.MathUtils.lerp(point.y, y, panelProgress);
+          }
+        }
         sheet.style.width = `${width}px`; sheet.style.height = `${height}px`;
         sheet.style.transform = `matrix(${(tr.x - tl.x) / width},${(tr.y - tl.y) / width},${(bl.x - tl.x) / height},${(bl.y - tl.y) / height},${tl.x},${tl.y})`;
       }

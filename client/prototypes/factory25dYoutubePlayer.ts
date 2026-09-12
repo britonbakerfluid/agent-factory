@@ -21,9 +21,10 @@ function youtubeApi() {
     document.head.append(script);
   });
 }
-/** Playback is only allowed in a visible, on-screen official player. No extracted audio. */
+/** Keep the same official iframe alive when the room's optional controls collapse. */
 export function createYoutubePlayer(host: HTMLElement, callbacks: {
   preferences(): { enabled: boolean; volume: number }; enable(): void;
+  background?: boolean;
   duration(id: number, seconds: number): void; feedback(message: string): void; playback?(playing: boolean): void;
 }) {
   let generation = 0;
@@ -36,6 +37,7 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
   let wantsPlayback = false, retryAt = 0, retries = 0, stalledAt: number | undefined;
   let loadingEntry = false;
   let recoveryEntry = -1, disconnected = false;
+  const presentationAllowsPlayback = () => shown && (callbacks.background || inView);
   const sharedTime = () => Math.max(0, (Date.now() + offset - (state?.current?.startedAt ?? Date.now())) / 1000);
   function clearRecovery() { retryAt = 0; retries = 0; stalledAt = undefined; }
   function scheduleRecovery() {
@@ -56,7 +58,7 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
   }
   function publishPlayback() {
     const prefs = callbacks.preferences();
-    const next = isPlaying && shown && inView && !document.hidden && prefs.enabled && prefs.volume > 0 && !!state?.current;
+    const next = isPlaying && presentationAllowsPlayback() && !document.hidden && prefs.enabled && prefs.volume > 0 && !!state?.current;
     if (next !== audible) { audible = next; callbacks.playback?.(next); }
   }
   const observer = new IntersectionObserver(entries => { inView = entries[0]?.intersectionRatio >= .95; tick(); }, { threshold: [0, .95, 1] });
@@ -71,7 +73,7 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
     if (disposed) return;
     publishPlayback();
     const preferences = callbacks.preferences();
-    const allowed = shown && inView && !document.hidden && preferences.enabled && consent && wantsPlayback;
+    const allowed = presentationAllowsPlayback() && !document.hidden && preferences.enabled && consent && wantsPlayback;
     const current = state?.current;
     if (allowed && preferences.volume > 0 && current && !retryOnGesture) {
       if (stalledAt !== undefined && Date.now() - stalledAt >= 15000) scheduleRecovery();
@@ -120,6 +122,7 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
       if (disposed || generation !== currentGeneration) return;
       const mount = document.createElement('div'); host.append(mount);
       player = new YT.Player(mount, {
+        videoId: state?.current?.videoId,
         width: '100%', height: '100%', playerVars: { playsinline: 1, origin: location.origin },
         events: {
           onReady: () => { if (generation !== currentGeneration) return; ready = true; stalledAt = undefined; tick(); },
@@ -129,7 +132,7 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
             publishPlayback();
             if (event.data === 1) {
               loadingEntry = false;
-              if (!shown || !inView || document.hidden) { player?.pauseVideo(); return; }
+              if (!presentationAllowsPlayback() || document.hidden) { player?.pauseVideo?.(); return; }
               if (!consent) callbacks.enable();
               else if (!callbacks.preferences().enabled) { player?.pauseVideo(); return; }
               consent = true; wasAllowed = true; retryOnGesture = false;
@@ -142,7 +145,7 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
             // Once it starts, YouTube's own pause control is the listener's choice.
             if (event.data === 2 && !loadingEntry) {
               stalledAt = undefined;
-              if (shown && inView && !document.hidden && callbacks.preferences().enabled && state?.current && !resumeOnShow && !retryOnGesture && retryAt === 0) wantsPlayback = false;
+              if (presentationAllowsPlayback() && !document.hidden && callbacks.preferences().enabled && state?.current && !resumeOnShow && !retryOnGesture && retryAt === 0) wantsPlayback = false;
             }
             if (event.data === 0 && !loadingEntry) stalledAt = undefined;
           },
@@ -172,7 +175,7 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
     }
     finally { if (generation === currentGeneration) loading = false; }
   }
-  const onVisibility = () => { if (document.hidden) { resumeOnShow = resumeOnShow || wantsPlayback; player?.pauseVideo(); wasAllowed = false; } tick(); };
+  const onVisibility = () => { if (document.hidden) { resumeOnShow = resumeOnShow || wantsPlayback; player?.pauseVideo?.(); wasAllowed = false; } tick(); };
   document.addEventListener('visibilitychange', onVisibility);
   const onGesture = () => {
     if (!retryOnGesture || !shown || !callbacks.preferences().enabled) return;
@@ -191,11 +194,11 @@ export function createYoutubePlayer(host: HTMLElement, callbacks: {
     reset() {
       resumeOnShow = wantsPlayback; clearRecovery(); destroyPlayer(); callbacks.feedback('');
     },
-    pause() { retryOnGesture = false; wantsPlayback = false; resumeOnShow = false; loadingEntry = false; clearRecovery(); player?.pauseVideo(); isPlaying = false; publishPlayback(); },
+    pause() { retryOnGesture = false; wantsPlayback = false; resumeOnShow = false; loadingEntry = false; clearRecovery(); player?.pauseVideo?.(); isPlaying = false; publishPlayback(); },
     seek(seconds: number) { if(ready && Number.isFinite(seconds)) player?.seekTo(Math.max(0, Math.min(player.getDuration(), seconds)), true); },
     progress() { return {ready, playing:isPlaying, time:ready ? player?.getCurrentTime() ?? 0 : 0, duration:ready ? player?.getDuration() ?? 0 : 0}; },
     play() { consent = true; wantsPlayback = true; resumeOnShow = true; retryOnGesture = false; const failed = retryAt !== 0; clearRecovery(); callbacks.enable(); if (failed) destroyPlayer(); if (!player) void open(); else tick(); },
-    hide() { resumeOnShow = resumeOnShow || wantsPlayback; shown = false; publishPlayback(); player?.pauseVideo(); wasAllowed = false; },
+    hide() { resumeOnShow = resumeOnShow || wantsPlayback; shown = false; publishPlayback(); player?.pauseVideo?.(); wasAllowed = false; },
     update(next: RadioState | undefined) {
       if (!next) disconnected = true;
       if (state !== next) {

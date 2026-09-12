@@ -1,3 +1,4 @@
+import { createInteractionGlow } from './factory25dInteractionGlow';
 import * as THREE from 'three';
 import { createBasketballFloorMarker } from './factory25dFloorMarker';
 import { validHorseSpot, HORSE_RELEASE_Y } from '@shared/basketball-challenge';
@@ -83,6 +84,7 @@ export function createVisitorBasketball(parent: THREE.Group, canvas: HTMLCanvasE
     button.setAttribute('aria-label', `Pick up basketball ${index + 1}`);
     canvas.parentElement!.append(button); return button;
   });
+  const pickupGlows = pickups.map((mesh, index) => createInteractionGlow(mesh, triggers[index]));
   const aimMaterial = new THREE.LineDashedMaterial({ color: '#b6c9c2', transparent: true, opacity: .5, dashSize: .045, gapSize: .035 });
   const aimGeometry = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(45), 3));
   const aimLine = new THREE.Line(aimGeometry, aimMaterial); aimLine.visible = false; aimLine.frustumCulled = false; parent.add(aimLine);
@@ -614,7 +616,7 @@ export function createVisitorBasketball(parent: THREE.Group, canvas: HTMLCanvasE
       canvas.dataset.ghostBalls = String(ghosts.size);
     },
     dispose() {
-      leaveMode(); exitListeners.clear(); releasePointer(); abort.abort(); stopMessages(); stopConnection();
+      pickupGlows.forEach(glow => glow.dispose()); leaveMode(); exitListeners.clear(); releasePointer(); abort.abort(); stopMessages(); stopConnection();
       for (const id of ghosts.keys()) removeGhost(id);
       for (const ball of locals.values()) { disposeBall(ball.mesh); pickups[ball.index].visible = true; if (pickupShadows[ball.index]) pickupShadows[ball.index].visible = true; }
       aimLine.removeFromParent(); aimGeometry.dispose(); aimMaterial.dispose(); triggers.forEach(button => button.remove()); hint.remove(); document.body.classList.remove('basketball-input-active'); dropRing.removeFromParent(); dropRing.geometry.dispose(); dropRing.material.dispose(); placementHint.remove(); status.remove();

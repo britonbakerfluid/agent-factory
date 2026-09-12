@@ -7,6 +7,9 @@ services:
     autoDeploy: true
     plan: free
     envVars:
+      # One opening HORSE shot from Briton for each signed-in teammate.
+      - key: AF_WELCOME_HORSE_OWNER_ID
+        value: FGApEbY5j36CGIdrEvuUZ1DoBn03cPKgnQmWvRnHqnQ
       - key: AF_TOKEN_SECRET
         generateValue: true
       - key: HOST
