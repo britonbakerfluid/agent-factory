@@ -21,6 +21,23 @@ describe('YouTube queue', () => {
     expect(radioMood(Date.parse('2026-09-09T00:00:00Z'))).toBe('evening');
     expect(radioMood(Date.parse('2026-09-09T06:00:00Z'))).toBe('night');
   });
+  it('plays every pick before repeating, and resumes its place after a human request', () => {
+    for (const stamp of ['2026-09-08T16:00:00Z', '2026-09-09T00:00:00Z', '2026-09-09T06:00:00Z']) {
+      const now = Date.parse(stamp), q = new LoungeRadioQueue();
+      const picks = DJ_VIDEOS.filter(v => v.mood === radioMood(now));
+      expect(picks.length).toBeGreaterThan(2);
+      const heard: string[] = [];
+      for (let i = 0; i < picks.length; i++) {
+        const current = q.snapshot(now).current!;
+        heard.push(current.videoId); q.skip(current.id, now);
+      }
+      expect(new Set(heard).size).toBe(picks.length);
+      expect(q.snapshot(now).current?.videoId).toBe(heard[0]);
+      q.enqueue(a, 'Alice', now);
+      q.skip(q.snapshot(now).current!.id, now);
+      expect(q.snapshot(now).current).toMatchObject({ videoId: heard[1], dj: true });
+    }
+  });
   it('fills silence, prioritizes human songs and resumes the DJ after the queue finishes', () => {
     const q = new LoungeRadioQueue(); expect(q.snapshot(1000).current?.dj).toBe(true);
     q.enqueue(a, 'Alice', 2000); const song = q.snapshot(2000).current!;
