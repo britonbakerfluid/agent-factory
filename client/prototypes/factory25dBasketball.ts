@@ -56,7 +56,7 @@ export function createBasketball(
   const resultMaterial = new THREE.MeshBasicMaterial({color:'#17201d',toneMapped:false});
   propPart(hoop, [.48,.08,.035], [0,boardY+.39,.02], frame);
   propPart(hoop, [.42,.045,.012], [0,boardY+.39,.044], resultMaterial);
-  let resultTime = 0;
+  let resultTime = 0, agentResultDelay = 0;
   function showResult(made: boolean) { resultMaterial.color.set(made ? '#41ef78' : '#ff4238'); resultTime = 1.6; }
 
   const mountingSteel = standard('#a9bbbf', 0.55);
@@ -138,7 +138,7 @@ export function createBasketball(
     const now = performance.now();
     if (now - lastAgentDunk < 900) return;
     lastAgentDunk = now;
-    hitRim(.25); swishNet(); showResult(true); sounds.swish?.();
+    hitRim(.25); swishNet(); agentResultDelay = .25; sounds.swish?.();
   };
 
   const ball = miniBall(parent),
@@ -255,6 +255,7 @@ export function createBasketball(
       free: boolean,
       reduced: boolean,
     ) {
+      if (agentResultDelay > 0) { agentResultDelay = Math.max(0,agentResultDelay-dt); if (!agentResultDelay) showResult(true); }
       if (resultTime > 0) { resultTime = Math.max(0,resultTime-dt); if (!resultTime) resultMaterial.color.set('#17201d'); }
       if (reduced) { rimAngle = 0; rimVelocity = 0; }
       else {

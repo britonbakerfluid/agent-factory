@@ -189,7 +189,7 @@ it.each([false,true])('falls through the hoop without rotating and restores its 
  const startY=f.mesh.position.y;let previousY=startY,sawLanding=false;
  for(now=140;now<=2400;now+=20){
   f.mesh.position.set(0,0,0);motion.update(camera,canvas);
-  expect(f.mesh.scale.toArray()).toEqual([1,1,1]);expect(f.mesh.rotation.z).toBe(0);
+  expect(f.mesh.scale.x).toBeGreaterThanOrEqual(.19);expect(f.mesh.scale.x).toBeLessThanOrEqual(1);expect(f.mesh.rotation.z).toBe(0);
   if(motion.stage==='dunking'){
    expect(f.mesh.position.y).toBeLessThanOrEqual(previousY+1e-8);
    const pixels=(startY-f.mesh.position.y)/(.86/32);expect(pixels).toBeCloseTo(Math.round(pixels),8);
@@ -266,9 +266,13 @@ it('squeezes and lingers at the rim, then restores normal proportions on landing
  for(;now<=5000;now+=20){
   f.mesh.position.set(0,0,0);motion.update(camera,canvas);
   minWidth=Math.min(minWidth,f.mesh.scale.x);
+  if(motion.stage==='dunking'&&Math.abs(f.mesh.position.y-1)<.5){
+    expect(f.mesh.scale.x).toBeLessThanOrEqual(.200001);
+    expect(f.mesh.scale.y).toBeCloseTo(1.18);
+  }
   if(motion.stage==='dunking'&&Math.abs(f.mesh.position.y-1)<.3)contactFrames++;
  }
- expect(minWidth).toBeLessThan(.9);expect(minWidth).toBeGreaterThanOrEqual(.84);
+ expect(minWidth).toBeCloseTo(.2);
  expect(contactFrames).toBeGreaterThan(8);
  expect(motion.active).toBe(false);expect(f.mesh.scale.toArray()).toEqual([1,1,1]);
  motion.dispose();f.pickup.dispose();
