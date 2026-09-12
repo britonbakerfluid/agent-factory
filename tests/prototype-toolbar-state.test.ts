@@ -23,7 +23,7 @@ describe('persistent factory navigation states', () => {
   it('keeps back and navigation usable inside a close-up', () => {
     expect(factoryToolbarState({...base,focused:'avatar',blocked:true})).toMatchObject({action:'back',primaryDisabled:false,navigationDisabled:false,profileSelected:true});
   });
-  it.each(['window','whiteboard','avatar','brand shelf','chat'])('replaces room controls with %s tools', focused => {
+  it.each(['window','whiteboard','avatar','brand shelf','chat','newspaper'])('replaces room controls with %s tools', focused => {
     expect(factoryToolbarState({...base,signedIn:true,focused,blocked:true})).toMatchObject({
       action:'back',tools:focused,showRoomTools:false,showProfile:false,primaryDisabled:false,
     });

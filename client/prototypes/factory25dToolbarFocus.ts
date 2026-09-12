@@ -2,6 +2,7 @@
 export function createToolbarFocus(toolbar: HTMLElement, available: () => boolean,
   leaveAvatar: () => boolean) {
   const views = [
+    { className: 'newspaper-open', name: 'newspaper', close: '.newspaper-close', modal: '.newspaper-dialog' },
     { className: 'duck-hunt-open', name: 'duck hunt', close: '#duck-play', modal: '' },
     { className: 'dj-station-open', name: 'DJ station', close: '.lounge-radio-panel header button', modal: '' },
     { className: 'basketball-mode', name: 'basketball', close: '.visitor-ball-hint [data-action="back"]', modal: '' },
