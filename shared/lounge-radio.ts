@@ -1,8 +1,14 @@
 /** Only official YouTube embeds are played; these are curated fallbacks, not generated recommendations. */
 export const DJ_VIDEOS = [
-  { videoId: '1fueZCTYkpA', title: 'Morning Coffee · Lofi Girl', mood: 'day' },
-  { videoId: 'O5g9Jxd4Ho0', title: 'First Snow · Chillhop Music', mood: 'evening' },
-  { videoId: 'Nyx6SBixRE8', title: 'Sleepless Night · Lofi Girl', mood: 'night' },
+  { videoId: 'LMeluRz2wv4', title: 'Doomsday · MF DOOM', mood: 'day' },
+  { videoId: 'G8_HqSbOw_M', title: 'All Time Low · Jon Bellion', mood: 'day' },
+  { videoId: 'elVF7oG0pQs', title: "Heard ’Em Say · Kanye West feat. Adam Levine", mood: 'day' },
+  { videoId: 'dERcdvcXuE0', title: 'Rapp Snitch Knishes · MF DOOM feat. Mr. Fantastik', mood: 'evening' },
+  { videoId: '3VxuMErCd-E', title: 'Blu · Jon Bellion', mood: 'evening' },
+  { videoId: 'ZtkNfC5Oymw', title: 'Everything I Am · Kanye West feat. DJ Premier', mood: 'evening' },
+  { videoId: 'j2DJbV5zyoQ', title: 'Arrowroot · MF DOOM', mood: 'night' },
+  { videoId: '0vmhgotEByc', title: 'Time: The Donut of the Heart · J Dilla', mood: 'night' },
+  { videoId: 'pzy1ZeX8ZOY', title: 'Blu (Acoustic) · Jon Bellion', mood: 'night' },
 ] as const;
 export interface RadioEntry { id: number; videoId: string; title: string; queuedBy: string; dj: boolean }
 export interface RadioScratch { type: 'radio_scratch'; entryId: number; deck: number; offset: number; serverTime: number }
@@ -38,7 +44,7 @@ export class LoungeRadioQueue {
   private queue: RadioEntry[] = [];
   private sequence = 0;
   private revision = 0;
-  private lastDj = '';
+  private djCursor = { day: 0, evening: 0, night: 0 };
   private start(entry: RadioEntry, now: number) { this.current = { ...entry, startedAt: now, duration: 600, durationKnown: false }; this.revision++; }
   advance(now: number) {
     if (this.current && now < this.current.startedAt + this.current.duration * 1000) return false;
@@ -47,8 +53,8 @@ export class LoungeRadioQueue {
     else {
       const mood = radioMood(now);
       const choices = DJ_VIDEOS.filter(v => v.mood === mood);
-      const video = choices.find(v => v.videoId !== this.lastDj) ?? choices[0];
-      this.lastDj = video.videoId;
+      const video = choices[this.djCursor[mood] % choices.length];
+      this.djCursor[mood] = (this.djCursor[mood] + 1) % choices.length;
       this.start({ ...video, id: ++this.sequence, queuedBy: 'lounge DJ', dj: true }, now);
     }
     return true;
