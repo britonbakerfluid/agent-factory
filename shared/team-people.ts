@@ -2,12 +2,25 @@ import type { TeamMember } from './team.js';
 import type { StationTicketState } from './types.js';
 import { ticketOwnerKey } from './station-tickets.js';
 
-// Confirmed by Briton: these installations and the legacy entry are one person.
+// Confirmed by Briton: each group contains one person’s installations and legacy entries.
 // Presentation only. Never use this mapping to grant access or transfer wallets.
 export const PERSON_IDENTITIES: readonly (readonly string[])[] = [[
   'FGApEbY5j36CGIdrEvuUZ1DoBn03cPKgnQmWvRnHqnQ',
   '-YLfLtcXdYhWy2bwJsBJQofxZ5E-gzqi7b6oQyVEpZs',
   'legacy:Briton Baker',
+], [
+  '7cneFzJbBYLPivxl9qJLm-DQKOGvW9xgLPH08fsAZ1Q',
+  'y-0TUFCECFqOyjkiJx20cx_-Yr8NWyGJd00r5xyifyI',
+  'legacy:Wolzey',
+], [
+  'qdoKrlcMaHcXlepNbzhHoi-7XWmn_Xa4VoQOLzE-BeQ',
+  'legacy:Jake',
+], [
+  'wxIXVL3bmCkgYCe_gYQ-9sdzzOATfXvxg2Hkw2ot2Ns',
+  'legacy:cdub',
+], [
+  'legacy:braypay',
+  'legacy:BrayPay',
 ]];
 export interface TeamPerson extends TeamMember { aliases: string[]; tickets: number }
 
